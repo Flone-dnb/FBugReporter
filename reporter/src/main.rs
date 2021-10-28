@@ -21,6 +21,8 @@ fn main() {
         return;
     }
 
+    logger.log("Received a report.");
+
     // Send report.
     // TODO
     println!("{:?}", game_report);

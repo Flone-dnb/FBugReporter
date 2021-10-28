@@ -126,7 +126,7 @@ std::optional<std::string> send_report(GameReport&& report){
     }
 
     int answer_code = 0;
-    size_t received_count = recv(socket, &answer_code, sizeof (answer_code), 0);
+    size_t received_count = recv(socket, reinterpret_cast<char*>(&answer_code), sizeof (answer_code), 0);
     if ( received_count != sizeof (answer_code) )
     {
         std::string msg = std::string("An error occurred at [");
@@ -183,7 +183,7 @@ std::optional<std::string> send_string(FSocket socket, std::string text){
     unsigned short len = text.size();
 
     // Send length of the text.
-    size_t sent_bytes = send(socket, &len, sizeof (len), 0);
+    size_t sent_bytes = send(socket, reinterpret_cast<char*>(&len), sizeof (len), 0);
     if (sent_bytes != sizeof (len)){
         std::string msg = std::string("An error occurred at [");
         msg += __FILE__;

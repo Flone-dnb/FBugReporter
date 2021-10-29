@@ -17,6 +17,7 @@
 #define FSocket SOCKET
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <Windows.h>
 #elif __linux__
 #define FSocket int
 #include <stdlib.h>
@@ -58,7 +59,7 @@ enum REPORT_FIELD_LIMIT{
 
 constexpr unsigned short CLIENT_PORT = 61234;
 constexpr unsigned short REPORTER_PROTOCOL = 0;
-constexpr size_t RETRY_CONNECT_COUNT = 5;
+constexpr size_t RETRY_CONNECT_COUNT = 4;
 constexpr size_t SLEEP_TIME_MS = 500;
 
 struct GameReport{
@@ -176,7 +177,22 @@ std::optional<REPORT_FIELD> check_fields_limit(GameReport& report){
 
 std::optional<std::string> start_reporter(){
 #ifdef _WIN32
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
 
+    ZeroMemory( &si, sizeof(si) );
+    si.cb = sizeof(si);
+    ZeroMemory( &pi, sizeof(pi) );
+
+    if (CreateProcessA(NULL, static_cast<LPSTR>(const_cast<char*>("reporter.exe")), NULL, NULL, TRUE, 0, NULL, NULL, (LPSTARTUPINFOA)&si, &pi) == 0){
+        std::string msg = std::string("An error occurred at [");
+        msg += __FILE__;
+        msg += ", ";
+        msg += std::to_string(__LINE__);
+        msg += "]: ";
+        msg += std::to_string(GetLastError());
+        return msg;
+    }
 #elif __linux__
     pid_t pid;
     char *argv[] = {(char *) 0};

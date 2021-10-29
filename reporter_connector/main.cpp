@@ -7,28 +7,26 @@
 #include <string>
 #include <iostream>
 #include <optional>
+#include <variant>
+#include <filesystem>
+#include <thread>
 
-// Sockets and stuff
-#ifdef _WIN32
 #ifdef _WIN32
 // Winsock 2
 #pragma comment(lib,"Ws2_32.lib")
-#endif
 #define FSocket SOCKET
-using std::memcpy;
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #elif __linux__
 #define FSocket int
+#include <stdlib.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netdb.h>
-#include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
 #include <string.h>
-#include <time.h>
+#include <spawn.h>
 #include <netinet/tcp.h>
 #define SOCKET_ERROR -1
 #define INVALID_SOCKET -1
@@ -37,9 +35,31 @@ using std::memcpy;
 
 enum ANSWER_CODE{
     AC_OK = 0,
+    AC_WRONG_PROTOCOL = 1,
+};
+
+enum REPORT_FIELD{
+    RF_REPORT_NAME = 0,
+    RF_REPORT_TEXT = 1,
+    RF_SENDER_NAME = 2,
+    RF_SENDER_EMAIL = 3,
+    RF_GAME_NAME = 4,
+    RF_GAME_VERSION = 5,
+};
+
+enum REPORT_FIELD_LIMIT{
+    RFL_REPORT_NAME_BYTES = 100,
+    RFL_REPORT_TEXT_BYTES = 5120,
+    RFL_SENDER_NAME_BYTES = 100,
+    RFL_SENDER_EMAIL_BYTES = 100,
+    RFL_GAME_NAME_BYTES = 100,
+    RFL_GAME_VERSION_BYTES = 100,
 };
 
 constexpr unsigned short CLIENT_PORT = 61234;
+constexpr unsigned short REPORTER_PROTOCOL = 0;
+constexpr size_t RETRY_CONNECT_COUNT = 5;
+constexpr size_t SLEEP_TIME_MS = 500;
 
 struct GameReport{
     std::string report_name;
@@ -48,13 +68,21 @@ struct GameReport{
     std::string sender_email;
     std::string game_name;
     std::string game_version;
+    // if adding new fields update:
+    //  - REPORT_FIELD enum,
+    //  - REPORT_FIELD_LIMIT enum,
+    //  - REPORTER_PROTOCOL,
+    //  - check_fields_limit().
 };
 
-std::optional<std::string> send_report(GameReport&&);
+std::variant<std::string, ANSWER_CODE> send_report(GameReport&&);
 std::optional<std::string> send_data(FSocket, GameReport&&);
 bool close_socket(FSocket);
 int get_last_error();
 void set_socket_nodelay(FSocket);
+int reporter(GameReport&& report);
+std::optional<std::string> start_reporter();
+std::optional<REPORT_FIELD> check_fields_limit(GameReport&);
 
 int main()
 {
@@ -66,15 +94,115 @@ int main()
     game_report.game_name = u8"TestGame";
     game_report.game_version = u8"v1.0.0";
 
-    std::optional<std::string> result = send_report(std::move(game_report));
-    if (result.has_value()){
-        std::cout<<result.value()<<std::endl;
-    }
+    reporter(std::move(game_report));
 
     return 0;
 }
 
-std::optional<std::string> send_report(GameReport&& report){
+// returns result to the user code
+// positive value means ANSWER_CODE
+// -1 = internal error, use get_error_info() for more information
+// -2 = report field has an incorrect size, use get_incorrect_field_info() for more information
+int reporter(GameReport&& report){
+    // Check fields limit.
+    std::optional<REPORT_FIELD> limit_result = check_fields_limit(report);
+    if (limit_result.has_value()){
+        std::cout<<"Field with ID "<<limit_result.value()<<" has wrong size."<<std::endl;
+        return -2;
+    }
+
+    // Start reporter.
+    std::optional<std::string> start_result = start_reporter();
+    if (start_result.has_value()){
+        std::cout<<start_result.value()<<std::endl;
+        return -1;
+    }
+
+    // Send report.
+    std::variant<std::string, ANSWER_CODE> result = send_report(std::move(report));
+
+    // See result.
+    if (std::get_if<ANSWER_CODE>(&result)){
+        switch(std::get<ANSWER_CODE>(result)){
+            case ANSWER_CODE::AC_OK:
+            std::cout<<"All good.\n";
+            break;
+
+            case ANSWER_CODE::AC_WRONG_PROTOCOL:
+            std::cout<<"Wrong protocol version\n";
+            break;
+        }
+
+        return std::get<ANSWER_CODE>(result);
+    }else{
+        // An error occurred:
+        std::cout<<std::get<std::string>(result)<<std::endl;
+
+        return -1;
+    }
+}
+
+std::optional<REPORT_FIELD> check_fields_limit(GameReport& report){
+    if (report.report_name.size() > REPORT_FIELD_LIMIT::RFL_REPORT_NAME_BYTES){
+        return REPORT_FIELD::RF_REPORT_NAME;
+    }
+
+    if (report.report_text.size() > REPORT_FIELD_LIMIT::RFL_REPORT_TEXT_BYTES){
+        return REPORT_FIELD::RF_REPORT_TEXT;
+    }
+
+    if (report.sender_name.size() > REPORT_FIELD_LIMIT::RFL_SENDER_NAME_BYTES){
+        return REPORT_FIELD::RF_SENDER_NAME;
+    }
+
+    if (report.sender_email.size() > REPORT_FIELD_LIMIT::RFL_SENDER_EMAIL_BYTES){
+        return REPORT_FIELD::RF_SENDER_EMAIL;
+    }
+
+    if (report.sender_email.size() > REPORT_FIELD_LIMIT::RFL_SENDER_EMAIL_BYTES){
+        return REPORT_FIELD::RF_SENDER_EMAIL;
+    }
+
+    if (report.game_name.size() > REPORT_FIELD_LIMIT::RFL_GAME_NAME_BYTES){
+        return REPORT_FIELD::RF_GAME_NAME;
+    }
+
+    if (report.game_version.size() > REPORT_FIELD_LIMIT::RFL_GAME_VERSION_BYTES){
+        return REPORT_FIELD::RF_GAME_VERSION;
+    }
+
+    return {};
+}
+
+std::optional<std::string> start_reporter(){
+#ifdef _WIN32
+
+#elif __linux__
+    pid_t pid;
+    char *argv[] = {(char *) 0};
+    int status;
+    status = posix_spawn(&pid, "./reporter", NULL, NULL, argv, environ);
+    if (status != 0) {
+        std::string msg = std::string("An error occurred at [");
+        msg += __FILE__;
+        msg += ", ";
+        msg += std::to_string(__LINE__);
+        msg += "]: ";
+        msg += strerror(status);
+        return msg;
+    }
+#endif
+
+    // Wait for it to start...
+    std::this_thread::sleep_for(std::chrono::milliseconds(SLEEP_TIME_MS));
+
+    return {};
+}
+
+std::variant<std::string, ANSWER_CODE> send_report(GameReport&& report){
+    unsigned short answer_code = 0;
+
+    for (size_t i = 0; i < RETRY_CONNECT_COUNT; i++){
 #ifdef _WIN32
     // Start Winsock2.
     WSADATA WSAData;
@@ -109,23 +237,28 @@ std::optional<std::string> send_report(GameReport&& report){
     freeaddrinfo(addr_info_result);
 
     if ( return_code == SOCKET_ERROR ){
-        return_code = get_last_error();
-        std::string msg = std::string("An error occurred at [");
-        msg += __FILE__;
-        msg += ", ";
-        msg += std::to_string(__LINE__);
-        msg += "]: " + std::to_string(return_code);
-        return msg;
+        if (i == RETRY_CONNECT_COUNT - 1){
+            return_code = get_last_error();
+            std::string msg = std::string("An error occurred at [");
+            msg += __FILE__;
+            msg += ", ";
+            msg += std::to_string(__LINE__);
+            msg += "]: " + std::to_string(return_code);
+            return msg;
+        }else{
+            // Try again later.
+            std::this_thread::sleep_for(std::chrono::milliseconds(SLEEP_TIME_MS));
+            continue;
+        }
     }
 
     set_socket_nodelay(socket);
 
     std::optional<std::string> result = send_data(socket, std::move(report));
     if ( result.has_value() ){
-        return result;
+        return result.value();
     }
 
-    int answer_code = 0;
     size_t received_count = recv(socket, reinterpret_cast<char*>(&answer_code), sizeof (answer_code), 0);
     if ( received_count != sizeof (answer_code) )
     {
@@ -140,11 +273,6 @@ std::optional<std::string> send_report(GameReport&& report){
         return msg;
     }
 
-    // See answer code.
-    if (answer_code == ANSWER_CODE::AC_OK){
-        // Ok.
-    }
-
     // Finish connection.
     shutdown(socket, SD_SEND);
     close_socket(socket);
@@ -152,8 +280,9 @@ std::optional<std::string> send_report(GameReport&& report){
 #ifdef _WIN32
     WSACleanup();
 #endif
+    }
 
-    return {};
+    return static_cast<ANSWER_CODE>(answer_code);
 }
 
 bool close_socket(FSocket socket)
@@ -179,10 +308,29 @@ bool close_socket(FSocket socket)
 #endif
 }
 
+std::optional<std::string> send_protocol_version(FSocket socket){
+    unsigned short ver = REPORTER_PROTOCOL;
+
+    // Send length of the text.
+    size_t sent_bytes = send(socket, reinterpret_cast<char*>(&ver), sizeof (ver), 0);
+    if (sent_bytes != sizeof (ver)){
+        std::string msg = std::string("An error occurred at [");
+        msg += __FILE__;
+        msg += ", ";
+        msg += std::to_string(__LINE__);
+        msg += "]: sent ";
+        msg += std::to_string(sent_bytes);
+        msg += " while expected ";
+        msg += sizeof (ver);
+        return msg;
+    }
+
+    return {};
+}
+
 std::optional<std::string> send_string(FSocket socket, std::string text){
     unsigned short len = text.size();
 
-    // Send length of the text.
     size_t sent_bytes = send(socket, reinterpret_cast<char*>(&len), sizeof (len), 0);
     if (sent_bytes != sizeof (len)){
         std::string msg = std::string("An error occurred at [");
@@ -196,48 +344,40 @@ std::optional<std::string> send_string(FSocket socket, std::string text){
         return msg;
     }
 
-    if (len == 0){
-        return {};
-    }
-
-    // Send text.
-    sent_bytes = send(socket, text.c_str(), len, 0);
-    if (sent_bytes != len){
-        std::string msg = std::string("An error occurred at [");
-        msg += __FILE__;
-        msg += ", ";
-        msg += std::to_string(__LINE__);
-        msg += "]: sent ";
-        msg += std::to_string(sent_bytes);
-        msg += " while expected ";
-        msg += len;
-        return msg;
-    }
-
     return {};
 }
 
 std::optional<std::string> send_data(FSocket socket, GameReport&& report){
-    std::optional<std::string> result = send_string(socket, report.report_name);
+    std::optional<std::string> result = send_protocol_version(socket);
     if (result.has_value()){
         return result;
     }
+
+    result = send_string(socket, report.report_name);
+    if (result.has_value()){
+        return result;
+    }
+
     result = send_string(socket, report.report_text);
     if (result.has_value()){
         return result;
     }
+
     result = send_string(socket, report.sender_name);
     if (result.has_value()){
         return result;
     }
+
     result = send_string(socket, report.sender_email);
     if (result.has_value()){
         return result;
     }
+
     result = send_string(socket, report.game_name);
     if (result.has_value()){
         return result;
     }
+
     result = send_string(socket, report.game_version);
     if (result.has_value()){
         return result;

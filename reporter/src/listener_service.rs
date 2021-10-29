@@ -7,6 +7,12 @@ use crate::global_params::*;
 use crate::logger_service::Logger;
 use crate::misc::GameReport;
 
+#[derive(Clone, Copy)]
+enum ConnectorAnswer {
+    Ok,
+    WrongProtocol,
+}
+
 pub struct ListenerService {
     connected_socket: Option<TcpStream>,
 }
@@ -69,6 +75,31 @@ impl ListenerService {
         Ok(game_report.unwrap())
     }
     fn read_report(&self, socket: &mut TcpStream) -> Result<GameReport, String> {
+        // Read reporter protocol.
+        let report_protocol = self.receive_u16(socket);
+        if let Err(e) = report_protocol {
+            return Err(format!(
+                "An error occurred at [{}, {}], {}",
+                file!(),
+                line!(),
+                e
+            ));
+        }
+        let report_protocol = report_protocol.unwrap();
+
+        // Check versions.
+        if report_protocol != REPORTER_PROTOCOL {
+            // Answer.
+            if let Err(e) = self.send_answer(socket, ConnectorAnswer::WrongProtocol) {
+                return Err(format!(
+                    "An error occurred at [{}, {}], {}",
+                    file!(),
+                    line!(),
+                    e
+                ));
+            }
+        }
+
         // Read report name.
         let report_name = self.receive_string(socket);
         if let Err(e) = report_name {
@@ -228,5 +259,79 @@ impl ListenerService {
         }
 
         Ok(String::from(result_data.unwrap()))
+    }
+    fn send_answer(&self, socket: &mut TcpStream, answer: ConnectorAnswer) -> Result<(), String> {
+        let mut _answer_code: u16 = 0;
+
+        match answer {
+            // should be just like in the reporter_connector's enum
+            ConnectorAnswer::Ok => _answer_code = 0,
+            ConnectorAnswer::WrongProtocol => _answer_code = 1,
+        }
+
+        let mut answer_buf = bincode::serialize(&_answer_code).unwrap();
+
+        // Send data.
+        match socket.write(&mut answer_buf) {
+            Ok(0) => {
+                return Err(format!(
+                    "at [{}, {}]: received unexpected FIN.",
+                    file!(),
+                    line!()
+                ));
+            }
+            Ok(byte_count) => {
+                if byte_count != answer_buf.len() {
+                    return Err(format!(
+                        "at [{}, {}]: sent {} bytes of data while expected {}.",
+                        file!(),
+                        line!(),
+                        byte_count,
+                        answer_buf.len()
+                    ));
+                }
+            }
+            Err(e) => {
+                return Err(format!("at [{}, {}]: {:?}", file!(), line!(), e));
+            }
+        }
+
+        Ok(())
+    }
+    fn receive_u16(&self, socket: &mut TcpStream) -> Result<u16, String> {
+        let mut len_buf = vec![0u8; std::mem::size_of::<u16>()];
+
+        // Read data.
+        match socket.read(&mut len_buf) {
+            Ok(0) => {
+                return Err(format!(
+                    "at [{}, {}]: received unexpected FIN.",
+                    file!(),
+                    line!()
+                ));
+            }
+            Ok(byte_count) => {
+                if byte_count != len_buf.len() {
+                    return Err(format!(
+                        "at [{}, {}]: received {} bytes of data while expected {}.",
+                        file!(),
+                        line!(),
+                        byte_count,
+                        len_buf.len()
+                    ));
+                }
+            }
+            Err(e) => {
+                return Err(format!("at [{}, {}]: {:?}", file!(), line!(), e));
+            }
+        }
+
+        let data = bincode::deserialize::<u16>(&len_buf);
+        if let Err(e) = data {
+            return Err(format!("at [{}, {}]: {:?}", file!(), line!(), e));
+        }
+        let data = data.unwrap();
+
+        Ok(data)
     }
 }

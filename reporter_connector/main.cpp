@@ -177,6 +177,21 @@ std::optional<REPORT_FIELD> check_fields_limit(GameReport& report){
 
 std::optional<std::string> start_reporter(){
 #ifdef _WIN32
+    std::string current_path = std::filesystem::current_path().string();
+    if (current_path[current_path.size() - 1] != '\\'){
+        current_path += '\\';
+    }
+    current_path += "reporter.exe";
+
+    if (!std::filesystem::exists(current_path)){
+        std::string msg = std::string("An error occurred at [");
+        msg += __FILE__;
+        msg += ", ";
+        msg += std::to_string(__LINE__);
+        msg += "]: reporter binary does not exist.";
+        return msg;
+    }
+
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
 
@@ -194,6 +209,21 @@ std::optional<std::string> start_reporter(){
         return msg;
     }
 #elif __linux__
+    std::string current_path = std::filesystem::current_path().string();
+    if (current_path[current_path.size() - 1] != '/'){
+        current_path += '/';
+    }
+    current_path += "reporter";
+
+    if (!std::filesystem::exists(current_path)){
+        std::string msg = std::string("An error occurred at [");
+        msg += __FILE__;
+        msg += ", ";
+        msg += std::to_string(__LINE__);
+        msg += "]: reporter binary does not exist.";
+        return msg;
+    }
+
     pid_t pid;
     char *argv[] = {(char *) 0};
     int status;

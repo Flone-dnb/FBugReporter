@@ -59,8 +59,8 @@ enum REPORT_FIELD_LIMIT{
 
 constexpr unsigned short CLIENT_PORT = 61234;
 constexpr unsigned short REPORTER_PROTOCOL = 0;
-constexpr size_t RETRY_CONNECT_COUNT = 4;
-constexpr size_t SLEEP_TIME_MS = 500;
+constexpr size_t RETRY_CONNECT_COUNT = 5;
+constexpr size_t SLEEP_TIME_MS = 1000;
 
 struct GameReport{
     std::string report_name;

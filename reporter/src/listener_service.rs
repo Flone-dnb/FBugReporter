@@ -88,7 +88,7 @@ impl ListenerService {
         let report_protocol = report_protocol.unwrap();
 
         // Check versions.
-        if report_protocol != REPORTER_PROTOCOL {
+        if report_protocol != REPORTER_PROTOCOL_VERSION {
             // Answer.
             if let Err(e) = self.send_answer(socket, ConnectorAnswer::WrongProtocol) {
                 return Err(format!(

@@ -6,7 +6,6 @@ use std::io::*;
 // Custom.
 use services::net_service::NetService;
 
-mod global_params;
 mod services;
 
 fn main() {
@@ -15,7 +14,7 @@ fn main() {
 
     let net_service = NetService::new();
     if let Err(e) = net_service {
-        panic!("{}, at [{}, {}]", e, file!(), line!());
+        panic!("{} at [{}, {}]", e, file!(), line!());
     }
 
     let args: Vec<String> = env::args().collect();

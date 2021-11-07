@@ -1,6 +1,8 @@
 // External.
+use num_bigint::{BigUint, RandomBits};
 #[cfg(target_os = "windows")]
 use platform_dirs::UserDirs;
+use rand::Rng;
 
 // Std.
 use std::fs::*;
@@ -8,7 +10,7 @@ use std::io::prelude::*;
 use std::path::Path;
 
 // Custom.
-use super::net_service::SERVER_DEFAULT_PORT;
+use super::net_service::{SERVER_DEFAULT_PORT, SERVER_PASSWORD_BIT_COUNT};
 
 const CONFIG_FILE_VERSION: u32 = 0;
 const CONFIG_FILE_MAGIC_NUMBER: u16 = 1919;
@@ -59,10 +61,19 @@ impl ServerConfig {
 
         Ok(server_config)
     }
+    pub fn refresh_password(&mut self) {
+        let mut rng = rand::thread_rng();
+        let server_key: BigUint = rng.sample(RandomBits::new(SERVER_PASSWORD_BIT_COUNT));
+
+        self.server_password = server_key.to_str_radix(16);
+    }
     fn default() -> Self {
+        let mut rng = rand::thread_rng();
+        let server_key: BigUint = rng.sample(RandomBits::new(SERVER_PASSWORD_BIT_COUNT));
+
         Self {
             server_port: SERVER_DEFAULT_PORT,
-            server_password: String::from(""),
+            server_password: server_key.to_str_radix(16),
             config_file_path: String::from(""),
             log_file_path: String::from(""),
         }

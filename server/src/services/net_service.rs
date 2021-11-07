@@ -1,6 +1,7 @@
 use super::config_service::ServerConfig;
 
 const SERVER_PROTOCOL_VERSION: u16 = 0;
+pub const SERVER_PASSWORD_BIT_COUNT: u64 = 1024;
 pub const SERVER_DEFAULT_PORT: u16 = 61919;
 
 pub struct NetService {
@@ -17,5 +18,11 @@ impl NetService {
         Ok(Self {
             server_config: config.unwrap(),
         })
+    }
+    pub fn refresh_password(&mut self) {
+        self.server_config.refresh_password();
+    }
+    pub fn start(&self) -> Result<(), String> {
+        Ok(())
     }
 }

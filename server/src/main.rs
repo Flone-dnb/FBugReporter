@@ -16,6 +16,7 @@ fn main() {
     if let Err(e) = net_service {
         panic!("{} at [{}, {}]", e, file!(), line!());
     }
+    let net_service = net_service.unwrap();
 
     let args: Vec<String> = env::args().collect();
 
@@ -47,6 +48,7 @@ fn main() {
             println!("exit - exit the application");
         } else if input == "start" {
         } else if input == "config" {
+            println!("{:#?}", net_service.server_config);
         } else if input == "exit" {
             break;
         } else {

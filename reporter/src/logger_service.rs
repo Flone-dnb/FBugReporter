@@ -7,8 +7,8 @@ use std::path::Path;
 #[cfg(target_os = "windows")]
 use platform_dirs::UserDirs;
 
-// Custom.
-use crate::global_params::*;
+const LOG_FILE_NAME: &str = "FBugReporter - reporter.log";
+const LOG_FILE_DIR: &str = "FBugReporter";
 
 pub struct Logger {
     log_file_path: String,

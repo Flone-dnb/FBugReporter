@@ -1,4 +1,3 @@
-mod global_params;
 mod listener_service;
 mod logger_service;
 mod misc;

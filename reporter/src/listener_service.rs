@@ -3,9 +3,11 @@ use std::io::prelude::*;
 use std::net::*;
 
 // Custom.
-use crate::global_params::*;
 use crate::logger_service::Logger;
 use crate::misc::GameReport;
+use crate::reporter_service::REPORTER_PROTOCOL_VERSION;
+
+const LISTENER_PORT: u16 = 61234;
 
 #[derive(Clone, Copy)]
 enum ConnectorAnswer {

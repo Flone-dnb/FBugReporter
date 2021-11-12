@@ -12,13 +12,15 @@
 #include <thread>
 
 #ifdef _WIN32
-// Winsock 2
+
 #pragma comment(lib,"Ws2_32.lib")
 #define FSocket SOCKET
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <Windows.h>
+
 #elif __linux__
+
 #define FSocket int
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -32,6 +34,7 @@
 #define SOCKET_ERROR -1
 #define INVALID_SOCKET -1
 #define SD_SEND SHUT_WR
+
 #endif
 
 enum ANSWER_CODE{

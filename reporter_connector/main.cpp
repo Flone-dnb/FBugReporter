@@ -79,12 +79,12 @@ struct GameReport{
     //  - check_fields_limit().
 };
 
-std::variant<std::string, ANSWER_CODE> send_report(GameReport&&);
-std::optional<std::string> send_data(FSocket, GameReport&&);
+std::variant<std::string, ANSWER_CODE> send_report(GameReport&&, unsigned short server_ip_a, unsigned short server_ip_b, unsigned short server_ip_c, unsigned short server_ip_d, unsigned short server_port);
+std::optional<std::string> send_data(FSocket, GameReport&&, unsigned short server_ip_a, unsigned short server_ip_b, unsigned short server_ip_c, unsigned short server_ip_d, unsigned short server_port);
 bool close_socket(FSocket);
 int get_last_error();
 void set_socket_nodelay(FSocket);
-int reporter(GameReport&& report);
+int reporter(GameReport&& report, unsigned short server_ip_a, unsigned short server_ip_b, unsigned short server_ip_c, unsigned short server_ip_d, unsigned short server_port);
 std::optional<std::string> start_reporter();
 std::optional<REPORT_FIELD> check_fields_limit(GameReport&);
 
@@ -98,7 +98,7 @@ int main()
     game_report.game_name = u8"TestGame";
     game_report.game_version = u8"v1.0.0";
 
-    reporter(std::move(game_report));
+    reporter(std::move(game_report), 127, 0, 0, 1, 4242);
 
     return 0;
 }
@@ -107,7 +107,7 @@ int main()
 // positive value means ANSWER_CODE
 // -1 = internal error, use get_error_info() for more information
 // -2 = report field has an incorrect size, use get_incorrect_field_info() for more information
-int reporter(GameReport&& report){
+int reporter(GameReport&& report, unsigned short server_ip_a, unsigned short server_ip_b, unsigned short server_ip_c, unsigned short server_ip_d, unsigned short server_port){
     // Check fields limit.
     std::optional<REPORT_FIELD> limit_result = check_fields_limit(report);
     if (limit_result.has_value()){
@@ -123,7 +123,7 @@ int reporter(GameReport&& report){
     }
 
     // Send report.
-    std::variant<std::string, ANSWER_CODE> result = send_report(std::move(report));
+    std::variant<std::string, ANSWER_CODE> result = send_report(std::move(report), server_ip_a, server_ip_b, server_ip_c, server_ip_d, server_port);
 
     // See result.
     if (std::get_if<ANSWER_CODE>(&result)){
@@ -248,7 +248,7 @@ std::optional<std::string> start_reporter(){
     return {};
 }
 
-std::variant<std::string, ANSWER_CODE> send_report(GameReport&& report){
+std::variant<std::string, ANSWER_CODE> send_report(GameReport&& report, unsigned short server_ip_a, unsigned short server_ip_b, unsigned short server_ip_c, unsigned short server_ip_d, unsigned short server_port){
     unsigned short answer_code = 0;
 
     for (size_t i = 0; i < RETRY_CONNECT_COUNT; i++){
@@ -303,7 +303,7 @@ std::variant<std::string, ANSWER_CODE> send_report(GameReport&& report){
 
     set_socket_nodelay(socket);
 
-    std::optional<std::string> result = send_data(socket, std::move(report));
+    std::optional<std::string> result = send_data(socket, std::move(report), server_ip_a, server_ip_b, server_ip_c, server_ip_d, server_port);
     if ( result.has_value() ){
         return result.value();
     }
@@ -377,6 +377,23 @@ std::optional<std::string> send_protocol_version(FSocket socket){
     return {};
 }
 
+std::optional<std::string> send_short(FSocket socket, unsigned short data){
+    size_t sent_bytes = send(socket, reinterpret_cast<char*>(&data), sizeof (data), 0);
+    if (sent_bytes != sizeof (data)){
+        std::string msg = std::string("An error occurred at [");
+        msg += __FILE__;
+        msg += ", ";
+        msg += std::to_string(__LINE__);
+        msg += "]: sent ";
+        msg += std::to_string(sent_bytes);
+        msg += " while expected ";
+        msg += sizeof (data);
+        return msg;
+    }
+
+    return {};
+}
+
 std::optional<std::string> send_string(FSocket socket, std::string text){
     unsigned short len = text.size();
 
@@ -393,10 +410,26 @@ std::optional<std::string> send_string(FSocket socket, std::string text){
         return msg;
     }
 
+    sent_bytes = send(socket, reinterpret_cast<char*>(const_cast<char*>(text.c_str())), len, 0);
+    if (sent_bytes != len){
+        std::string msg = std::string("An error occurred at [");
+        msg += __FILE__;
+        msg += ", ";
+        msg += std::to_string(__LINE__);
+        msg += "]: sent ";
+        msg += std::to_string(sent_bytes);
+        msg += " while expected ";
+        msg += sizeof (len);
+        msg += ", on string \"";
+        msg += text;
+        msg += "\"";
+        return msg;
+    }
+
     return {};
 }
 
-std::optional<std::string> send_data(FSocket socket, GameReport&& report){
+std::optional<std::string> send_data(FSocket socket, GameReport&& report, unsigned short server_ip_a, unsigned short server_ip_b, unsigned short server_ip_c, unsigned short server_ip_d, unsigned short server_port){
     std::optional<std::string> result = send_protocol_version(socket);
     if (result.has_value()){
         return result;
@@ -428,6 +461,28 @@ std::optional<std::string> send_data(FSocket socket, GameReport&& report){
     }
 
     result = send_string(socket, report.game_version);
+    if (result.has_value()){
+        return result;
+    }
+
+    // Send server address.
+    result = send_short(socket, server_ip_a);
+    if (result.has_value()){
+        return result;
+    }
+    result = send_short(socket, server_ip_b);
+    if (result.has_value()){
+        return result;
+    }
+    result = send_short(socket, server_ip_c);
+    if (result.has_value()){
+        return result;
+    }
+    result = send_short(socket, server_ip_d);
+    if (result.has_value()){
+        return result;
+    }
+    result = send_short(socket, server_port);
     if (result.has_value()){
         return result;
     }

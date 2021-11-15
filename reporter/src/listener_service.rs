@@ -25,7 +25,11 @@ impl ListenerService {
             connected_socket: None,
         }
     }
-    pub fn listen_for_report(&mut self, logger: &mut Logger) -> Result<GameReport, ()> {
+    /// Returns received game report and the address of the server.
+    pub fn listen_for_report(
+        &mut self,
+        logger: &mut Logger,
+    ) -> Result<(GameReport, SocketAddr), ()> {
         // Create socket.
         let listener_socker = TcpListener::bind(format!("127.0.0.1:{}", LISTENER_PORT));
         if let Err(e) = listener_socker {
@@ -76,7 +80,8 @@ impl ListenerService {
 
         Ok(game_report.unwrap())
     }
-    fn read_report(&self, socket: &mut TcpStream) -> Result<GameReport, String> {
+    /// Returns received game report and the address of the server.
+    fn read_report(&self, socket: &mut TcpStream) -> Result<(GameReport, SocketAddr), String> {
         // Read reporter protocol.
         let report_protocol = self.receive_u16(socket);
         if let Err(e) = report_protocol {
@@ -174,6 +179,18 @@ impl ListenerService {
         }
         let game_version = game_version.unwrap();
 
+        // Read server address.
+        let server_address = self.receive_server_address(socket);
+        if let Err(e) = server_address {
+            return Err(format!(
+                "An error occurred at [{}, {}], {}",
+                file!(),
+                line!(),
+                e
+            ));
+        }
+        let server_address = server_address.unwrap();
+
         // Generate OS info.
         let client_os_info = os_info::get();
 
@@ -188,7 +205,7 @@ impl ListenerService {
             client_os_info,
         };
 
-        Ok(game_report)
+        Ok((game_report, server_address))
     }
     fn receive_string(&self, socket: &mut TcpStream) -> Result<String, String> {
         let mut len_buf = vec![0u8; std::mem::size_of::<u16>()];
@@ -299,6 +316,48 @@ impl ListenerService {
         }
 
         Ok(())
+    }
+    fn receive_server_address(&self, socket: &mut TcpStream) -> Result<SocketAddr, String> {
+        // Read address ip.
+        let mut ip_address_str: String = String::new();
+        for _ in 0..4 {
+            let part = self.receive_u16(socket);
+            if let Err(e) = part {
+                return Err(format!(
+                    "An error occurred at [{}, {}], {}",
+                    file!(),
+                    line!(),
+                    e
+                ));
+            }
+            ip_address_str += &part.unwrap().to_string();
+            ip_address_str += ".";
+        }
+
+        ip_address_str.pop();
+        ip_address_str += ":";
+
+        let port = self.receive_u16(socket);
+        if let Err(e) = port {
+            return Err(format!(
+                "An error occurred at [{}, {}], {}",
+                file!(),
+                line!(),
+                e
+            ));
+        }
+        ip_address_str += &port.unwrap().to_string();
+        let server_addr = ip_address_str.parse::<SocketAddr>();
+        if let Err(e) = server_addr {
+            return Err(format!(
+                "An error occurred at [{}, {}], {}",
+                file!(),
+                line!(),
+                e
+            ));
+        }
+
+        Ok(server_addr.unwrap())
     }
     fn receive_u16(&self, socket: &mut TcpStream) -> Result<u16, String> {
         let mut len_buf = vec![0u8; std::mem::size_of::<u16>()];

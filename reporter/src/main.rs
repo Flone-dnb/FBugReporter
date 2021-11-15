@@ -19,6 +19,7 @@ fn main() {
     if game_report.is_err() {
         return;
     }
+    let (game_report, server_addr) = game_report.unwrap();
 
     logger.log("Received a report.");
 

@@ -34,7 +34,7 @@ impl ListenerService {
         let listener_socker = TcpListener::bind(format!("127.0.0.1:{}", LISTENER_PORT));
         if let Err(e) = listener_socker {
             logger.log(&format!(
-                "An error occurred at [{}, {}]: {:?}",
+                "An error occurred at [{}, {}]: {:?}\n\n",
                 file!(),
                 line!(),
                 e
@@ -47,7 +47,7 @@ impl ListenerService {
         let accept_result = listener_socket.accept();
         if let Err(e) = accept_result {
             logger.log(&format!(
-                "An error occurred at [{}, {}]: {:?}",
+                "An error occurred at [{}, {}]: {:?}\n\n",
                 file!(),
                 line!(),
                 e
@@ -60,7 +60,7 @@ impl ListenerService {
 
         if let Err(e) = socket.set_nodelay(true) {
             logger.log(&format!(
-                "An error occurred at [{}, {}]: {:?}",
+                "An error occurred at [{}, {}]: {:?}\n\n",
                 file!(),
                 line!(),
                 e
@@ -85,12 +85,7 @@ impl ListenerService {
         // Read reporter protocol.
         let report_protocol = self.receive_u16(socket);
         if let Err(e) = report_protocol {
-            return Err(format!(
-                "An error occurred at [{}, {}], {}",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
         }
         let report_protocol = report_protocol.unwrap();
 
@@ -98,96 +93,56 @@ impl ListenerService {
         if report_protocol != REPORTER_PROTOCOL_VERSION {
             // Answer.
             if let Err(e) = self.send_answer(socket, ConnectorAnswer::WrongProtocol) {
-                return Err(format!(
-                    "An error occurred at [{}, {}], {}",
-                    file!(),
-                    line!(),
-                    e
-                ));
+                return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
             }
         }
 
         // Read report name.
         let report_name = self.receive_string(socket);
         if let Err(e) = report_name {
-            return Err(format!(
-                "An error occurred at [{}, {}], {}",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
         }
         let report_name = report_name.unwrap();
 
         // Read report text.
         let report_text = self.receive_string(socket);
         if let Err(e) = report_text {
-            return Err(format!(
-                "An error occurred at [{}, {}], {}",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
         }
         let report_text = report_text.unwrap();
 
         // Read sender name.
         let sender_name = self.receive_string(socket);
         if let Err(e) = sender_name {
-            return Err(format!(
-                "An error occurred at [{}, {}], {}",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
         }
         let sender_name = sender_name.unwrap();
 
         // Read sender e-mail.
         let sender_email = self.receive_string(socket);
         if let Err(e) = sender_email {
-            return Err(format!(
-                "An error occurred at [{}, {}], {}",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
         }
         let sender_email = sender_email.unwrap();
 
         // Read game name.
         let game_name = self.receive_string(socket);
         if let Err(e) = game_name {
-            return Err(format!(
-                "An error occurred at [{}, {}], {}",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
         }
         let game_name = game_name.unwrap();
 
         // Read game version.
         let game_version = self.receive_string(socket);
         if let Err(e) = game_version {
-            return Err(format!(
-                "An error occurred at [{}, {}], {}",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
         }
         let game_version = game_version.unwrap();
 
         // Read server address.
         let server_address = self.receive_server_address(socket);
         if let Err(e) = server_address {
-            return Err(format!(
-                "An error occurred at [{}, {}], {}",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
         }
         let server_address = server_address.unwrap();
 
@@ -214,7 +169,7 @@ impl ListenerService {
         match socket.read(&mut len_buf) {
             Ok(0) => {
                 return Err(format!(
-                    "at [{}, {}]: received unexpected FIN.",
+                    "An error occurred at [{}, {}]: received unexpected FIN\n\n",
                     file!(),
                     line!()
                 ));
@@ -222,7 +177,7 @@ impl ListenerService {
             Ok(byte_count) => {
                 if byte_count != len_buf.len() {
                     return Err(format!(
-                        "at [{}, {}]: received {} bytes of data while expected {}.",
+                        "An error occurred at [{}, {}]: received {} bytes of data while expected {}\n\n",
                         file!(),
                         line!(),
                         byte_count,
@@ -231,13 +186,23 @@ impl ListenerService {
                 }
             }
             Err(e) => {
-                return Err(format!("at [{}, {}]: {:?}", file!(), line!(), e));
+                return Err(format!(
+                    "An error occurred at [{}, {}]: {:?}\n\n",
+                    file!(),
+                    line!(),
+                    e
+                ));
             }
         }
 
         let data_size = bincode::deserialize::<u16>(&len_buf);
         if let Err(e) = data_size {
-            return Err(format!("at [{}, {}]: {:?}", file!(), line!(), e));
+            return Err(format!(
+                "An error occurred at [{}, {}]: {:?}\n\n",
+                file!(),
+                line!(),
+                e
+            ));
         }
         let data_size = data_size.unwrap();
 
@@ -251,7 +216,7 @@ impl ListenerService {
         match socket.read(&mut data_buf) {
             Ok(0) => {
                 return Err(format!(
-                    "at [{}, {}]: received unexpected FIN.",
+                    "An error occurred at [{}, {}]: received unexpected FIN\n\n",
                     file!(),
                     line!()
                 ));
@@ -259,7 +224,7 @@ impl ListenerService {
             Ok(byte_count) => {
                 if byte_count != data_buf.len() {
                     return Err(format!(
-                        "at [{}, {}]: received {} bytes of data while expected {}.",
+                        "An error occurred at [{}, {}]: received {} bytes of data while expected {}\n\n",
                         file!(),
                         line!(),
                         byte_count,
@@ -268,13 +233,23 @@ impl ListenerService {
                 }
             }
             Err(e) => {
-                return Err(format!("at [{}, {}]: {:?}", file!(), line!(), e));
+                return Err(format!(
+                    "An error occurred at [{}, {}]: {:?}\n\n",
+                    file!(),
+                    line!(),
+                    e
+                ));
             }
         }
 
         let result_data = std::str::from_utf8(&data_buf);
         if let Err(e) = result_data {
-            return Err(format!("at [{}, {}]: {:?}", file!(), line!(), e));
+            return Err(format!(
+                "An error occurred at [{}, {}]: {:?}\n\n",
+                file!(),
+                line!(),
+                e
+            ));
         }
 
         Ok(String::from(result_data.unwrap()))
@@ -294,7 +269,7 @@ impl ListenerService {
         match socket.write(&mut answer_buf) {
             Ok(0) => {
                 return Err(format!(
-                    "at [{}, {}]: received unexpected FIN.",
+                    "An error occurred at [{}, {}]: received unexpected FIN\n\n",
                     file!(),
                     line!()
                 ));
@@ -302,7 +277,7 @@ impl ListenerService {
             Ok(byte_count) => {
                 if byte_count != answer_buf.len() {
                     return Err(format!(
-                        "at [{}, {}]: sent {} bytes of data while expected {}.",
+                        "An error occurred at [{}, {}]: sent {} bytes of data while expected {}\n\n",
                         file!(),
                         line!(),
                         byte_count,
@@ -311,7 +286,12 @@ impl ListenerService {
                 }
             }
             Err(e) => {
-                return Err(format!("at [{}, {}]: {:?}", file!(), line!(), e));
+                return Err(format!(
+                    "An error occurred at [{}, {}]: {:?}\n\n",
+                    file!(),
+                    line!(),
+                    e
+                ));
             }
         }
 
@@ -323,12 +303,7 @@ impl ListenerService {
         for _ in 0..4 {
             let part = self.receive_u16(socket);
             if let Err(e) = part {
-                return Err(format!(
-                    "An error occurred at [{}, {}], {}",
-                    file!(),
-                    line!(),
-                    e
-                ));
+                return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
             }
             ip_address_str += &part.unwrap().to_string();
             ip_address_str += ".";
@@ -339,18 +314,13 @@ impl ListenerService {
 
         let port = self.receive_u16(socket);
         if let Err(e) = port {
-            return Err(format!(
-                "An error occurred at [{}, {}], {}",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
         }
         ip_address_str += &port.unwrap().to_string();
         let server_addr = ip_address_str.parse::<SocketAddr>();
         if let Err(e) = server_addr {
             return Err(format!(
-                "An error occurred at [{}, {}], {}",
+                "An error occurred at [{}, {}]: {:?}\n\n",
                 file!(),
                 line!(),
                 e
@@ -366,7 +336,7 @@ impl ListenerService {
         match socket.read(&mut len_buf) {
             Ok(0) => {
                 return Err(format!(
-                    "at [{}, {}]: received unexpected FIN.",
+                    "An error occurred at [{}, {}]: received unexpected FIN\n\n",
                     file!(),
                     line!()
                 ));
@@ -374,7 +344,7 @@ impl ListenerService {
             Ok(byte_count) => {
                 if byte_count != len_buf.len() {
                     return Err(format!(
-                        "at [{}, {}]: received {} bytes of data while expected {}.",
+                        "An error occurred at [{}, {}]: received {} bytes of data while expected {}\n\n",
                         file!(),
                         line!(),
                         byte_count,
@@ -383,13 +353,23 @@ impl ListenerService {
                 }
             }
             Err(e) => {
-                return Err(format!("at [{}, {}]: {:?}", file!(), line!(), e));
+                return Err(format!(
+                    "An error occurred at [{}, {}]: {:?}\n\n",
+                    file!(),
+                    line!(),
+                    e
+                ));
             }
         }
 
         let data = bincode::deserialize::<u16>(&len_buf);
         if let Err(e) = data {
-            return Err(format!("at [{}, {}]: {:?}", file!(), line!(), e));
+            return Err(format!(
+                "An error occurred at [{}, {}]: {:?}\n\n",
+                file!(),
+                line!(),
+                e
+            ));
         }
         let data = data.unwrap();
 

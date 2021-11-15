@@ -8,6 +8,7 @@ use std::path::Path;
 use platform_dirs::UserDirs;
 
 const LOG_FILE_NAME: &str = "FBugReporter - reporter.log";
+#[cfg(target_os = "windows")]
 const LOG_FILE_DIR: &str = "FBugReporter";
 
 pub struct Logger {

@@ -33,7 +33,7 @@ impl ServerConfig {
         // Get config path.
         let config_file_path = ServerConfig::get_config_file_path();
         if let Err(msg) = config_file_path {
-            return Err(format!("{}, at [{}, {}]\n\n", msg, file!(), line!()));
+            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
         }
         let config_file_path = config_file_path.unwrap();
 
@@ -52,7 +52,7 @@ impl ServerConfig {
         // Get log path.
         let log_file_path = ServerConfig::get_log_file_path();
         if let Err(msg) = log_file_path {
-            return Err(format!("{}, at [{}, {}]\n\n", msg, file!(), line!()));
+            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
         }
         let log_file_path = log_file_path.unwrap();
 
@@ -82,7 +82,7 @@ impl ServerConfig {
         // Get config path.
         let config_file_path = ServerConfig::get_config_file_path();
         if let Err(msg) = config_file_path {
-            return Err(format!("{}, at [{}, {}]\n\n", msg, file!(), line!()));
+            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
         }
         let config_file_path = config_file_path.unwrap();
 
@@ -90,11 +90,11 @@ impl ServerConfig {
             // Remove existing (old) config file.
             if let Err(e) = std::fs::remove_file(&config_file_path) {
                 return Err(format!(
-                    "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
+                    "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
+                    file!(),
+                    line!(),
                     e,
                     config_file_path,
-                    file!(),
-                    line!()
                 ));
             }
         }
@@ -103,11 +103,11 @@ impl ServerConfig {
         let config_file = File::create(&config_file_path);
         if let Err(e) = config_file {
             return Err(format!(
-                "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
+                "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
+                file!(),
+                line!(),
                 e,
                 config_file_path,
-                file!(),
-                line!()
             ));
         }
         let mut config_file = config_file.unwrap();
@@ -115,11 +115,11 @@ impl ServerConfig {
         // Write magic number.
         if let Err(e) = config_file.write(&bincode::serialize(&CONFIG_FILE_MAGIC_NUMBER).unwrap()) {
             return Err(format!(
-                "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
+                "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
+                file!(),
+                line!(),
                 e,
                 config_file_path,
-                file!(),
-                line!()
             ));
         }
 
@@ -127,22 +127,22 @@ impl ServerConfig {
         let config_version = CONFIG_FILE_VERSION;
         if let Err(e) = config_file.write(&bincode::serialize(&config_version).unwrap()) {
             return Err(format!(
-                "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
+                "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
+                file!(),
+                line!(),
                 e,
                 config_file_path,
-                file!(),
-                line!()
             ));
         }
 
         // Write server port.
         if let Err(e) = config_file.write(&bincode::serialize(&self.server_port).unwrap()) {
             return Err(format!(
-                "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
+                "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
+                file!(),
+                line!(),
                 e,
                 config_file_path,
-                file!(),
-                line!()
             ));
         }
 
@@ -150,11 +150,11 @@ impl ServerConfig {
         let pass_size: u32 = self.server_password.len() as u32;
         if let Err(e) = config_file.write(&bincode::serialize(&pass_size).unwrap()) {
             return Err(format!(
-                "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
+                "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
+                file!(),
+                line!(),
                 e,
                 config_file_path,
-                file!(),
-                line!()
             ));
         }
 
@@ -162,11 +162,11 @@ impl ServerConfig {
         if !self.server_password.is_empty() {
             if let Err(e) = config_file.write(self.server_password.as_bytes()) {
                 return Err(format!(
-                    "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
+                    "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
+                    file!(),
+                    line!(),
                     e,
                     config_file_path,
-                    file!(),
-                    line!()
                 ));
             }
         }
@@ -177,16 +177,16 @@ impl ServerConfig {
         // Get config path.
         let config_file_path = ServerConfig::get_config_file_path();
         if let Err(msg) = config_file_path {
-            return Err(format!("{}, at [{}, {}]\n\n", msg, file!(), line!()));
+            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
         }
         let config_file_path = config_file_path.unwrap();
 
         if !Path::new(&config_file_path).exists() {
             return Err(format!(
-                "An error occurred: config file does not exist (config path: {}), at [{}, {}]\n\n",
-                config_file_path,
+                "An error occurred at [{}, {}]: config file does not exist (config path: {})\n\n",
                 file!(),
-                line!()
+                line!(),
+                config_file_path,
             ));
         }
 
@@ -194,11 +194,11 @@ impl ServerConfig {
         let config_file = File::open(&config_file_path);
         if let Err(e) = config_file {
             return Err(format!(
-                "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
-                e,
-                config_file_path,
+                "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
                 file!(),
-                line!()
+                line!(),
+                e,
+                config_file_path
             ));
         }
         let mut config_file = config_file.unwrap();
@@ -207,21 +207,21 @@ impl ServerConfig {
         let mut buf = vec![0u8; std::mem::size_of::<u16>()];
         if let Err(e) = config_file.read(&mut buf) {
             return Err(format!(
-                "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
-                e,
-                config_file_path,
+                "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
                 file!(),
-                line!()
+                line!(),
+                e,
+                config_file_path
             ));
         }
         let magic_number = bincode::deserialize::<u16>(&buf).unwrap();
         if magic_number != CONFIG_FILE_MAGIC_NUMBER {
             return Err(format!(
-                "An error occurred: file magic number ({}) != config magic number ({}), at [{}, {}]\n\n",
-                magic_number,
-                CONFIG_FILE_MAGIC_NUMBER,
+                "An error occurred at [{}, {}]: file magic number ({}) is not equal to config magic number ({})\n\n",
                 file!(),
                 line!(),
+                magic_number,
+                CONFIG_FILE_MAGIC_NUMBER,
             ));
         }
 
@@ -229,11 +229,11 @@ impl ServerConfig {
         let mut buf = vec![0u8; std::mem::size_of::<u32>()];
         if let Err(e) = config_file.read(&mut buf) {
             return Err(format!(
-                "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
-                e,
-                config_file_path,
+                "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
                 file!(),
-                line!()
+                line!(),
+                e,
+                config_file_path
             ));
         }
         // use it to handle old config versions
@@ -243,11 +243,11 @@ impl ServerConfig {
         let mut buf = vec![0u8; std::mem::size_of::<u16>()];
         if let Err(e) = config_file.read(&mut buf) {
             return Err(format!(
-                "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
-                e,
-                config_file_path,
+                "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
                 file!(),
-                line!()
+                line!(),
+                e,
+                config_file_path
             ));
         }
         self.server_port = bincode::deserialize::<u16>(&buf).unwrap();
@@ -257,11 +257,11 @@ impl ServerConfig {
         let mut _password_byte_count = 0u32;
         if let Err(e) = config_file.read(&mut buf) {
             return Err(format!(
-                "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
-                e,
-                config_file_path,
+                "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
                 file!(),
-                line!()
+                line!(),
+                e,
+                config_file_path
             ));
         }
         _password_byte_count = bincode::deserialize::<u32>(&buf).unwrap();
@@ -271,22 +271,22 @@ impl ServerConfig {
         if _password_byte_count > 0 {
             if let Err(e) = config_file.read(&mut buf) {
                 return Err(format!(
-                    "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
-                    e,
-                    config_file_path,
+                    "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
                     file!(),
-                    line!()
+                    line!(),
+                    e,
+                    config_file_path
                 ));
             }
 
             let server_pass = std::str::from_utf8(&buf);
             if let Err(e) = server_pass {
                 return Err(format!(
-                    "An error occurred: {:?} (config path: {}), at [{}, {}]\n\n",
-                    e,
-                    config_file_path,
+                    "An error occurred at [{}, {}]: {:?} (config path: {})\n\n",
                     file!(),
-                    line!()
+                    line!(),
+                    e,
+                    config_file_path
                 ));
             }
 
@@ -305,7 +305,7 @@ impl ServerConfig {
         let res = ServerConfig::get_config_file_dir();
         match res {
             Ok(path) => Ok(path + CONFIG_FILE_NAME),
-            Err(msg) => Err(format!("{}, at [{}, {}]\n\n", msg, file!(), line!())),
+            Err(msg) => Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!())),
         }
     }
 
@@ -313,7 +313,7 @@ impl ServerConfig {
         let res = ServerConfig::get_config_file_dir();
         match res {
             Ok(path) => Ok(path + LOG_FILE_NAME),
-            Err(msg) => Err(format!("{}, at [{}, {}]\n\n", msg, file!(), line!())),
+            Err(msg) => Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!())),
         }
     }
 
@@ -324,7 +324,7 @@ impl ServerConfig {
             let user_dirs = UserDirs::new();
             if user_dirs.is_none() {
                 return Err(format!(
-                    "UserDirs::new() failed, error: can't read user dirs, at [{}, {}]\n\n",
+                    "An error occurred at [{}, {}]: UserDirs::new() failed, error: can't read user dirs\n\n",
                     file!(),
                     line!(),
                 ));

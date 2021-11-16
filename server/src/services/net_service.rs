@@ -32,6 +32,13 @@ impl NetService {
 
         Ok(())
     }
+    pub fn set_port(&mut self, port: u16) -> Result<(), String> {
+        if let Err(msg) = self.server_config.set_port(port) {
+            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+        }
+
+        Ok(())
+    }
     pub fn start(&self) -> Result<(), String> {
         Ok(())
     }

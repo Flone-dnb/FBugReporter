@@ -86,6 +86,16 @@ impl ServerConfig {
 
         Ok(())
     }
+    pub fn set_port(&mut self, port: u16) -> Result<(), String> {
+        self.server_port = port;
+
+        // Save to config.
+        if let Err(msg) = self.save_config() {
+            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+        }
+
+        Ok(())
+    }
     fn default() -> Self {
         let mut rng = rand::thread_rng();
         let server_key: BigUint = rng.sample(RandomBits::new(SERVER_PASSWORD_BIT_COUNT));

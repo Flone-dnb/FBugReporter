@@ -52,10 +52,14 @@ fn main() {
         } else if input == "config" {
             println!("{:#?}", net_service.server_config);
         } else if input == "refresh-password" {
-            net_service.refresh_password();
+            if let Err(msg) = net_service.refresh_password() {
+                panic!("{} at [{}, {}]", msg, file!(), line!());
+            }
             println!("New password is generated. Please update the server password in all client applications in order for them to connect to this server.");
         } else if input == "refresh-port" {
-            net_service.refresh_port();
+            if let Err(msg) = net_service.refresh_port() {
+                panic!("{} at [{}, {}]", msg, file!(), line!());
+            }
             println!("New port is generated. Please update the server port in all client applications in order for them to connect to this server.");
         } else if input == "exit" {
             break;

@@ -62,15 +62,29 @@ impl ServerConfig {
 
         Ok(server_config)
     }
-    pub fn refresh_password(&mut self) {
+    pub fn refresh_password(&mut self) -> Result<(), String> {
         let mut rng = rand::thread_rng();
         let server_key: BigUint = rng.sample(RandomBits::new(SERVER_PASSWORD_BIT_COUNT));
 
         self.server_password = server_key.to_str_radix(16);
+
+        // Save to config.
+        if let Err(msg) = self.save_config() {
+            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+        }
+
+        Ok(())
     }
-    pub fn refresh_port(&mut self) {
+    pub fn refresh_port(&mut self) -> Result<(), String> {
         let mut rng = rand::thread_rng();
         self.server_port = rng.gen_range(PORT_RANGE);
+
+        // Save to config.
+        if let Err(msg) = self.save_config() {
+            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+        }
+
+        Ok(())
     }
     fn default() -> Self {
         let mut rng = rand::thread_rng();

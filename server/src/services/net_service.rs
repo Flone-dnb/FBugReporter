@@ -18,11 +18,19 @@ impl NetService {
             server_config: config.unwrap(),
         })
     }
-    pub fn refresh_password(&mut self) {
-        self.server_config.refresh_password();
+    pub fn refresh_password(&mut self) -> Result<(), String> {
+        if let Err(msg) = self.server_config.refresh_password() {
+            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+        }
+
+        Ok(())
     }
-    pub fn refresh_port(&mut self) {
-        self.server_config.refresh_port();
+    pub fn refresh_port(&mut self) -> Result<(), String> {
+        if let Err(msg) = self.server_config.refresh_port() {
+            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+        }
+
+        Ok(())
     }
     pub fn start(&self) -> Result<(), String> {
         Ok(())

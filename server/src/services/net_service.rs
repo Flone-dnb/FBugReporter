@@ -21,6 +21,9 @@ impl NetService {
     pub fn refresh_password(&mut self) {
         self.server_config.refresh_password();
     }
+    pub fn refresh_port(&mut self) {
+        self.server_config.refresh_port();
+    }
     pub fn start(&self) -> Result<(), String> {
         Ok(())
     }

@@ -17,6 +17,7 @@ const CONFIG_FILE_MAGIC_NUMBER: u16 = 1919;
 const CONFIG_DIR_NAME: &str = "fbugreporter-server";
 const CONFIG_FILE_NAME: &str = "config.data";
 const LOG_FILE_NAME: &str = "log.txt";
+const PORT_RANGE: std::ops::Range<u16> = 7000..65535;
 
 #[derive(Debug)]
 pub struct ServerConfig {
@@ -67,12 +68,16 @@ impl ServerConfig {
 
         self.server_password = server_key.to_str_radix(16);
     }
+    pub fn refresh_port(&mut self) {
+        let mut rng = rand::thread_rng();
+        self.server_port = rng.gen_range(PORT_RANGE);
+    }
     fn default() -> Self {
         let mut rng = rand::thread_rng();
         let server_key: BigUint = rng.sample(RandomBits::new(SERVER_PASSWORD_BIT_COUNT));
 
         Self {
-            server_port: rng.gen_range(7000..65535),
+            server_port: rng.gen_range(PORT_RANGE),
             server_password: server_key.to_str_radix(16),
             config_file_path: String::from(""),
             log_file_path: String::from(""),

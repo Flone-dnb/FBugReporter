@@ -46,13 +46,17 @@ fn main() {
             println!("start - starts the server with the current configuration");
             println!("config - show the current server configuration");
             println!("refresh-password - generates new server password (use 'config' to display)");
+            println!("refresh-port - generates new server port (use 'config' to display)");
             println!("exit - exit the application");
         } else if input == "start" {
         } else if input == "config" {
             println!("{:#?}", net_service.server_config);
         } else if input == "refresh-password" {
             net_service.refresh_password();
-            println!("New password is generated. Please update the password in all client applications in order for them to connect to this server.");
+            println!("New password is generated. Please update the server password in all client applications in order for them to connect to this server.");
+        } else if input == "refresh-port" {
+            net_service.refresh_port();
+            println!("New port is generated. Please update the server port in all client applications in order for them to connect to this server.");
         } else if input == "exit" {
             break;
         } else {

@@ -10,7 +10,7 @@ use std::io::prelude::*;
 use std::path::Path;
 
 // Custom.
-use super::net_service::{SERVER_DEFAULT_PORT, SERVER_PASSWORD_BIT_COUNT};
+use super::net_service::SERVER_PASSWORD_BIT_COUNT;
 
 const CONFIG_FILE_VERSION: u32 = 0;
 const CONFIG_FILE_MAGIC_NUMBER: u16 = 1919;
@@ -72,7 +72,7 @@ impl ServerConfig {
         let server_key: BigUint = rng.sample(RandomBits::new(SERVER_PASSWORD_BIT_COUNT));
 
         Self {
-            server_port: SERVER_DEFAULT_PORT,
+            server_port: rng.gen_range(7000..65535),
             server_password: server_key.to_str_radix(16),
             config_file_path: String::from(""),
             log_file_path: String::from(""),

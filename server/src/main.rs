@@ -4,6 +4,7 @@ use std::io;
 use std::io::*;
 
 // Custom.
+use services::logger_service::Logger;
 use services::net_service::NetService;
 
 mod services;
@@ -12,7 +13,7 @@ fn main() {
     println!("FBugReporter (server) (v{}).", env!("CARGO_PKG_VERSION"));
     println!("Type 'help' to see commands...\n");
 
-    let net_service = NetService::new();
+    let net_service = NetService::new(Logger::new());
     if let Err(e) = net_service {
         panic!("{} at [{}, {}]", e, file!(), line!());
     }

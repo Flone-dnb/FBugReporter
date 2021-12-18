@@ -10,13 +10,12 @@ use std::io::prelude::*;
 use std::path::Path;
 
 // Custom.
+use super::logger_service::LOG_FILE_NAME;
 use super::net_service::SERVER_PASSWORD_BIT_COUNT;
 
 const CONFIG_FILE_VERSION: u32 = 0;
 const CONFIG_FILE_MAGIC_NUMBER: u16 = 1919;
-const CONFIG_DIR_NAME: &str = "fbugreporter-server";
-const CONFIG_FILE_NAME: &str = "config.data";
-const LOG_FILE_NAME: &str = "log.txt";
+const CONFIG_FILE_NAME: &str = "fbugreporter_server.config";
 const PORT_RANGE: std::ops::Range<u16> = 7000..65535;
 
 #[derive(Debug)]
@@ -33,10 +32,6 @@ impl ServerConfig {
 
         // Get config path.
         let config_file_path = ServerConfig::get_config_file_path();
-        if let Err(msg) = config_file_path {
-            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
-        }
-        let config_file_path = config_file_path.unwrap();
 
         if Path::new(&config_file_path).exists() {
             // Read existing config file.
@@ -49,16 +44,6 @@ impl ServerConfig {
                 return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
             }
         }
-
-        // Get log path.
-        let log_file_path = ServerConfig::get_log_file_path();
-        if let Err(msg) = log_file_path {
-            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
-        }
-        let log_file_path = log_file_path.unwrap();
-
-        server_config.log_file_path = log_file_path;
-        server_config.config_file_path = config_file_path;
 
         Ok(server_config)
     }
@@ -103,17 +88,13 @@ impl ServerConfig {
         Self {
             server_port: rng.gen_range(PORT_RANGE),
             server_password: server_key.to_str_radix(16),
-            config_file_path: String::from(""),
-            log_file_path: String::from(""),
+            config_file_path: ServerConfig::get_config_file_path(),
+            log_file_path: ServerConfig::get_log_file_path(),
         }
     }
     fn save_config(&self) -> Result<(), String> {
         // Get config path.
         let config_file_path = ServerConfig::get_config_file_path();
-        if let Err(msg) = config_file_path {
-            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
-        }
-        let config_file_path = config_file_path.unwrap();
 
         if Path::new(&config_file_path).exists() {
             // Remove existing (old) config file.
@@ -205,10 +186,6 @@ impl ServerConfig {
     fn read_config(&mut self) -> Result<(), String> {
         // Get config path.
         let config_file_path = ServerConfig::get_config_file_path();
-        if let Err(msg) = config_file_path {
-            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
-        }
-        let config_file_path = config_file_path.unwrap();
 
         if !Path::new(&config_file_path).exists() {
             return Err(format!(
@@ -330,84 +307,43 @@ impl ServerConfig {
 
         Ok(())
     }
-    fn get_config_file_path() -> Result<String, String> {
-        let res = ServerConfig::get_config_file_dir();
-        match res {
-            Ok(path) => Ok(path + CONFIG_FILE_NAME),
-            Err(msg) => Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!())),
-        }
-    }
+    fn get_config_file_path() -> String {
+        let mut config_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
 
-    fn get_log_file_path() -> Result<String, String> {
-        let res = ServerConfig::get_config_file_dir();
-        match res {
-            Ok(path) => Ok(path + LOG_FILE_NAME),
-            Err(msg) => Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!())),
-        }
-    }
-
-    fn get_config_file_dir() -> Result<String, String> {
-        let mut _config_dir = String::new();
-        #[cfg(target_os = "windows")]
-        {
-            let user_dirs = UserDirs::new();
-            if user_dirs.is_none() {
-                return Err(format!(
-                    "An error occurred at [{}, {}]: UserDirs::new() failed, error: can't read user dirs\n\n",
-                    file!(),
-                    line!(),
-                ));
-            }
-            let user_dirs = user_dirs.unwrap();
-            _config_dir = String::from(user_dirs.document_dir.to_str().unwrap());
-        }
-
+        // Check ending.
         #[cfg(target_os = "linux")]
         {
-            _config_dir = format!(
-                "/home/{}/.config",
-                users::get_current_username().unwrap().to_str().unwrap()
-            );
-            if !Path::new(&_config_dir).exists() {
-                if let Err(e) = create_dir(&_config_dir) {
-                    panic!(
-                        "unable to create a .config directory ({}): {}",
-                        &_config_dir, e
-                    );
-                }
+            if !config_path.ends_with('/') {
+                config_path += "/";
+            }
+        }
+        #[cfg(target_os = "windows")]
+        {
+            if !config_path.ends_with('\\') {
+                config_path += "\\";
             }
         }
 
-        #[cfg(target_os = "windows")]
-        if !_config_dir.ends_with('\\') {
-            _config_dir += "\\";
-        }
+        config_path + CONFIG_FILE_NAME
+    }
 
+    fn get_log_file_path() -> String {
+        let mut log_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
+
+        // Check ending.
         #[cfg(target_os = "linux")]
-        if !_config_dir.ends_with('/') {
-            _config_dir += "/";
+        {
+            if !log_path.ends_with('/') {
+                log_path += "/";
+            }
         }
-
-        _config_dir += CONFIG_DIR_NAME;
-        if !Path::new(&_config_dir).exists() {
-            if let Err(e) = create_dir(&_config_dir) {
-                panic!(
-                    "unable to create a config directory ({}), error: {}",
-                    &_config_dir, e
-                );
+        #[cfg(target_os = "windows")]
+        {
+            if !log_path.ends_with('\\') {
+                log_path += "\\";
             }
         }
 
-        #[cfg(target_os = "windows")]
-        if !_config_dir.ends_with('\\') {
-            _config_dir += "\\";
-        }
-
-        #[cfg(target_os = "linux")]
-        if !_config_dir.ends_with('/') {
-            _config_dir += "/";
-        }
-
-        Ok(_config_dir)
+        log_path + LOG_FILE_NAME
     }
 }

@@ -6,11 +6,9 @@ use std::backtrace::Backtrace;
 use gdnative::prelude::*;
 
 // Custom.
-mod listener_service;
 mod logger_service;
 mod misc;
 mod reporter_service;
-use listener_service::*;
 use logger_service::*;
 use misc::GameReport;
 use reporter_service::*;

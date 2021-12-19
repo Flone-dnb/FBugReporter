@@ -15,8 +15,11 @@ Compiled library will be located at /reporter/target/release/ (with the extensio
 Now create a new script with the following parameters: "Language" to "NativeScript", "Inherits" to "Node", "Class Name" to "Reporter" and change the name of the script (file) in the "Path" to "reporter". Then open this script and in the "Inspector" panel find property with the name "Library", click on it, then pick "Load" and select the reporter.gdnlib (GDNativeLibrary) file the we created.<br><br>
 You can then use the following GDScript code to send reports:
 
-```
+```gdscript
 var reporter = preload(*path to reporter.gdns*).new();
+
+func _ready():
+    reporter.set_server(ip_a, ip_b, ip_c, ip_d, port); # should be according to your server's info
 
 func send_report(
         report_name: String, report_text: String,
@@ -25,11 +28,15 @@ func send_report(
     var result_code: int = reporter.send_report(
         report_name, report_text, sender_name, sender_email, game_name, game_version);
     if result_code != 0:
-        # notify the user and show him the error code so he can report this issue
-        # make sure to include "FBugReporter - reporter.log" which is located
-        # Linux: in the folder with the game,
-        # Windows: in the Documents folder, in the subfolder "FBugReporter".
-        pass
+        if result_code == 1:
+            # you forgot to call reporter.set_server()
+            pass;
+        else:
+            # notify the user and show him the error code so he can report this issue
+            # make sure to include "FBugReporter - reporter.log" which is located
+            # Linux: in the folder with the game,
+            # Windows: in the Documents folder, in the subfolder "FBugReporter".
+            pass
 
 func _notification(what):
     if what == NOTIFICATION_PREDELETE:

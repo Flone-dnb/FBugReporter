@@ -1,6 +1,9 @@
 // Std.
 #![feature(backtrace)]
-use std::backtrace::Backtrace;
+use std::{
+    backtrace::Backtrace,
+    net::{Ipv4Addr, SocketAddrV4},
+};
 
 // External.
 use gdnative::prelude::*;
@@ -15,20 +18,34 @@ use reporter_service::*;
 
 #[derive(NativeClass)]
 #[inherit(Node)]
-struct Reporter;
+struct Reporter {
+    server_addr: Option<SocketAddrV4>,
+    last_report: Option<GameReport>,
+}
 
 #[gdnative::methods]
 impl Reporter {
     fn new(_owner: &Node) -> Self {
-        Reporter
+        Reporter {
+            server_addr: None,
+            last_report: None,
+        }
     }
 
     #[export]
     fn _ready(&self, _owner: &Node) {}
 
     #[export]
+    fn set_server(&mut self, _owner: &Node, ip_a: u8, ip_b: u8, ip_c: u8, ip_d: u8, port: u16) {
+        self.server_addr = Some(SocketAddrV4::new(
+            Ipv4Addr::new(ip_a, ip_b, ip_c, ip_d),
+            port,
+        ));
+    }
+
+    #[export]
     fn send_report(
-        &self,
+        &mut self,
         _owner: &Node,
         report_name: String,
         report_text: String,
@@ -37,6 +54,10 @@ impl Reporter {
         game_name: String,
         game_version: String,
     ) -> i32 {
+        if self.server_addr.is_none() {
+            return 1;
+        }
+
         // Construct report object.
         let report = GameReport {
             report_name,
@@ -51,6 +72,9 @@ impl Reporter {
         // Prepare logging.
         let logger = Logger::new();
         logger.log(&format!("Received a report: {:?}", report));
+
+        // Save report.
+        self.last_report = Some(report);
 
         return 0;
     }

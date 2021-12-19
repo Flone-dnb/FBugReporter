@@ -92,6 +92,8 @@ impl NetService {
         }
 
         // TODO: 1. establish secure connection
+        // TODO: in wouldblock have loop limit as a variable
+        // never set the limit when waiting for user messages!
         // TODO: 2. check password hash and etc
 
         Ok(())

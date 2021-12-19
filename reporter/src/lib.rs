@@ -1,9 +1,6 @@
 // Std.
-#![feature(backtrace)]
-use std::{
-    backtrace::Backtrace,
-    net::{Ipv4Addr, SocketAddrV4},
-};
+use backtrace::Backtrace;
+use std::net::{Ipv4Addr, SocketAddrV4};
 
 // External.
 use gdnative::prelude::*;
@@ -13,7 +10,7 @@ mod logger_service;
 mod misc;
 mod reporter_service;
 use logger_service::*;
-use misc::GameReport;
+use misc::*;
 use reporter_service::*;
 
 #[derive(NativeClass)]
@@ -21,6 +18,7 @@ use reporter_service::*;
 struct Reporter {
     server_addr: Option<SocketAddrV4>,
     last_report: Option<GameReport>,
+    last_error: String,
 }
 
 #[gdnative::methods]
@@ -29,11 +27,17 @@ impl Reporter {
         Reporter {
             server_addr: None,
             last_report: None,
+            last_error: String::new(),
         }
     }
 
     #[export]
     fn _ready(&self, _owner: &Node) {}
+
+    #[export]
+    fn get_last_error(&mut self, _owner: &Node) -> String {
+        return self.last_error.clone();
+    }
 
     #[export]
     fn set_server(&mut self, _owner: &Node, ip_a: u8, ip_b: u8, ip_c: u8, ip_d: u8, port: u16) {
@@ -55,7 +59,7 @@ impl Reporter {
         game_version: String,
     ) -> i32 {
         if self.server_addr.is_none() {
-            return 1;
+            return ReportResult::ServerNotSet.value();
         }
 
         // Construct report object.
@@ -69,14 +73,62 @@ impl Reporter {
             client_os_info: os_info::get(),
         };
 
+        // Check input length.
+        let invalid_field = self.is_input_valid(&report);
+        if invalid_field.is_some() {
+            self.last_error = invalid_field.unwrap().id().to_string();
+            return ReportResult::InvalidInput.value();
+        }
+
         // Prepare logging.
-        let logger = Logger::new();
+        let mut logger = Logger::new();
         logger.log(&format!("Received a report: {:?}", report));
 
-        // Save report.
-        self.last_report = Some(report);
+        let mut reporter = ReporterService::new();
+        let (result_code, error_message) =
+            reporter.send_report(self.server_addr.unwrap(), &mut logger);
 
-        return 0;
+        if result_code == ReportResult::Ok {
+            // Save report.
+            self.last_report = Some(report);
+        } else {
+            if error_message.is_none() {
+                self.last_error = String::from("Error message is None.");
+            } else {
+                self.last_error = error_message.unwrap();
+            }
+        }
+
+        return result_code.value();
+    }
+
+    /// Returns the id of the invalid field.
+    fn is_input_valid(&self, report: &GameReport) -> Option<ReportLimits> {
+        if report.report_name.chars().count() > ReportLimits::ReportName.max_length() {
+            return Some(ReportLimits::ReportName);
+        }
+
+        if report.report_text.chars().count() > ReportLimits::ReportText.max_length() {
+            return Some(ReportLimits::ReportText);
+        }
+
+        if report.sender_name.chars().count() > ReportLimits::SenderName.max_length() {
+            return Some(ReportLimits::SenderName);
+        }
+
+        if report.sender_email.chars().count() > ReportLimits::SenderEMail.max_length() {
+            return Some(ReportLimits::SenderEMail);
+        }
+
+        if report.game_name.chars().count() > ReportLimits::GameName.max_length() {
+            return Some(ReportLimits::GameName);
+        }
+
+        if report.game_version.chars().count() > ReportLimits::GameVersion.max_length() {
+            return Some(ReportLimits::GameVersion);
+        }
+
+        return None;
     }
 }
 
@@ -112,7 +164,7 @@ pub fn init_panic_hook() {
         }
         godot_error!("{}", error_message);
         // Uncomment the following line if backtrace crate is included as a dependency
-        godot_error!("Backtrace:\n{:?}", Backtrace::capture());
+        godot_error!("Backtrace:\n{:?}", Backtrace::new());
         (*(old_hook.as_ref()))(panic_info);
 
         // unsafe {

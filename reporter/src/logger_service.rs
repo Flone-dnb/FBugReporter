@@ -7,7 +7,7 @@ use std::path::Path;
 #[cfg(target_os = "windows")]
 use platform_dirs::UserDirs;
 
-const LOG_FILE_NAME: &str = "FBugReporter - reporter.log";
+const LOG_FILE_NAME: &str = "reporter.log";
 #[cfg(target_os = "windows")]
 const LOG_FILE_DIR: &str = "FBugReporter";
 

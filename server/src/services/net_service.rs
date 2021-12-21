@@ -139,10 +139,12 @@ impl NetService {
             }
 
             // TODO: establish secure connection
-            // TODO: check protocol version
+            // TODO: check protocol version (send ReportResult::WrongProtocol if different)
             // TODO: in wouldblock have loop limit as a variable
             // never set the limit when waiting for user messages!
-            // TODO: 2. check password hash and etc
+            // TODO: send ReportResult::NetworkIssue if cmac or other errors
+            // TODO: send ReportResult::ServerRejected if any fields exceed limits
+            // TODO: (only for clients, not for reporters) check password hash and etc (send ReportResult::NetworkIssue if cmac or other errors)
         }
     }
     fn establish_secure_connection(socket: &mut TcpStream) -> Result<Vec<u8>, String> {

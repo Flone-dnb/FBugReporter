@@ -41,7 +41,9 @@ pub enum ReportResult {
     InvalidInput,
     CouldNotConnect,
     InternalError,
+    WrongProtocol,
     ServerRejected,
+    NetworkIssue,
 }
 impl ReportResult {
     pub fn value(&self) -> i32 {
@@ -51,7 +53,9 @@ impl ReportResult {
             ReportResult::InvalidInput => 2,
             ReportResult::CouldNotConnect => 3,
             ReportResult::InternalError => 4,
-            ReportResult::ServerRejected => 5,
+            ReportResult::WrongProtocol => 5,
+            ReportResult::ServerRejected => 6,
+            ReportResult::NetworkIssue => 7,
         }
     }
 }

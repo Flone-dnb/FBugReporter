@@ -1,6 +1,7 @@
 // Std.
 use std::io::prelude::*;
 use std::net::*;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -31,7 +32,7 @@ enum IoResult {
 }
 
 pub struct NetService {
-    pub logger: Logger,
+    pub logger: Arc<Mutex<Logger>>,
     pub server_config: ServerConfig,
 }
 
@@ -44,7 +45,7 @@ impl NetService {
 
         Ok(Self {
             server_config: config.unwrap(),
-            logger,
+            logger: Arc::new(Mutex::new(logger)),
         })
     }
     pub fn refresh_password(&mut self) -> Result<(), String> {
@@ -69,13 +70,15 @@ impl NetService {
         Ok(())
     }
     pub fn start(&self) {
-        self.logger.print_and_log("Starting...");
+        {
+            self.logger.lock().unwrap().print_and_log("Starting...");
+        }
 
         // Create socket.
         let listener_socker =
             TcpListener::bind(format!("0.0.0.0:{}", self.server_config.server_port));
         if let Err(ref e) = listener_socker {
-            self.logger.print_and_log(&format!(
+            self.logger.lock().unwrap().print_and_log(&format!(
                 "An error occurred at [{}, {}]: {:?}\n\n",
                 file!(),
                 line!(),
@@ -84,16 +87,18 @@ impl NetService {
         }
         let listener_socket = listener_socker.unwrap();
 
-        self.logger.print_and_log(&format!(
-            "Ready to accept connections on port {}",
-            self.server_config.server_port
-        ));
+        {
+            self.logger.lock().unwrap().print_and_log(&format!(
+                "Ready to accept connections on port {}",
+                self.server_config.server_port
+            ));
+        }
 
         loop {
             // Wait for connection.
             let accept_result = listener_socket.accept();
             if let Err(ref e) = accept_result {
-                self.logger.print_and_log(&format!(
+                self.logger.lock().unwrap().print_and_log(&format!(
                     "An error occurred at [{}, {}]: {:?}\n\n",
                     file!(),
                     line!(),
@@ -102,14 +107,16 @@ impl NetService {
             }
 
             let (mut socket, addr) = accept_result.unwrap();
-            self.logger.print_and_log(&format!(
-                "Accepted connection with {}:{}.",
-                addr.ip(),
-                addr.port()
-            ));
+            {
+                self.logger.lock().unwrap().print_and_log(&format!(
+                    "Accepted connection with {}:{}.",
+                    addr.ip(),
+                    addr.port()
+                ));
+            }
 
             if let Err(e) = socket.set_nodelay(true) {
-                self.logger.print_and_log(&format!(
+                self.logger.lock().unwrap().print_and_log(&format!(
                     "An error occurred at [{}, {}]: {:?}\n\n",
                     file!(),
                     line!(),
@@ -117,7 +124,7 @@ impl NetService {
                 ));
             }
             if let Err(e) = socket.set_nonblocking(true) {
-                self.logger.print_and_log(&format!(
+                self.logger.lock().unwrap().print_and_log(&format!(
                     "An error occurred at [{}, {}]: {:?}\n\n",
                     file!(),
                     line!(),
@@ -127,7 +134,7 @@ impl NetService {
 
             let result = NetService::establish_secure_connection(&mut socket);
             if let Err(msg) = result {
-                self.logger.print_and_log(&format!(
+                self.logger.lock().unwrap().print_and_log(&format!(
                     "{} at [{}, {}] (socket: {}:{}).\n(This client cannot be connected, continuing...)\n\n",
                     msg,
                     file!(),
@@ -138,7 +145,6 @@ impl NetService {
                 continue;
             }
 
-            // TODO: establish secure connection
             // TODO: check protocol version (send ReportResult::WrongProtocol if different)
             // TODO: in wouldblock have loop limit as a variable
             // never set the limit when waiting for user messages!

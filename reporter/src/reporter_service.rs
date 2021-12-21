@@ -13,13 +13,13 @@ use num_bigint::{BigUint, RandomBits};
 use rand::{Rng, RngCore};
 
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
-const KEY_LENGTH_IN_BYTES: usize = 32;
+const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
 
 // Custom.
 use crate::logger_service::Logger;
 use crate::misc::ReportResult;
 
-const A_B_BITS: u64 = 2048;
+const A_B_BITS: u64 = 2048; // if changed, change protocol version
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 
 pub const REPORTER_PROTOCOL_VERSION: u16 = 0;
@@ -50,8 +50,28 @@ impl ReporterService {
         }
 
         let tcp_socket = tcp_socket.unwrap();
-        tcp_socket.set_nodelay(true);
-        tcp_socket.set_nonblocking(true);
+        if let Err(e) = tcp_socket.set_nodelay(true) {
+            return (
+                ReportResult::InternalError,
+                Some(format!(
+                    "An error occurred at [{}, {}]: {:?}",
+                    file!(),
+                    line!(),
+                    e
+                )),
+            );
+        }
+        if let Err(e) = tcp_socket.set_nonblocking(true) {
+            return (
+                ReportResult::InternalError,
+                Some(format!(
+                    "An error occurred at [{}, {}]: {:?}",
+                    file!(),
+                    line!(),
+                    e
+                )),
+            );
+        }
         self.tcp_socket = Some(tcp_socket);
 
         let secret_key = self.establish_secure_connection();

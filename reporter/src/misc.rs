@@ -13,9 +13,9 @@ impl ReportLimits {
     /// Returns the maximum number of __characters__ allowed for the field.
     pub fn max_length(&self) -> usize {
         match *self {
-            ReportLimits::ReportName => 50,
-            ReportLimits::ReportText => 5120,
-            ReportLimits::SenderName => 50,
+            ReportLimits::ReportName => 50,   // the server also checks the limits
+            ReportLimits::ReportText => 5120, // so if changing any values here
+            ReportLimits::SenderName => 50,   // also change them in the server
             ReportLimits::SenderEMail => 50,
             ReportLimits::GameName => 50,
             ReportLimits::GameVersion => 50,
@@ -41,6 +41,7 @@ pub enum ReportResult {
     InvalidInput,
     CouldNotConnect,
     InternalError,
+    ServerRejected,
 }
 impl ReportResult {
     pub fn value(&self) -> i32 {
@@ -50,6 +51,7 @@ impl ReportResult {
             ReportResult::InvalidInput => 2,
             ReportResult::CouldNotConnect => 3,
             ReportResult::InternalError => 4,
+            ReportResult::ServerRejected => 5,
         }
     }
 }

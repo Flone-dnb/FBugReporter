@@ -158,6 +158,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "869d572136620d55835903746bcb5cdc54cb2851fd0aeec53220b4bb65ef3013"
 
 [[package]]
+name = "log"
+version = "0.4.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51b9bbe6c47d51fc3e1a9b945965946b4c44142ab8792c50835a980d362c2710"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -194,6 +203,17 @@ name = "opaque-debug"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
+
+[[package]]
+name = "os_info"
+version = "3.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b89dd55b8d8d97dabd0d1adc625d188378fcf87632825bfe9c956acc9a11a72a"
+dependencies = [
+ "log",
+ "serde",
+ "winapi",
+]
 
 [[package]]
 name = "ppv-lite86"
@@ -289,6 +309,7 @@ dependencies = [
  "chrono",
  "cmac",
  "num-bigint",
+ "os_info",
  "rand",
  "serde",
  "sha2",

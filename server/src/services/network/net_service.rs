@@ -17,11 +17,14 @@ type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
 
 // Custom.
-use super::config_service::ServerConfig;
-use super::logger_service::Logger;
+use super::net_packets::ReportPacket;
+use crate::services::config_service::ServerConfig;
+use crate::services::logger_service::Logger;
 
 const A_B_BITS: u64 = 2048; // if changed, change protocol version
-const SERVER_PROTOCOL_VERSION: u16 = 0;
+const IV_LENGTH: usize = 16; // if changed, change protocol version
+const CMAC_TAG_LENGTH: usize = 16; // if changed, change protocol version
+const NETWORK_PROTOCOL_VERSION: u16 = 0;
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 pub const SERVER_PASSWORD_BIT_COUNT: u64 = 1024;
 
@@ -132,10 +135,10 @@ impl NetService {
                 ));
             }
 
-            let result = NetService::establish_secure_connection(&mut socket);
-            if let Err(msg) = result {
+            let secret_key = NetService::establish_secure_connection(&mut socket);
+            if let Err(msg) = secret_key {
                 self.logger.lock().unwrap().print_and_log(&format!(
-                    "{} at [{}, {}] (socket: {}:{}).\n(This client cannot be connected, continuing...)\n\n",
+                    "{} at [{}, {}] (socket: {}:{}).\n\n",
                     msg,
                     file!(),
                     line!(),
@@ -144,10 +147,183 @@ impl NetService {
                 ));
                 continue;
             }
+            let secret_key = secret_key.unwrap();
 
+            // Read u32 (size of a packet)
+            let mut packet_size_buf = [0u8; std::u32::MAX as usize];
+            let mut _next_packet_size: u32 = 0;
+            match NetService::read_from_socket(&mut socket, &mut packet_size_buf) {
+                IoResult::Fin => {
+                    self.logger.lock().unwrap().print_and_log(&format!(
+                        "An error occurred at [{}, {}]: unexpected FIN received (socket: {}:{}).",
+                        file!(),
+                        line!(),
+                        addr.ip(),
+                        addr.port(),
+                    ));
+                    continue;
+                }
+                IoResult::Err(msg) => {
+                    self.logger.lock().unwrap().print_and_log(&format!(
+                        "{} at [{}, {}] (socket: {}:{})\n\n",
+                        msg,
+                        file!(),
+                        line!(),
+                        addr.ip(),
+                        addr.port(),
+                    ));
+                    continue;
+                }
+                IoResult::Ok(byte_count) => {
+                    if byte_count != packet_size_buf.len() {
+                        self.logger.lock().unwrap().print_and_log(&format!(
+                            "An error occurred at [{}, {}]: not all data received (got: {}, expected: {}) (socket: {}:{}).",
+                            file!(),
+                            line!(),
+                            byte_count,
+                            packet_size_buf.len(),
+                            addr.ip(),
+                            addr.port(),
+                        ));
+                        continue;
+                    }
+
+                    let res = bincode::deserialize(&packet_size_buf);
+                    if let Err(e) = res {
+                        self.logger.lock().unwrap().print_and_log(&format!(
+                            "An error occurred at [{}, {}]: {:?} (socket: {}:{})\n\n",
+                            file!(),
+                            line!(),
+                            e,
+                            addr.ip(),
+                            addr.port(),
+                        ));
+                        continue;
+                    }
+
+                    _next_packet_size = res.unwrap();
+                }
+            }
+
+            // Receive encrypted packet.
+            let mut encrypted_packet = vec![0u8; _next_packet_size as usize];
+            match NetService::read_from_socket(&mut socket, &mut encrypted_packet) {
+                IoResult::Fin => {
+                    self.logger.lock().unwrap().print_and_log(&format!(
+                        "An error occurred at [{}, {}]: unexpected FIN received (socket: {}:{}).",
+                        file!(),
+                        line!(),
+                        addr.ip(),
+                        addr.port(),
+                    ));
+                    continue;
+                }
+                IoResult::Err(msg) => {
+                    self.logger.lock().unwrap().print_and_log(&format!(
+                        "{} at [{}, {}] (socket: {}:{})\n\n",
+                        msg,
+                        file!(),
+                        line!(),
+                        addr.ip(),
+                        addr.port(),
+                    ));
+                    continue;
+                }
+                IoResult::Ok(_) => {}
+            };
+
+            // Get IV.
+            if encrypted_packet.len() < IV_LENGTH {
+                self.logger.lock().unwrap().print_and_log(&format!(
+                    "An error occurred at [{}, {}]: unexpected packet length ({}) (socket: {}:{}).",
+                    file!(),
+                    line!(),
+                    encrypted_packet.len(),
+                    addr.ip(),
+                    addr.port(),
+                ));
+                continue;
+            }
+            let iv = &encrypted_packet[..IV_LENGTH].to_vec();
+            encrypted_packet = encrypted_packet[IV_LENGTH..].to_vec();
+
+            // Decrypt packet.
+            let cipher = Aes256Cbc::new_from_slices(&secret_key, &iv).unwrap();
+            let decrypted_packet = cipher.decrypt_vec(&encrypted_packet);
+            if let Err(e) = decrypted_packet {
+                self.logger.lock().unwrap().print_and_log(&format!(
+                    "An error occurred at [{}, {}]: {:?} (socket: {}:{})\n\n",
+                    file!(),
+                    line!(),
+                    e,
+                    addr.ip(),
+                    addr.port(),
+                ));
+                continue;
+            }
+            let mut decrypted_packet = decrypted_packet.unwrap();
+
+            // CMAC
+            let mut mac = Cmac::<Aes256>::new_from_slice(&secret_key).unwrap();
+            let tag: Vec<u8> = decrypted_packet
+                .drain(decrypted_packet.len().saturating_sub(CMAC_TAG_LENGTH)..)
+                .collect();
+            mac.update(&decrypted_packet);
+            if let Err(e) = mac.verify(&tag) {
+                self.logger.lock().unwrap().print_and_log(&format!(
+                    "An error occurred at [{}, {}]: {:?} (socket: {}:{})\n\n",
+                    file!(),
+                    line!(),
+                    e,
+                    addr.ip(),
+                    addr.port(),
+                ));
+                continue;
+            }
+
+            // Deserialize.
+            let packet = bincode::deserialize::<ReportPacket>(&decrypted_packet);
+            if let Err(e) = packet {
+                self.logger.lock().unwrap().print_and_log(&format!(
+                    "An error occurred at [{}, {}]: {:?} (socket: {}:{})\n\n",
+                    file!(),
+                    line!(),
+                    e,
+                    addr.ip(),
+                    addr.port(),
+                ));
+                continue;
+            }
+            let packet = packet.unwrap();
+
+            // Check protocol version.
+            if packet.reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
+                self.logger.lock().unwrap().print_and_log(&format!(
+                    "An error occurred at [{}, {}]: wrong protocol version ({} != {}) (socket: {}:{})\n\n",
+                    file!(),
+                    line!(),
+                    packet.reporter_net_protocol,
+                    NETWORK_PROTOCOL_VERSION,
+                    addr.ip(),
+                    addr.port(),
+                ));
+                continue;
+            }
+
+            {
+                self.logger
+                    .lock()
+                    .unwrap()
+                    .print_and_log(&format!("Received report: {:?}", packet.game_report));
+            }
+
+            // TODO: move all this code to the new process_user() function.
+            //       add a helper function receive_packet() with generics.
             // TODO: check protocol version (send ReportResult::WrongProtocol if different)
-            // TODO: in wouldblock have loop limit as a variable
-            // never set the limit when waiting for user messages!
+            // TODO: in wouldblock (read/write functions) have loop limit as a variable
+            //       never set the limit when waiting for user messages!
+            //       pass loop limit to read/write functions
+            // TODO: add keep alive timer
             // TODO: send ReportResult::NetworkIssue if cmac or other errors
             // TODO: send ReportResult::ServerRejected if any fields exceed limits
             // TODO: (only for clients, not for reporters) check password hash and etc (send ReportResult::NetworkIssue if cmac or other errors)

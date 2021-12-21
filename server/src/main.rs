@@ -5,8 +5,9 @@ use std::io::*;
 
 // Custom.
 use services::logger_service::Logger;
-use services::net_service::NetService;
+use services::network::net_service::NetService;
 
+mod misc;
 mod services;
 
 fn main() {
@@ -14,8 +15,8 @@ fn main() {
     println!("Type 'help' to see commands...\n");
 
     let net_service = NetService::new(Logger::new());
-    if let Err(e) = net_service {
-        panic!("{} at [{}, {}]", e, file!(), line!());
+    if let Err(msg) = net_service {
+        panic!("{} at [{}, {}]", msg, file!(), line!());
     }
     let mut net_service = net_service.unwrap();
 

@@ -11,7 +11,7 @@ use std::path::Path;
 
 // Custom.
 use super::logger_service::LOG_FILE_NAME;
-use super::net_service::SERVER_PASSWORD_BIT_COUNT;
+use super::network::net_service::SERVER_PASSWORD_BIT_COUNT;
 
 const CONFIG_FILE_VERSION: u32 = 0;
 const CONFIG_FILE_MAGIC_NUMBER: u16 = 1919;

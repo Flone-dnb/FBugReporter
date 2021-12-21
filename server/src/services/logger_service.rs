@@ -6,7 +6,7 @@ use std::path::Path;
 // External.
 use chrono::Local;
 
-pub const LOG_FILE_NAME: &str = "fbugreporter_server.log";
+pub const LOG_FILE_NAME: &str = "server.log";
 
 pub struct Logger;
 
@@ -16,7 +16,9 @@ impl Logger {
         Logger::recreate_log_file();
         Self {}
     }
-    pub fn log(&self, text: &str) {
+    pub fn print_and_log(&self, text: &str) {
+        println!("{}", text);
+
         let mut log_file = self.open_log_file();
 
         let datetime = Local::now();

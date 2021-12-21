@@ -51,9 +51,8 @@ fn main() {
             println!("refresh-port - generates new server port");
             println!("exit - exit the application");
         } else if input == "start" {
-            if let Err(msg) = net_service.start() {
-                println!("{} at [{}, {}]", msg, file!(), line!());
-            }
+            net_service.start();
+            break;
         } else if input.contains("config") {
             if input == "config" {
                 println!("{:#?}", net_service.server_config);

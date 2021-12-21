@@ -15,7 +15,7 @@ use super::net_service::SERVER_PASSWORD_BIT_COUNT;
 
 const CONFIG_FILE_VERSION: u32 = 0;
 const CONFIG_FILE_MAGIC_NUMBER: u16 = 1919;
-const CONFIG_FILE_NAME: &str = "fbugreporter_server.config";
+const CONFIG_FILE_NAME: &str = "server.config";
 const PORT_RANGE: std::ops::Range<u16> = 7000..65535;
 
 #[derive(Debug)]

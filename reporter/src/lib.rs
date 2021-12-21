@@ -8,6 +8,7 @@ use gdnative::prelude::*;
 // Custom.
 mod logger_service;
 mod misc;
+mod net_packets;
 mod reporter_service;
 use logger_service::*;
 use misc::*;
@@ -86,7 +87,7 @@ impl Reporter {
 
         let mut reporter = ReporterService::new();
         let (result_code, error_message) =
-            reporter.send_report(self.server_addr.unwrap(), &mut logger);
+            reporter.send_report(self.server_addr.unwrap(), report.clone(), &mut logger);
 
         if result_code == ReportResult::Ok {
             // Save report.

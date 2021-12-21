@@ -1,3 +1,4 @@
+// External.
 use serde::{Deserialize, Serialize};
 
 // --------------------------------------------------------
@@ -61,7 +62,7 @@ impl ReportResult {
 }
 // --------------------------------------------------------
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GameReport {
     pub report_name: String,
     pub report_text: String,

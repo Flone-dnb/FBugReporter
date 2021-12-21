@@ -4,6 +4,7 @@ use std::io::prelude::*;
 use std::path::Path;
 
 // External.
+use chrono::Local;
 #[cfg(target_os = "windows")]
 use platform_dirs::UserDirs;
 
@@ -25,7 +26,9 @@ impl Logger {
     pub fn log(&self, text: &str) {
         let mut log_file = self.open_log_file();
 
-        if let Err(e) = writeln!(log_file, "{}", text) {
+        let datetime = Local::now();
+
+        if let Err(e) = writeln!(log_file, "[{}]: {}", datetime.naive_local(), text) {
             panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
         }
     }

@@ -150,7 +150,7 @@ impl NetService {
             let secret_key = secret_key.unwrap();
 
             // Read u32 (size of a packet)
-            let mut packet_size_buf = [0u8; std::mem::size_of::<usize>() as usize];
+            let mut packet_size_buf = [0u8; std::mem::size_of::<u32>() as usize];
             let mut _next_packet_size: u32 = 0;
             match NetService::read_from_socket(&mut socket, &mut packet_size_buf) {
                 IoResult::Fin => {

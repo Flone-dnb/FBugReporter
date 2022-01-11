@@ -36,6 +36,11 @@ impl Reporter {
     fn _ready(&self, _owner: &Node) {}
 
     #[export]
+    fn get_log_file_path(&self, _owner: &Node) -> String {
+        Logger::get_log_file_path()
+    }
+
+    #[export]
     fn get_last_error(&mut self, _owner: &Node) -> String {
         return self.last_error.clone();
     }

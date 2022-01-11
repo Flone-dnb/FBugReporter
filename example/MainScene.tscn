@@ -1,6 +1,8 @@
-[gd_scene load_steps=2 format=2]
+[gd_scene load_steps=3 format=2]
 
 [ext_resource path="res://MainScene.gd" type="Script" id=1]
+
+[sub_resource type="Theme" id=1]
 
 [node name="Control" type="Control"]
 anchor_right = 1.0
@@ -9,3 +11,241 @@ script = ExtResource( 1 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
+
+[node name="TitleLabel" type="Label" parent="."]
+anchor_top = 0.05
+anchor_right = 1.001
+anchor_bottom = 0.158
+margin_right = -0.0240479
+margin_bottom = 0.199997
+theme = SubResource( 1 )
+text = "Report a bug"
+align = 1
+valign = 1
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="DescriptionLabel" type="Label" parent="."]
+anchor_top = 0.175
+anchor_right = 1.0
+anchor_bottom = 0.268
+margin_top = -7.62939e-06
+margin_bottom = 0.199997
+theme = SubResource( 1 )
+text = "Encountered an unexpected behavior of the game? The game crashed, froze or something else? Use this form to describe what happend. Please, tell us about the things that you did before an unexpected behavior occurred so we can reproduce the issue."
+align = 1
+valign = 1
+autowrap = true
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="WarningLabel" type="Label" parent="."]
+anchor_top = 0.278
+anchor_right = 1.001
+anchor_bottom = 0.315
+margin_top = 0.199982
+margin_right = -0.0240479
+margin_bottom = -1.52588e-05
+theme = SubResource( 1 )
+text = "The more details you provide, the more likely the issue will be resolved."
+align = 1
+valign = 1
+autowrap = true
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+anchor_left = 0.009
+anchor_top = 0.338
+anchor_right = 0.988
+anchor_bottom = 0.883
+margin_left = -0.216
+margin_top = 0.199982
+margin_right = 0.287964
+margin_bottom = 0.200012
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="ReportNameHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+margin_right = 1002.0
+margin_bottom = 24.0
+
+[node name="ReporNameLabel" type="Label" parent="VBoxContainer/ReportNameHBoxContainer"]
+margin_top = 5.0
+margin_right = 99.0
+margin_bottom = 19.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 10.0
+text = "Summary:"
+
+[node name="ReportNameLineEdit" type="LineEdit" parent="VBoxContainer/ReportNameHBoxContainer"]
+margin_left = 103.0
+margin_right = 1002.0
+margin_bottom = 24.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 90.0
+max_length = 50
+placeholder_text = "Short description of your issue... For example: \"Crash on level 2\"."
+
+[node name="SenderNameHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+margin_top = 28.0
+margin_right = 1002.0
+margin_bottom = 52.0
+
+[node name="SenderNameLabel" type="Label" parent="VBoxContainer/SenderNameHBoxContainer"]
+margin_top = 5.0
+margin_right = 99.0
+margin_bottom = 19.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 10.0
+text = "Your name:"
+
+[node name="SenderNameLineEdit" type="LineEdit" parent="VBoxContainer/SenderNameHBoxContainer"]
+margin_left = 103.0
+margin_right = 1002.0
+margin_bottom = 24.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 90.0
+max_length = 50
+placeholder_text = "How should we call you? This field is optional and could be empty."
+
+[node name="SenderEMailHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+margin_top = 56.0
+margin_right = 1002.0
+margin_bottom = 80.0
+
+[node name="SenderEMailLabel" type="Label" parent="VBoxContainer/SenderEMailHBoxContainer"]
+margin_top = 5.0
+margin_right = 99.0
+margin_bottom = 19.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 10.0
+text = "Your email:"
+
+[node name="SenderEMailLineEdit" type="LineEdit" parent="VBoxContainer/SenderEMailHBoxContainer"]
+margin_left = 103.0
+margin_right = 1002.0
+margin_bottom = 24.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 90.0
+max_length = 50
+placeholder_text = "Sometimes we could contact you for more details about the issue. This field is optional and could be empty."
+
+[node name="ReportTextHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+margin_top = 84.0
+margin_right = 1002.0
+margin_bottom = 225.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="ReportTextLabel" type="Label" parent="VBoxContainer/ReportTextHBoxContainer"]
+margin_top = 63.0
+margin_right = 99.0
+margin_bottom = 77.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 10.0
+text = "Issue report:"
+
+[node name="ReportTextTextEdit" type="TextEdit" parent="VBoxContainer/ReportTextHBoxContainer"]
+margin_left = 103.0
+margin_right = 1002.0
+margin_bottom = 141.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 90.0
+text = "Describe your issue here! English is preferred, but any other language will work.
+Make sure to include:
+    - level/location where the issue occurred;
+	- what happend: crash, freeze, graphical glitch, collision issues or something else;
+	- what did you do before the issue occurred;
+	- etc."
+
+[node name="EmptyHBoxContainer3" type="HBoxContainer" parent="VBoxContainer"]
+margin_top = 229.0
+margin_right = 1002.0
+margin_bottom = 229.0
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/EmptyHBoxContainer3"]
+
+[node name="NoticeHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+margin_top = 233.0
+margin_right = 1002.0
+margin_bottom = 281.0
+
+[node name="NoticeLabel" type="Label" parent="VBoxContainer/NoticeHBoxContainer"]
+margin_right = 1002.0
+margin_bottom = 48.0
+size_flags_horizontal = 3
+size_flags_vertical = 6
+text = "All data that you specify here will be transferred in the encrypted form, no one except the developers will be able to read your name / email / report. 
+Your email will only be used to get more information about the issue (if necessary). We do not share your email with third parties. After your issue has been resolved, your email will be deleted. "
+align = 1
+valign = 1
+autowrap = true
+
+[node name="EmptyHBoxContainer2" type="HBoxContainer" parent="VBoxContainer"]
+margin_top = 285.0
+margin_right = 1002.0
+margin_bottom = 285.0
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/EmptyHBoxContainer2"]
+
+[node name="SendReportHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+margin_top = 289.0
+margin_right = 1002.0
+margin_bottom = 309.0
+
+[node name="MarginContainer2" type="MarginContainer" parent="VBoxContainer/SendReportHBoxContainer"]
+margin_right = 397.0
+margin_bottom = 20.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 40.0
+
+[node name="SendReportButton" type="Button" parent="VBoxContainer/SendReportHBoxContainer"]
+margin_left = 401.0
+margin_right = 600.0
+margin_bottom = 20.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 20.0
+text = "Send Report"
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/SendReportHBoxContainer"]
+margin_left = 604.0
+margin_right = 1002.0
+margin_bottom = 20.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 40.0
+
+[node name="SendResultHBoxContainer2" type="HBoxContainer" parent="VBoxContainer"]
+margin_top = 313.0
+margin_right = 1002.0
+margin_bottom = 327.0
+
+[node name="MarginContainer2" type="MarginContainer" parent="VBoxContainer/SendResultHBoxContainer2"]
+margin_right = 99.0
+margin_bottom = 14.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 10.0
+
+[node name="SendResultLabel" type="Label" parent="VBoxContainer/SendResultHBoxContainer2"]
+margin_left = 103.0
+margin_right = 898.0
+margin_bottom = 14.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 80.0
+align = 1
+valign = 1
+autowrap = true
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/SendResultHBoxContainer2"]
+margin_left = 902.0
+margin_right = 1002.0
+margin_bottom = 14.0
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 10.0
+
+[connection signal="text_changed" from="VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit" to="." method="_on_ReportTextTextEdit_text_changed"]
+[connection signal="pressed" from="VBoxContainer/SendReportHBoxContainer/SendReportButton" to="." method="_on_SendReportButton_pressed"]

@@ -128,7 +128,7 @@ impl ReporterService {
         let mut encrypted_packet = cipher.encrypt_vec(&binary_packet);
 
         // Prepare encrypted packet len buffer.
-        if encrypted_packet.len() + IV_LENGTH > std::u16::MAX as usize {
+        if encrypted_packet.len() + IV_LENGTH > std::u32::MAX as usize {
             // should never happen
             return (
                 ReportResult::InternalError,
@@ -137,7 +137,7 @@ impl ReporterService {
                     file!(),
                     line!(),
                     encrypted_packet.len() + IV_LENGTH,
-                    std::u16::MAX
+                    std::u32::MAX
                 )),
             );
         }

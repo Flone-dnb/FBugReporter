@@ -11,12 +11,12 @@ use std::path::Path;
 
 // Custom.
 use super::logger_service::LOG_FILE_NAME;
-use super::network::net_service::SERVER_PASSWORD_BIT_COUNT;
 
 const CONFIG_FILE_VERSION: u32 = 0;
 const CONFIG_FILE_MAGIC_NUMBER: u16 = 1919;
 const CONFIG_FILE_NAME: &str = "server.config";
 const PORT_RANGE: std::ops::Range<u16> = 7000..65535;
+const SERVER_PASSWORD_BIT_COUNT: u64 = 1024;
 
 #[derive(Debug)]
 pub struct ServerConfig {

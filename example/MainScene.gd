@@ -96,6 +96,10 @@ func send_report(
 			return;
 	else:
 		get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = "We successfully received your report! Thank you!";
+		get_node("VBoxContainer/ReportNameHBoxContainer/ReportNameLineEdit").text = "";
+		get_node("VBoxContainer/SenderNameHBoxContainer/SenderNameLineEdit").text = "";
+		get_node("VBoxContainer/SenderEMailHBoxContainer/SenderEMailLineEdit").text = "";
+		get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text = "";
 
 func _notification(what):
 	if what == NOTIFICATION_PREDELETE:

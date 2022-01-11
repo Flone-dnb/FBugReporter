@@ -11,7 +11,7 @@ use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
 use cmac::{Cmac, Mac, NewMac};
 use num_bigint::{BigUint, RandomBits};
-use rand::{Rng, RngCore};
+use rand::Rng;
 
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
@@ -150,7 +150,7 @@ impl NetService {
             let secret_key = secret_key.unwrap();
 
             // Read u32 (size of a packet)
-            let mut packet_size_buf = [0u8; std::u32::MAX as usize];
+            let mut packet_size_buf = [0u8; std::mem::size_of::<usize>() as usize];
             let mut _next_packet_size: u32 = 0;
             match NetService::read_from_socket(&mut socket, &mut packet_size_buf) {
                 IoResult::Fin => {

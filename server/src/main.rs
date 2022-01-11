@@ -69,7 +69,7 @@ fn main() {
                     if let Err(msg) = net_service.set_port(value) {
                         panic!("{} at [{}, {}]", msg, file!(), line!());
                     } else {
-                        println!("New port is saved. Please update the server port in all client applications in order for them to connect to this server.");
+                        println!("New port ({}) is saved. Please update the server port in the reporter and the client application in order for them to connect to this server.", value);
                     }
                 } else {
                     println!(

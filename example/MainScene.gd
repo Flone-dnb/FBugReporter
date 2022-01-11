@@ -99,7 +99,7 @@ func send_report(
 		get_node("VBoxContainer/ReportNameHBoxContainer/ReportNameLineEdit").text = "";
 		get_node("VBoxContainer/SenderNameHBoxContainer/SenderNameLineEdit").text = "";
 		get_node("VBoxContainer/SenderEMailHBoxContainer/SenderEMailLineEdit").text = "";
-		get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text = "";
+		get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text = initial_report_text;
 
 func _notification(what):
 	if what == NOTIFICATION_PREDELETE:

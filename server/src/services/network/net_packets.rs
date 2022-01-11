@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::misc::GameReport;
 
 #[derive(Serialize, Deserialize)]
-pub struct ReportPacket {
-    pub reporter_net_protocol: u16,
-    pub game_report: GameReport,
+pub enum NetPacket {
+    ReportPacket {
+        reporter_net_protocol: u16,
+        game_report: GameReport,
+    },
 }

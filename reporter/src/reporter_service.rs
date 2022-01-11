@@ -18,7 +18,7 @@ const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
 // Custom.
 use crate::logger_service::Logger;
 use crate::misc::{GameReport, ReportResult};
-use crate::net_packets::ReportPacket;
+use crate::net_packets::NetPacket;
 
 const A_B_BITS: u64 = 2048; // if changed, change protocol version
 const IV_LENGTH: usize = 16; // if changed, change protocol version
@@ -92,7 +92,7 @@ impl ReporterService {
         let secret_key = secret_key.unwrap();
 
         // Prepare packet.
-        let packet = ReportPacket {
+        let packet = NetPacket::ReportPacket {
             reporter_net_protocol: NETWORK_PROTOCOL_VERSION,
             game_report: report,
         };

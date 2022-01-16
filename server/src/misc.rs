@@ -1,6 +1,7 @@
 // External.
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug)]
 pub enum ReportLimits {
     ReportName,
     ReportText,
@@ -13,6 +14,8 @@ impl ReportLimits {
     /// Returns the maximum number of __characters__ allowed for the field.
     pub fn max_length(&self) -> usize {
         match *self {
+            // be careful and tweak the MAX_PACKET_SIZE_IN_BYTES in user_service.rs
+            // if needed, always test first, only then change MAX_PACKET_SIZE_IN_BYTES
             ReportLimits::ReportName => 50, // the reporter also checks the limits
             ReportLimits::ReportText => 5120, // so if changing any values here
             ReportLimits::SenderName => 50, // also change them in the reporter

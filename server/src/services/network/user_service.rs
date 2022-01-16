@@ -20,11 +20,12 @@ const A_B_BITS: u64 = 2048; // if changed, change protocol version
 const IV_LENGTH: usize = 16; // if changed, change protocol version
 const CMAC_TAG_LENGTH: usize = 16; // if changed, change protocol version
 const NETWORK_PROTOCOL_VERSION: u16 = 0;
+const MAX_PACKET_SIZE_IN_BYTES: u32 = 131_072; // 128 kB for now
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 
 // Custom.
 use super::net_packets::{InPacket, OutPacket};
-use crate::misc::ReportResult;
+use crate::misc::*;
 use crate::services::logger_service::Logger;
 
 enum IoResult {
@@ -125,7 +126,7 @@ impl UserService {
         // TODO: in wouldblock (read/write functions) have loop limit as a variable
         //       never set the limit when waiting for user messages!
         //       pass loop limit to read/write functions
-        // TODO: add keep alive timer
+        // TODO: add keep alive timer (for clients only)
         // TODO: send ReportResult::NetworkIssue if cmac or other errors
         // TODO: send ReportResult::ServerRejected if any fields exceed limits
         // TODO: (only for clients, not for reporters) check password hash and etc (send ReportResult::NetworkIssue if cmac or other errors)
@@ -136,9 +137,9 @@ impl UserService {
             } => {
                 // Check protocol version.
                 if reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
-                    if let Err(msg) = self.send_packet(OutPacket::ReportAnswer {
-                        result_code: ReportResult::WrongProtocol,
-                    }) {
+                    let result_code = ReportResult::WrongProtocol;
+
+                    if let Err(msg) = self.send_packet(OutPacket::ReportAnswer { result_code }) {
                         self.logger.lock().unwrap().print_and_log(&format!(
                             "An error occurred at [{}, {}]: {:?}.\n\n",
                             file!(),
@@ -147,7 +148,7 @@ impl UserService {
                         ));
                     }
 
-                    return Err((ReportResult::WrongProtocol,
+                    return Err((result_code,
                         format!(
                         "An error occurred at [{}, {}]: wrong protocol version ({} != {}) (socket: {}:{})\n\n",
                         file!(),
@@ -159,8 +160,34 @@ impl UserService {
                     )));
                 }
 
+                // Check field limits.
+                if let Err((field, length)) = UserService::check_report_field_limits(&game_report) {
+                    let result_code = ReportResult::ServerRejected;
+
+                    if let Err(msg) = self.send_packet(OutPacket::ReportAnswer { result_code }) {
+                        self.logger.lock().unwrap().print_and_log(&format!(
+                            "An error occurred at [{}, {}]: {:?}.\n\n",
+                            file!(),
+                            line!(),
+                            msg
+                        ));
+                    }
+
+                    return Err((result_code,
+                        format!(
+                        "An error occurred at [{}, {}]: report exceeds report field limits ({:?} has length of {} characters while the limit is {}) (socket: {}:{})\n\n",
+                        file!(),
+                        line!(),
+                        field,
+                        length,
+                        field.max_length(),
+                        self.addr.ip(),
+                        self.addr.port(),
+                    )));
+                }
+
                 self.logger.lock().unwrap().print_and_log(&format!(
-                    "Received report from socket {}:{}.",
+                    "Received and saved a report from socket {}:{}.",
                     self.addr.ip(),
                     self.addr.port()
                 ));
@@ -382,6 +409,41 @@ impl UserService {
 
         Ok(Vec::from(&secret_key_str[0..KEY_LENGTH_IN_BYTES]))
     }
+    /// Returns [`Ok`] if the fields have the corrent length (amount of characters, not byte count),
+    /// otherwise returns the field type and its received length (not the limit, actual length).
+    fn check_report_field_limits(report: &GameReport) -> Result<(), (ReportLimits, usize)> {
+        if report.report_name.chars().count() > ReportLimits::ReportName.max_length() {
+            return Err((ReportLimits::ReportName, report.report_name.chars().count()));
+        }
+
+        if report.report_text.chars().count() > ReportLimits::ReportText.max_length() {
+            return Err((ReportLimits::ReportText, report.report_text.chars().count()));
+        }
+
+        if report.sender_name.chars().count() > ReportLimits::SenderName.max_length() {
+            return Err((ReportLimits::SenderName, report.sender_name.chars().count()));
+        }
+
+        if report.sender_email.chars().count() > ReportLimits::SenderEMail.max_length() {
+            return Err((
+                ReportLimits::SenderEMail,
+                report.sender_email.chars().count(),
+            ));
+        }
+
+        if report.game_name.chars().count() > ReportLimits::GameName.max_length() {
+            return Err((ReportLimits::GameName, report.game_name.chars().count()));
+        }
+
+        if report.game_version.chars().count() > ReportLimits::GameVersion.max_length() {
+            return Err((
+                ReportLimits::GameVersion,
+                report.game_version.chars().count(),
+            ));
+        }
+
+        Ok(())
+    }
     fn send_packet(&mut self, packet: OutPacket) -> Result<(), String> {
         if self.secret_key.is_empty() {
             return Err(format!(
@@ -525,6 +587,19 @@ impl UserService {
 
                 _next_packet_size = res.unwrap();
             }
+        }
+
+        // Check packet size.
+        if _next_packet_size > MAX_PACKET_SIZE_IN_BYTES {
+            return Err(format!(
+                "An error occurred at [{}, {}]: incoming packet is too big to receive ({} > {} bytes) (socket: {}:{}).",
+                file!(),
+                line!(),
+                _next_packet_size,
+                MAX_PACKET_SIZE_IN_BYTES,
+                self.addr.ip(),
+                self.addr.port(),
+            ));
         }
 
         // Receive encrypted packet.

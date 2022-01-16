@@ -165,7 +165,6 @@ impl UserService {
                     self.addr.port()
                 ));
 
-                std::thread::sleep(std::time::Duration::from_secs(10));
                 if let Err(msg) = self.send_packet(OutPacket::ReportAnswer {
                     result_code: ReportResult::Ok,
                 }) {

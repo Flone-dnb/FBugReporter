@@ -22,6 +22,7 @@ impl ReportLimits {
             ReportLimits::SenderEMail => 50,
             ReportLimits::GameName => 50,
             ReportLimits::GameVersion => 50,
+            // if adding new fields, update check_report_field_limits() in user_service.rs
         }
     }
 }

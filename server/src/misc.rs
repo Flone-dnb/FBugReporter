@@ -22,7 +22,35 @@ impl ReportLimits {
         }
     }
 }
-
+// --------------------------------------------------------
+#[derive(PartialEq, Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum ReportResult {
+    // this enum should be in sync with the server's enum
+    Ok,
+    ServerNotSet,
+    InvalidInput,
+    CouldNotConnect,
+    InternalError,
+    WrongProtocol,
+    ServerRejected,
+    NetworkIssue,
+    // this enum should be in sync with the server's enum
+}
+impl ReportResult {
+    pub fn value(&self) -> i32 {
+        match *self {
+            ReportResult::Ok => 0,
+            ReportResult::ServerNotSet => 1, // if changing any values here
+            ReportResult::InvalidInput => 2, // also change them in the reporter
+            ReportResult::CouldNotConnect => 3, // ...
+            ReportResult::InternalError => 4,
+            ReportResult::WrongProtocol => 5,
+            ReportResult::ServerRejected => 6,
+            ReportResult::NetworkIssue => 7,
+        }
+    }
+}
+// --------------------------------------------------------
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GameReport {
     pub report_name: String,

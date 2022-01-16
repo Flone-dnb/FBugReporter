@@ -11,7 +11,7 @@ use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
 use cmac::{Cmac, Mac, NewMac};
 use num_bigint::{BigUint, RandomBits};
-use rand::Rng;
+use rand::{Rng, RngCore};
 
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
@@ -23,7 +23,8 @@ const NETWORK_PROTOCOL_VERSION: u16 = 0;
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 
 // Custom.
-use super::net_packets::NetPacket;
+use super::net_packets::{InPacket, OutPacket};
+use crate::misc::ReportResult;
 use crate::services::logger_service::Logger;
 
 enum IoResult {
@@ -34,9 +35,10 @@ enum IoResult {
 pub struct UserService {
     logger: Arc<Mutex<Logger>>,
     socket: TcpStream,
+    secret_key: Vec<u8>,
     addr: SocketAddr,
     connected_users_count: Arc<Mutex<usize>>,
-    exit_error: Option<String>,
+    exit_error: Option<(ReportResult, String)>,
 }
 
 impl UserService {
@@ -63,51 +65,61 @@ impl UserService {
             addr,
             connected_users_count,
             exit_error: None,
+            secret_key: Vec::new(),
         }
     }
     /// After this function is finished the object is destroyed.
     pub fn process_user(&mut self) {
         let secret_key = UserService::establish_secure_connection(&mut self.socket);
         if let Err(msg) = secret_key {
-            self.exit_error = Some(format!(
-                "{} at [{}, {}] (socket: {}:{}).\n\n",
-                msg,
-                file!(),
-                line!(),
-                self.addr.ip(),
-                self.addr.port(),
+            self.exit_error = Some((
+                ReportResult::InternalError,
+                format!(
+                    "{} at [{}, {}] (socket: {}:{}).\n\n",
+                    msg,
+                    file!(),
+                    line!(),
+                    self.addr.ip(),
+                    self.addr.port(),
+                ),
             ));
             return;
         }
-        let secret_key = secret_key.unwrap();
+        self.secret_key = secret_key.unwrap();
 
-        let packet = self.receive_packet(&secret_key);
+        let packet = self.receive_packet();
         if let Err(msg) = packet {
-            self.exit_error = Some(format!(
-                "{} at [{}, {}] (socket: {}:{}).\n\n",
-                msg,
-                file!(),
-                line!(),
-                self.addr.ip(),
-                self.addr.port(),
+            self.exit_error = Some((
+                ReportResult::InternalError,
+                format!(
+                    "{} at [{}, {}] (socket: {}:{}).\n\n",
+                    msg,
+                    file!(),
+                    line!(),
+                    self.addr.ip(),
+                    self.addr.port(),
+                ),
             ));
             return;
         }
         let packet = packet.unwrap();
 
-        if let Err(msg) = self.handle_packet(packet) {
-            self.exit_error = Some(format!(
-                "{} at [{}, {}] (socket: {}:{}).\n\n",
-                msg,
-                file!(),
-                line!(),
-                self.addr.ip(),
-                self.addr.port(),
+        if let Err(result) = self.handle_packet(packet) {
+            self.exit_error = Some((
+                result.0,
+                format!(
+                    "{} at [{}, {}] (socket: {}:{}).\n\n",
+                    result.1,
+                    file!(),
+                    line!(),
+                    self.addr.ip(),
+                    self.addr.port(),
+                ),
             ));
             return;
         }
     }
-    fn handle_packet(&self, packet: NetPacket) -> Result<(), String> {
+    fn handle_packet(&mut self, packet: InPacket) -> Result<(), (ReportResult, String)> {
         // TODO: check protocol version (send ReportResult::WrongProtocol if different)
         // TODO: send OK if everything is OK for reporters
         // TODO: in wouldblock (read/write functions) have loop limit as a variable
@@ -118,13 +130,25 @@ impl UserService {
         // TODO: send ReportResult::ServerRejected if any fields exceed limits
         // TODO: (only for clients, not for reporters) check password hash and etc (send ReportResult::NetworkIssue if cmac or other errors)
         match packet {
-            NetPacket::ReportPacket {
+            InPacket::ReportPacket {
                 reporter_net_protocol,
                 game_report,
             } => {
                 // Check protocol version.
                 if reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
-                    return Err(format!(
+                    if let Err(msg) = self.send_packet(OutPacket::ReportAnswer {
+                        result_code: ReportResult::WrongProtocol,
+                    }) {
+                        self.logger.lock().unwrap().print_and_log(&format!(
+                            "An error occurred at [{}, {}]: {:?}.\n\n",
+                            file!(),
+                            line!(),
+                            msg
+                        ));
+                    }
+
+                    return Err((ReportResult::WrongProtocol,
+                        format!(
                         "An error occurred at [{}, {}]: wrong protocol version ({} != {}) (socket: {}:{})\n\n",
                         file!(),
                         line!(),
@@ -132,15 +156,26 @@ impl UserService {
                         NETWORK_PROTOCOL_VERSION,
                         self.addr.ip(),
                         self.addr.port(),
-                    ));
+                    )));
                 }
 
                 self.logger.lock().unwrap().print_and_log(&format!(
-                    "Received report from socket {}:{}: {:?}",
+                    "Received report from socket {}:{}.",
                     self.addr.ip(),
-                    self.addr.port(),
-                    game_report
+                    self.addr.port()
                 ));
+
+                std::thread::sleep(std::time::Duration::from_secs(10));
+                if let Err(msg) = self.send_packet(OutPacket::ReportAnswer {
+                    result_code: ReportResult::Ok,
+                }) {
+                    self.logger.lock().unwrap().print_and_log(&format!(
+                        "An error occurred at [{}, {}]: {:?}.\n\n",
+                        file!(),
+                        line!(),
+                        msg
+                    ));
+                }
             }
         }
 
@@ -348,7 +383,99 @@ impl UserService {
 
         Ok(Vec::from(&secret_key_str[0..KEY_LENGTH_IN_BYTES]))
     }
-    fn receive_packet(&mut self, secret_key: &[u8]) -> Result<NetPacket, String> {
+    fn send_packet(&mut self, packet: OutPacket) -> Result<(), String> {
+        if self.secret_key.is_empty() {
+            return Err(format!(
+                "An error occurred at [{}, {}]: secure connected is not established - can't send a packet.",
+                file!(),
+                line!(),
+            ));
+        }
+
+        // Serialize.
+        let mut binary_packet = bincode::serialize(&packet).unwrap();
+
+        // CMAC.
+        let mut mac = Cmac::<Aes256>::new_from_slice(&self.secret_key).unwrap();
+        mac.update(&binary_packet);
+        let result = mac.finalize();
+        let mut tag_bytes = result.into_bytes().to_vec();
+        if tag_bytes.len() != CMAC_TAG_LENGTH {
+            return Err(format!(
+                "An error occurred at [{}, {}]: unexpected tag length: {} != {}.",
+                file!(),
+                line!(),
+                tag_bytes.len(),
+                CMAC_TAG_LENGTH
+            ));
+        }
+
+        binary_packet.append(&mut tag_bytes);
+
+        // Encrypt packet.
+        let mut rng = rand::thread_rng();
+        let mut iv = vec![0u8; IV_LENGTH];
+        rng.fill_bytes(&mut iv);
+        let cipher = Aes256Cbc::new_from_slices(&self.secret_key, &iv).unwrap();
+        let mut encrypted_packet = cipher.encrypt_vec(&binary_packet);
+
+        // Prepare encrypted packet len buffer.
+        if encrypted_packet.len() + IV_LENGTH > std::u32::MAX as usize {
+            // should never happen
+            return Err(format!(
+                "An error occurred at [{}, {}]: resulting packet is too big ({} > {})",
+                file!(),
+                line!(),
+                encrypted_packet.len() + IV_LENGTH,
+                std::u32::MAX
+            ));
+        }
+        let encrypted_len = (encrypted_packet.len() + IV_LENGTH) as u32;
+        let encrypted_len_buf = bincode::serialize(&encrypted_len);
+        if let Err(e) = encrypted_len_buf {
+            return Err(format!(
+                "An error occurred at [{}, {}]: {:?}",
+                file!(),
+                line!(),
+                e
+            ));
+        }
+        let mut send_buffer = encrypted_len_buf.unwrap();
+
+        // Merge all to one buffer.
+        send_buffer.append(&mut iv);
+        send_buffer.append(&mut encrypted_packet);
+
+        // Send to the server.
+        loop {
+            match UserService::write_to_socket(&mut self.socket, &mut send_buffer) {
+                IoResult::Fin => {
+                    return Err(format!(
+                        "An error occurred at [{}, {}]: unexpected FIN received.",
+                        file!(),
+                        line!()
+                    ));
+                }
+                IoResult::Err(msg) => {
+                    return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+                }
+                IoResult::Ok(_) => {
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    }
+    fn receive_packet(&mut self) -> Result<InPacket, String> {
+        if self.secret_key.is_empty() {
+            return Err(format!(
+                "An error occurred at [{}, {}]: secure connected is not established - can't receive a packet.",
+                file!(),
+                line!(),
+            ));
+        }
+
         // Read u32 (size of a packet)
         let mut packet_size_buf = [0u8; std::mem::size_of::<u32>() as usize];
         let mut _next_packet_size: u32 = 0;
@@ -441,7 +568,7 @@ impl UserService {
         encrypted_packet = encrypted_packet[IV_LENGTH..].to_vec();
 
         // Decrypt packet.
-        let cipher = Aes256Cbc::new_from_slices(secret_key, &iv).unwrap();
+        let cipher = Aes256Cbc::new_from_slices(&self.secret_key, &iv).unwrap();
         let decrypted_packet = cipher.decrypt_vec(&encrypted_packet);
         if let Err(e) = decrypted_packet {
             return Err(format!(
@@ -456,7 +583,7 @@ impl UserService {
         let mut decrypted_packet = decrypted_packet.unwrap();
 
         // CMAC
-        let mut mac = Cmac::<Aes256>::new_from_slice(&secret_key).unwrap();
+        let mut mac = Cmac::<Aes256>::new_from_slice(&self.secret_key).unwrap();
         let tag: Vec<u8> = decrypted_packet
             .drain(decrypted_packet.len().saturating_sub(CMAC_TAG_LENGTH)..)
             .collect();
@@ -473,7 +600,7 @@ impl UserService {
         }
 
         // Deserialize.
-        let packet = bincode::deserialize::<NetPacket>(&decrypted_packet);
+        let packet = bincode::deserialize::<InPacket>(&decrypted_packet);
         if let Err(e) = packet {
             return Err(format!(
                 "An error occurred at [{}, {}]: {:?} (socket: {}:{})\n\n",
@@ -583,7 +710,8 @@ impl Drop for UserService {
 
         if self.exit_error.is_some() {
             message += " due to error:\n";
-            message += self.exit_error.as_ref().unwrap();
+            message += &format!("({:?}): ", self.exit_error.as_ref().unwrap().0);
+            message += &self.exit_error.as_ref().unwrap().1;
         }
 
         message += "\n";

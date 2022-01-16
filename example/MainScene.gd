@@ -95,6 +95,8 @@ func send_report(
 			get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = error_message;
 			return;
 	else:
+		# clear all fields, with this
+		# you can't send the same report again with just another button press
 		get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = "We successfully received your report! Thank you!";
 		get_node("VBoxContainer/ReportNameHBoxContainer/ReportNameLineEdit").text = "";
 		get_node("VBoxContainer/SenderNameHBoxContainer/SenderNameLineEdit").text = "";
@@ -111,8 +113,10 @@ func _on_SendReportButton_pressed():
 	# Check essential fields.
 	if get_node("VBoxContainer/ReportNameHBoxContainer/ReportNameLineEdit").text.length() == 0:
 		get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = "Please add a summary.";
+		return;
 	elif initial_report_text == get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text:
 		get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = "Please provide an issue description.";
+		return;
 	else:
 		get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = "";
 		

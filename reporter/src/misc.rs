@@ -21,6 +21,8 @@ impl ReportLimits {
             ReportLimits::GameName => 50,
             ReportLimits::GameVersion => 50,
             // if adding new fields, update is_input_valid() in lib.rs
+            // also update get_field_limit()
+            // also update/add get_field_limit() calls in 'example'
         }
     }
     pub fn id(&self) -> u64 {
@@ -31,6 +33,7 @@ impl ReportLimits {
             ReportLimits::SenderEMail => 3,
             ReportLimits::GameName => 4,
             ReportLimits::GameVersion => 5,
+            // add new fields here, continue 6, 7... (don't add stuff before existing values)
         }
     }
 }

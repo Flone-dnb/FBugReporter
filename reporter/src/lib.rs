@@ -54,6 +54,25 @@ impl Reporter {
     }
 
     #[export]
+    fn get_field_limit(&mut self, _owner: &Node, field_id: u64) -> i32 {
+        if ReportLimits::ReportName.id() == field_id {
+            ReportLimits::ReportName.max_length() as i32
+        } else if ReportLimits::ReportText.id() == field_id {
+            ReportLimits::ReportText.max_length() as i32
+        } else if ReportLimits::SenderName.id() == field_id {
+            ReportLimits::SenderName.max_length() as i32
+        } else if ReportLimits::SenderEMail.id() == field_id {
+            ReportLimits::SenderEMail.max_length() as i32
+        } else if ReportLimits::GameName.id() == field_id {
+            ReportLimits::GameName.max_length() as i32
+        } else if ReportLimits::GameVersion.id() == field_id {
+            ReportLimits::GameVersion.max_length() as i32
+        } else {
+            0
+        }
+    }
+
+    #[export]
     fn send_report(
         &mut self,
         _owner: &Node,
@@ -172,6 +191,9 @@ pub fn init_panic_hook() {
         // Uncomment the following line if backtrace crate is included as a dependency
         godot_error!("Backtrace:\n{:?}", Backtrace::new());
         (*(old_hook.as_ref()))(panic_info);
+
+        // don't call the actual assert (plus less work for devs)
+        // FBugReporter should never crash the game
 
         // unsafe {
         //     if let Some(gd_panic_hook) =

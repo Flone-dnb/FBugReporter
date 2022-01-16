@@ -88,7 +88,6 @@ margin_right = 1002.0
 margin_bottom = 24.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 90.0
-max_length = 50
 placeholder_text = "Short description of your issue... For example: \"Crash on level 2\"."
 
 [node name="SenderNameHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
@@ -110,7 +109,6 @@ margin_right = 1002.0
 margin_bottom = 24.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 90.0
-max_length = 50
 placeholder_text = "How should we call you? This field is optional and could be empty."
 
 [node name="SenderEMailHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
@@ -132,7 +130,6 @@ margin_right = 1002.0
 margin_bottom = 24.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 90.0
-max_length = 50
 placeholder_text = "Sometimes we could contact you for more details about the issue. This field is optional and could be empty."
 
 [node name="ReportTextHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]

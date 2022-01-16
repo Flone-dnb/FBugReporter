@@ -4,10 +4,18 @@ var initial_report_text: String = "";
 var reporter = preload("res://lib/reporter.gdns").new();
 var game_name: String = "My Cool Game"; # put your game name here, make sure that it's shorter than 50 characters
 var game_version: String = "v1.0.0"; # put your game version here, make sure that it's shorter than 50 characters
+var report_text_limit: int = 10;
 
 func _ready():
 	reporter.set_server(127, 0, 0, 1, 50123); # should be according to your server's info
 	initial_report_text = get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text;
+	
+	# set length limits
+	# get_field_limit() values are from reporter/src/misc.rs
+	get_node("VBoxContainer/ReportNameHBoxContainer/ReportNameLineEdit").max_length = reporter.get_field_limit(0);
+	get_node("VBoxContainer/SenderNameHBoxContainer/SenderNameLineEdit").max_length = reporter.get_field_limit(2);
+	get_node("VBoxContainer/SenderEMailHBoxContainer/SenderEMailLineEdit").max_length = reporter.get_field_limit(3);
+	report_text_limit = reporter.get_field_limit(1);
 
 func send_report(
 		report_name: String, report_text: String,
@@ -135,7 +143,7 @@ var current_text = ''
 var cursor_line = 0
 var cursor_column = 0
 func _on_ReportTextTextEdit_text_changed():
-	if get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text.length() > 5120:
+	if get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text.length() > report_text_limit:
 		get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text = current_text;
 		get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").cursor_set_line(cursor_line)
 		get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").cursor_set_column(cursor_column)

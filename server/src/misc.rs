@@ -62,4 +62,5 @@ pub struct GameReport {
     pub client_os_info: os_info::Info,
     // if adding new stuff here
     // also add its limit to the ReportLimits enum
+    // and update the NETWORK_PROTOCOL_VERSION
 }

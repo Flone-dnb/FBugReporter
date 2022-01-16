@@ -34,9 +34,9 @@ impl ReportLimits {
     }
 }
 // --------------------------------------------------------
-// --------------------------------------------------------
-#[derive(PartialEq)]
+#[derive(PartialEq, Serialize, Deserialize, Debug)]
 pub enum ReportResult {
+    // this enum should be in sync with the server's enum
     Ok,
     ServerNotSet,
     InvalidInput,
@@ -45,14 +45,15 @@ pub enum ReportResult {
     WrongProtocol,
     ServerRejected,
     NetworkIssue,
+    // this enum should be in sync with the server's enum
 }
 impl ReportResult {
     pub fn value(&self) -> i32 {
         match *self {
             ReportResult::Ok => 0,
-            ReportResult::ServerNotSet => 1,
-            ReportResult::InvalidInput => 2,
-            ReportResult::CouldNotConnect => 3,
+            ReportResult::ServerNotSet => 1, // if changing any values here
+            ReportResult::InvalidInput => 2, // also change them in the server
+            ReportResult::CouldNotConnect => 3, // ...
             ReportResult::InternalError => 4,
             ReportResult::WrongProtocol => 5,
             ReportResult::ServerRejected => 6,

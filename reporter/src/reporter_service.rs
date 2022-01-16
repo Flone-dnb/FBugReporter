@@ -18,7 +18,8 @@ const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
 // Custom.
 use crate::logger_service::Logger;
 use crate::misc::{GameReport, ReportResult};
-use crate::net_packets::NetPacket;
+use crate::net_packets::InPacket;
+use crate::net_packets::OutPacket;
 
 const A_B_BITS: u64 = 2048; // if changed, change protocol version
 const IV_LENGTH: usize = 16; // if changed, change protocol version
@@ -92,7 +93,7 @@ impl ReporterService {
         let secret_key = secret_key.unwrap();
 
         // Prepare packet.
-        let packet = NetPacket::ReportPacket {
+        let packet = OutPacket::ReportPacket {
             reporter_net_protocol: NETWORK_PROTOCOL_VERSION,
             game_report: report,
         };
@@ -185,7 +186,143 @@ impl ReporterService {
             }
         }
 
-        return (ReportResult::Ok, None);
+        let result = self.receive_answer(&secret_key);
+        if let Err(msg) = result {
+            return (
+                ReportResult::InternalError,
+                Some(format!("{} at [{}, {}]\n\n", msg, file!(), line!())),
+            );
+        }
+
+        return (result.unwrap(), None);
+    }
+    fn receive_answer(&mut self, secret_key: &[u8]) -> Result<ReportResult, String> {
+        if secret_key.is_empty() {
+            return Err(format!(
+                "An error occurred at [{}, {}]: secure connected is not established - can't receive a packet.",
+                file!(),
+                line!(),
+            ));
+        }
+
+        // Read u32 (size of a packet)
+        let mut packet_size_buf = [0u8; std::mem::size_of::<u32>() as usize];
+        let mut _next_packet_size: u32 = 0;
+        match self.read_from_socket(&mut packet_size_buf) {
+            IoResult::Fin => {
+                return Err(format!(
+                    "An error occurred at [{}, {}]: unexpected FIN received.",
+                    file!(),
+                    line!(),
+                ));
+            }
+            IoResult::Err(msg) => {
+                return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!(),));
+            }
+            IoResult::Ok(byte_count) => {
+                if byte_count != packet_size_buf.len() {
+                    return Err(format!(
+                        "An error occurred at [{}, {}]: not all data received (got: {}, expected: {}).",
+                        file!(),
+                        line!(),
+                        byte_count,
+                        packet_size_buf.len(),
+                    ));
+                }
+
+                let res = bincode::deserialize(&packet_size_buf);
+                if let Err(e) = res {
+                    return Err(format!(
+                        "An error occurred at [{}, {}]: {:?}\n\n",
+                        file!(),
+                        line!(),
+                        e,
+                    ));
+                }
+
+                _next_packet_size = res.unwrap();
+            }
+        }
+
+        // Receive encrypted packet.
+        let mut encrypted_packet = vec![0u8; _next_packet_size as usize];
+        match self.read_from_socket(&mut encrypted_packet) {
+            IoResult::Fin => {
+                return Err(format!(
+                    "An error occurred at [{}, {}]: unexpected FIN received.",
+                    file!(),
+                    line!(),
+                ));
+            }
+            IoResult::Err(msg) => {
+                return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!(),));
+            }
+            IoResult::Ok(_) => {}
+        };
+
+        // Get IV.
+        if encrypted_packet.len() < IV_LENGTH {
+            return Err(format!(
+                "An error occurred at [{}, {}]: unexpected packet length ({}).",
+                file!(),
+                line!(),
+                encrypted_packet.len(),
+            ));
+        }
+        let iv = &encrypted_packet[..IV_LENGTH].to_vec();
+        encrypted_packet = encrypted_packet[IV_LENGTH..].to_vec();
+
+        // Decrypt packet.
+        let cipher = Aes256Cbc::new_from_slices(&secret_key, &iv).unwrap();
+        let decrypted_packet = cipher.decrypt_vec(&encrypted_packet);
+        if let Err(e) = decrypted_packet {
+            return Err(format!(
+                "An error occurred at [{}, {}]: {:?}\n\n",
+                file!(),
+                line!(),
+                e,
+            ));
+        }
+        let mut decrypted_packet = decrypted_packet.unwrap();
+
+        // CMAC
+        let mut mac = Cmac::<Aes256>::new_from_slice(&secret_key).unwrap();
+        let tag: Vec<u8> = decrypted_packet
+            .drain(decrypted_packet.len().saturating_sub(CMAC_TAG_LENGTH)..)
+            .collect();
+        mac.update(&decrypted_packet);
+        if let Err(e) = mac.verify(&tag) {
+            return Err(format!(
+                "An error occurred at [{}, {}]: {:?}\n\n",
+                file!(),
+                line!(),
+                e,
+            ));
+        }
+
+        // Deserialize.
+        let packet = bincode::deserialize::<InPacket>(&decrypted_packet);
+        if let Err(e) = packet {
+            return Err(format!(
+                "An error occurred at [{}, {}]: {:?}\n\n",
+                file!(),
+                line!(),
+                e,
+            ));
+        }
+
+        let packet = packet.unwrap();
+        match packet {
+            InPacket::ReportAnswer { result_code } => Ok(result_code),
+            _ => {
+                return Err(format!(
+                    "An error occurred at [{}, {}]: unexpected packet received ({:?})\n\n",
+                    file!(),
+                    line!(),
+                    packet
+                ));
+            }
+        }
     }
     fn establish_secure_connection(&mut self) -> Result<Vec<u8>, String> {
         // Generate secret key 'b'.

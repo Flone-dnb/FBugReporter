@@ -81,7 +81,10 @@ func send_report(
 			# server rejected your report
 			# this should probably never happen unless you've modified the source code of the reporter in an incorrect way
 			var error_message: String = "An error occurred: the server rejected your report.\n";
-			error_message += "This should probably never happen unless you've modified the source code of the reporter in an incorrect way.";
+			error_message += "This should probably never happen unless you've modified the source code of the reporter in an incorrect way.\n";
+			error_message += "If you're not the developer of this game, please, contact the developers and tell them about this issue!\n";
+			error_message += "Make sure to include the file \"reporter.log\" which is located at ";
+			error_message += reporter.get_log_file_path();
 			get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = error_message;
 			return;
 		elif result_code == 7:

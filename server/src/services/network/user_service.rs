@@ -122,13 +122,10 @@ impl UserService {
     }
     fn handle_packet(&mut self, packet: InPacket) -> Result<(), (ReportResult, String)> {
         // TODO: check protocol version (send ReportResult::WrongProtocol if different)
-        // TODO: send OK if everything is OK for reporters
         // TODO: in wouldblock (read/write functions) have loop limit as a variable
         //       never set the limit when waiting for user messages!
         //       pass loop limit to read/write functions
         // TODO: add keep alive timer (for clients only)
-        // TODO: send ReportResult::NetworkIssue if cmac or other errors
-        // TODO: send ReportResult::ServerRejected if any fields exceed limits
         // TODO: (only for clients, not for reporters) check password hash and etc (send ReportResult::NetworkIssue if cmac or other errors)
         match packet {
             InPacket::ReportPacket {
@@ -187,11 +184,12 @@ impl UserService {
                 }
 
                 self.logger.lock().unwrap().print_and_log(&format!(
-                    "Received and saved a report from socket {}:{}.",
+                    "Received and saved a report from socket {}:{}",
                     self.addr.ip(),
                     self.addr.port()
                 ));
 
+                // Answer "OK".
                 if let Err(msg) = self.send_packet(OutPacket::ReportAnswer {
                     result_code: ReportResult::Ok,
                 }) {

@@ -1,3 +1,4 @@
 /target
 server.config
 server.log
+*.db3

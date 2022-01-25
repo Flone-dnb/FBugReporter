@@ -67,4 +67,5 @@ pub struct GameReport {
     // if adding new stuff here
     // also add its limit to the ReportLimits enum
     // and update the NETWORK_PROTOCOL_VERSION
+    // and maybe update table structure in the database (backwards compatibility)?
 }

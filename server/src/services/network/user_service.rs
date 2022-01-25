@@ -26,6 +26,7 @@ const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 // Custom.
 use super::net_packets::{InPacket, OutPacket};
 use crate::misc::*;
+use crate::services::db_manager::DatabaseManager;
 use crate::services::logger_service::Logger;
 
 enum IoResult {
@@ -40,6 +41,7 @@ pub struct UserService {
     addr: SocketAddr,
     connected_users_count: Arc<Mutex<usize>>,
     exit_error: Option<(ReportResult, String)>,
+    database: Arc<Mutex<DatabaseManager>>,
 }
 
 impl UserService {
@@ -48,6 +50,7 @@ impl UserService {
         socket: TcpStream,
         addr: SocketAddr,
         connected_users_count: Arc<Mutex<usize>>,
+        database: Arc<Mutex<DatabaseManager>>,
     ) -> Self {
         {
             let mut guard = connected_users_count.lock().unwrap();
@@ -67,6 +70,7 @@ impl UserService {
             connected_users_count,
             exit_error: None,
             secret_key: Vec::new(),
+            database,
         }
     }
     /// After this function is finished the object is destroyed.

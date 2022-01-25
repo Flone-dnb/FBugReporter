@@ -5,6 +5,7 @@ use std::thread;
 
 // Custom.
 use crate::services::config_service::ServerConfig;
+use crate::services::db_manager::DatabaseManager;
 use crate::services::logger_service::Logger;
 use crate::services::network::user_service::UserService;
 
@@ -12,6 +13,7 @@ pub struct NetService {
     pub logger: Arc<Mutex<Logger>>,
     pub server_config: ServerConfig,
     connected_socket_count: Arc<Mutex<usize>>,
+    database: Arc<Mutex<DatabaseManager>>,
 }
 
 impl NetService {
@@ -21,10 +23,16 @@ impl NetService {
             return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
         }
 
+        let db = DatabaseManager::new();
+        if let Err(e) = config {
+            return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
+        }
+
         Ok(Self {
             server_config: config.unwrap(),
             logger: Arc::new(Mutex::new(logger)),
             connected_socket_count: Arc::new(Mutex::new(0)),
+            database: Arc::new(Mutex::new(db.unwrap())),
         })
     }
     pub fn refresh_password(&mut self) -> Result<(), String> {
@@ -106,12 +114,18 @@ impl NetService {
 
             let logger_copy = self.logger.clone();
             let connected_clone = self.connected_socket_count.clone();
+            let database_clone = self.database.clone();
 
             let handle = thread::Builder::new()
                 .name(format!("socket {}:{}", addr.ip(), addr.port()))
                 .spawn(move || {
-                    let mut user_service =
-                        UserService::new(logger_copy, socket, addr, connected_clone);
+                    let mut user_service = UserService::new(
+                        logger_copy,
+                        socket,
+                        addr,
+                        connected_clone,
+                        database_clone,
+                    );
                     user_service.process_user();
                 });
             if let Err(ref e) = handle {

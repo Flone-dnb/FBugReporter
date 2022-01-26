@@ -24,13 +24,13 @@ impl DatabaseManager {
         let connection = result.unwrap();
 
         // Check if table exists.
-        let result = connection.execute(
-            &format!(
+        let mut stmt = connection
+            .prepare(&format!(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='{}'",
                 REPORT_TABLE_NAME
-            ),
-            [],
-        );
+            ))
+            .unwrap();
+        let result = stmt.query([]);
         if let Err(e) = result {
             return Err(format!(
                 "An error occurred at [{}, {}]: {:?}.\n\n",
@@ -40,9 +40,14 @@ impl DatabaseManager {
             ));
         }
 
-        let count = result.unwrap();
+        let mut rows = result.unwrap();
+        let row = rows.next().unwrap();
 
-        if count == 0 {
+        if row.is_none() {
+            println!(
+                "INFO: No table \"{}\" was found in database, creating a new table.\n",
+                REPORT_TABLE_NAME
+            );
             // Create this table.
             let result = connection.execute(
                 &format!(
@@ -71,6 +76,10 @@ impl DatabaseManager {
                 ));
             }
         }
+
+        drop(row);
+        drop(rows);
+        drop(stmt);
 
         Ok(Self { connection })
     }

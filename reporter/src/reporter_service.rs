@@ -188,13 +188,23 @@ impl ReporterService {
 
         let result = self.receive_answer(&secret_key);
         if let Err(msg) = result {
+            // We failed somewhere in the receive_answer().
             return (
                 ReportResult::InternalError,
                 Some(format!("{} at [{}, {}]\n\n", msg, file!(), line!())),
             );
         }
 
-        return (result.unwrap(), None);
+        let result_code = result.unwrap();
+        if result_code != ReportResult::Ok {
+            // Server returned an error.
+            return (
+                result_code,
+                Some(format!("The server returned error: {:?}", result_code)),
+            );
+        }
+
+        return (result_code, None);
     }
     fn receive_answer(&mut self, secret_key: &[u8]) -> Result<ReportResult, String> {
         if secret_key.is_empty() {

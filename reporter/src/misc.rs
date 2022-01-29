@@ -38,7 +38,7 @@ impl ReportLimits {
     }
 }
 // --------------------------------------------------------
-#[derive(PartialEq, Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum ReportResult {
     // this enum should be in sync with the server's enum
     Ok,

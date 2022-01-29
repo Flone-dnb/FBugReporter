@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 // Custom.
+use crate::error::AppError;
 use crate::services::config_service::ServerConfig;
 use crate::services::db_manager::DatabaseManager;
 use crate::services::logger_service::Logger;
@@ -17,15 +18,15 @@ pub struct NetService {
 }
 
 impl NetService {
-    pub fn new(logger: Logger) -> Result<Self, String> {
+    pub fn new(logger: Logger) -> Result<Self, AppError> {
         let config = ServerConfig::new();
-        if let Err(e) = config {
-            return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
+        if let Err(err) = config {
+            return Err(err.add_entry(file!(), line!()));
         }
 
         let db = DatabaseManager::new();
-        if let Err(e) = config {
-            return Err(format!("{} at [{}, {}]\n\n", e, file!(), line!()));
+        if let Err(err) = config {
+            return Err(err.add_entry(file!(), line!()));
         }
 
         Ok(Self {
@@ -35,23 +36,23 @@ impl NetService {
             database: Arc::new(Mutex::new(db.unwrap())),
         })
     }
-    pub fn refresh_password(&mut self) -> Result<(), String> {
-        if let Err(msg) = self.server_config.refresh_password() {
-            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+    pub fn refresh_password(&mut self) -> Result<(), AppError> {
+        if let Err(err) = self.server_config.refresh_password() {
+            return Err(err.add_entry(file!(), line!()));
         }
 
         Ok(())
     }
-    pub fn refresh_port(&mut self) -> Result<(), String> {
-        if let Err(msg) = self.server_config.refresh_port() {
-            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+    pub fn refresh_port(&mut self) -> Result<(), AppError> {
+        if let Err(err) = self.server_config.refresh_port() {
+            return Err(err.add_entry(file!(), line!()));
         }
 
         Ok(())
     }
-    pub fn set_port(&mut self, port: u16) -> Result<(), String> {
-        if let Err(msg) = self.server_config.set_port(port) {
-            return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+    pub fn set_port(&mut self, port: u16) -> Result<(), AppError> {
+        if let Err(err) = self.server_config.set_port(port) {
+            return Err(err.add_entry(file!(), line!()));
         }
 
         Ok(())

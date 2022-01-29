@@ -13,6 +13,9 @@ use cmac::{Cmac, Mac, NewMac};
 use num_bigint::{BigUint, RandomBits};
 use rand::{Rng, RngCore};
 
+// Custom.
+use crate::error::AppError;
+
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
 
@@ -32,15 +35,14 @@ use crate::services::logger_service::Logger;
 enum IoResult {
     Ok(usize),
     Fin,
-    Err(String),
+    Err(AppError),
 }
 pub struct UserService {
     logger: Arc<Mutex<Logger>>,
     socket: TcpStream,
     secret_key: Vec<u8>,
-    addr: SocketAddr,
     connected_users_count: Arc<Mutex<usize>>,
-    exit_error: Option<(ReportResult, String)>,
+    exit_error: Option<(ReportResult, AppError)>,
     database: Arc<Mutex<DatabaseManager>>,
 }
 
@@ -66,7 +68,6 @@ impl UserService {
         UserService {
             logger,
             socket,
-            addr,
             connected_users_count,
             exit_error: None,
             secret_key: Vec::new(),
@@ -76,55 +77,25 @@ impl UserService {
     /// After this function is finished the object is destroyed.
     pub fn process_user(&mut self) {
         let secret_key = UserService::establish_secure_connection(&mut self.socket);
-        if let Err(msg) = secret_key {
-            self.exit_error = Some((
-                ReportResult::InternalError,
-                format!(
-                    "{} at [{}, {}] (socket: {}:{}).\n\n",
-                    msg,
-                    file!(),
-                    line!(),
-                    self.addr.ip(),
-                    self.addr.port(),
-                ),
-            ));
+        if let Err(err) = secret_key {
+            self.exit_error = Some((ReportResult::InternalError, err.add_entry(file!(), line!())));
             return;
         }
         self.secret_key = secret_key.unwrap();
 
         let packet = self.receive_packet();
-        if let Err(msg) = packet {
-            self.exit_error = Some((
-                ReportResult::InternalError,
-                format!(
-                    "{} at [{}, {}] (socket: {}:{}).\n\n",
-                    msg,
-                    file!(),
-                    line!(),
-                    self.addr.ip(),
-                    self.addr.port(),
-                ),
-            ));
+        if let Err(err) = packet {
+            self.exit_error = Some((ReportResult::InternalError, err.add_entry(file!(), line!())));
             return;
         }
         let packet = packet.unwrap();
 
         if let Err(result) = self.handle_packet(packet) {
-            self.exit_error = Some((
-                result.0,
-                format!(
-                    "{} at [{}, {}] (socket: {}:{}).\n\n",
-                    result.1,
-                    file!(),
-                    line!(),
-                    self.addr.ip(),
-                    self.addr.port(),
-                ),
-            ));
+            self.exit_error = Some((result.0, result.1.add_entry(file!(), line!())));
             return;
         }
     }
-    fn handle_packet(&mut self, packet: InPacket) -> Result<(), (ReportResult, String)> {
+    fn handle_packet(&mut self, packet: InPacket) -> Result<(), (ReportResult, AppError)> {
         // TODO: check protocol version (send ReportResult::WrongProtocol if different)
         // TODO: in wouldblock (read/write functions) have loop limit as a variable
         //       never set the limit when waiting for user messages!
@@ -140,125 +111,102 @@ impl UserService {
                 if reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
                     let result_code = ReportResult::WrongProtocol;
 
-                    if let Err(msg) = UserService::send_packet(
+                    if let Err(err) = UserService::send_packet(
                         &mut self.socket,
                         &self.secret_key,
                         OutPacket::ReportAnswer { result_code },
                     ) {
-                        self.logger.lock().unwrap().print_and_log(&format!(
-                            "An error occurred at [{}, {}]: {:?}.\n\n",
-                            file!(),
-                            line!(),
-                            msg
-                        ));
+                        return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
                     }
 
-                    return Err((result_code,
-                        format!(
-                        "An error occurred at [{}, {}]: wrong protocol version ({} != {}) (socket: {}:{})\n\n",
-                        file!(),
-                        line!(),
-                        reporter_net_protocol,
-                        NETWORK_PROTOCOL_VERSION,
-                        self.addr.ip(),
-                        self.addr.port(),
-                    )));
+                    return Err((
+                        result_code,
+                        AppError::new(
+                            &format!(
+                                "wrong protocol version ({} != {}) (socket: {})",
+                                reporter_net_protocol,
+                                NETWORK_PROTOCOL_VERSION,
+                                self.socket.peer_addr().unwrap()
+                            ),
+                            file!(),
+                            line!(),
+                        ),
+                    ));
                 }
 
                 // Check field limits.
                 if let Err((field, length)) = UserService::check_report_field_limits(&game_report) {
                     let result_code = ReportResult::ServerRejected;
 
-                    if let Err(msg) = UserService::send_packet(
+                    if let Err(err) = UserService::send_packet(
                         &mut self.socket,
                         &self.secret_key,
                         OutPacket::ReportAnswer { result_code },
                     ) {
-                        self.logger.lock().unwrap().print_and_log(&format!(
-                            "An error occurred at [{}, {}]: {:?}.\n\n",
-                            file!(),
-                            line!(),
-                            msg
-                        ));
+                        return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
                     }
 
-                    return Err((result_code,
-                        format!(
-                        "An error occurred at [{}, {}]: report exceeds report field limits ({:?} has length of {} characters while the limit is {}) (socket: {}:{})\n\n",
-                        file!(),
-                        line!(),
-                        field,
-                        length,
-                        field.max_length(),
-                        self.addr.ip(),
-                        self.addr.port(),
-                    )));
+                    return Err((
+                        result_code,
+                        AppError::new(
+                            &format!(
+                                "report exceeds report field limits ({:?} has length of {} characters while the limit is {}) (socket: {})",
+                                field,
+                                length,
+                                field.max_length(),
+                                self.socket.peer_addr().unwrap()
+                            ),
+                            file!(),
+                            line!(),
+                        ),
+                    ));
                 }
 
                 self.logger.lock().unwrap().print_and_log(&format!(
-                    "Received a report from socket {}:{}",
-                    self.addr.ip(),
-                    self.addr.port()
+                    "Received a report from socket {}",
+                    self.socket.peer_addr().unwrap()
                 ));
 
                 {
-                    if let Err(msg) = self.database.lock().unwrap().save_report(game_report) {
+                    if let Err(err) = self.database.lock().unwrap().save_report(game_report) {
                         let result_code = ReportResult::InternalError;
 
-                        if let Err(msg) = UserService::send_packet(
+                        if let Err(err) = UserService::send_packet(
                             &mut self.socket,
                             &self.secret_key,
                             OutPacket::ReportAnswer { result_code },
                         ) {
-                            self.logger.lock().unwrap().print_and_log(&format!(
-                                "An error occurred at [{}, {}]: {:?}.\n\n",
-                                file!(),
-                                line!(),
-                                msg
+                            return Err((
+                                ReportResult::InternalError,
+                                err.add_entry(file!(), line!()),
                             ));
                         }
 
-                        return Err((
-                            result_code,
-                            format!(
-                                "{} at [{}, {}] (socket: {}:{})\n\n",
-                                msg,
-                                file!(),
-                                line!(),
-                                self.addr.ip(),
-                                self.addr.port(),
-                            ),
-                        ));
+                        return Err((result_code, err.add_entry(file!(), line!())));
                     }
                 }
 
                 self.logger.lock().unwrap().print_and_log(&format!(
-                    "Saved a report from socket {}:{}",
-                    self.addr.ip(),
-                    self.addr.port()
+                    "Saved a report from socket {}",
+                    self.socket.peer_addr().unwrap()
                 ));
 
                 // Answer "OK".
-                if let Err(msg) = UserService::send_packet(
+                if let Err(err) = UserService::send_packet(
                     &mut self.socket,
                     &self.secret_key,
                     OutPacket::ReportAnswer {
                         result_code: ReportResult::Ok,
                     },
                 ) {
-                    self.logger.lock().unwrap().print_and_log(&format!(
-                        "An error occurred at [{}, {}]: {:?}.\n\n",
-                        file!(),
-                        line!(),
-                        msg
-                    ));
+                    return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
                 }
             }
         }
 
         Ok(())
     }
-    fn establish_secure_connection(socket: &mut TcpStream) -> Result<Vec<u8>, String> {
+    fn establish_secure_connection(socket: &mut TcpStream) -> Result<Vec<u8>, AppError> {
         // taken from https://www.rfc-editor.org/rfc/rfc5114#section-2.1
         let p = BigUint::parse_bytes(
             b"B10B8F96A080E01DDE92DE5EAE5D54EC52C99FBCFB06A3C69A6A9DCA52D23B616073E28675A23D189838EF1E2EE652C013ECB4AEA906112324975C3CD49B83BFACCBDD7D90C4BD7098488E9C219A73724EFFD6FAE5644738FAA31A4FF55BCCC0A151AF5F0DC8B4BD45BF37DF365C1A65E68CFDA76D4DA708DF1FB2BC2E4A4371",
@@ -274,22 +222,12 @@ impl UserService {
         let g_buf = bincode::serialize(&g);
 
         if let Err(e) = p_buf {
-            return Err(format!(
-                "An error occurred at [{}, {}]: {:?}.",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
         }
         let mut p_buf = p_buf.unwrap();
 
         if let Err(e) = g_buf {
-            return Err(format!(
-                "An error occurred at [{}, {}]: {:?}.",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
         }
         let mut g_buf = g_buf.unwrap();
 
@@ -309,14 +247,10 @@ impl UserService {
         loop {
             match UserService::write_to_socket(socket, &mut pg_send_buf) {
                 IoResult::Fin => {
-                    return Err(format!(
-                        "An error occurred at [{}, {}]: unexpected FIN received.",
-                        file!(),
-                        line!()
-                    ));
+                    return Err(AppError::new("unexpected FIN received", file!(), line!()));
                 }
-                IoResult::Err(msg) => {
-                    return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+                IoResult::Err(err) => {
+                    return Err(err.add_entry(file!(), line!()));
                 }
                 IoResult::Ok(_) => {
                     break;
@@ -334,12 +268,7 @@ impl UserService {
         // Prepare to send open key 'A'.
         let a_open_buf = bincode::serialize(&a_open);
         if let Err(e) = a_open_buf {
-            return Err(format!(
-                "An error occurred at [{}, {}]: {:?}.",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
         }
         let mut a_open_buf = a_open_buf.unwrap();
 
@@ -347,26 +276,17 @@ impl UserService {
         let a_open_len = a_open_buf.len() as u64;
         let a_open_len_buf = bincode::serialize(&a_open_len);
         if let Err(e) = a_open_len_buf {
-            return Err(format!(
-                "An error occurred at [{}, {}]: {:?}.",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
         }
         let mut a_open_len_buf = a_open_len_buf.unwrap();
         a_open_len_buf.append(&mut a_open_buf);
         loop {
             match UserService::write_to_socket(socket, &mut a_open_len_buf) {
                 IoResult::Fin => {
-                    return Err(format!(
-                        "An error occurred at [{}, {}]: unexpected FIN received.",
-                        file!(),
-                        line!()
-                    ));
+                    return Err(AppError::new("unexpected FIN received", file!(), line!()));
                 }
-                IoResult::Err(msg) => {
-                    return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+                IoResult::Err(err) => {
+                    return Err(err.add_entry(file!(), line!()));
                 }
                 IoResult::Ok(_) => {
                     break;
@@ -379,14 +299,10 @@ impl UserService {
         loop {
             match UserService::read_from_socket(socket, &mut b_open_len_buf) {
                 IoResult::Fin => {
-                    return Err(format!(
-                        "An error occurred at [{}, {}]: unexpected FIN received.",
-                        file!(),
-                        line!()
-                    ));
+                    return Err(AppError::new("unexpected FIN received", file!(), line!()));
                 }
-                IoResult::Err(msg) => {
-                    return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+                IoResult::Err(err) => {
+                    return Err(err.add_entry(file!(), line!()));
                 }
                 IoResult::Ok(_) => {
                     break;
@@ -397,12 +313,7 @@ impl UserService {
         // Receive open key 'B'.
         let b_open_len = bincode::deserialize::<u64>(&b_open_len_buf);
         if let Err(e) = b_open_len {
-            return Err(format!(
-                "An error occurred at [{}, {}]: {:?}.",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
         }
         let b_open_len = b_open_len.unwrap();
         let mut b_open_buf = vec![0u8; b_open_len as usize];
@@ -410,14 +321,10 @@ impl UserService {
         loop {
             match UserService::read_from_socket(socket, &mut b_open_buf) {
                 IoResult::Fin => {
-                    return Err(format!(
-                        "An error occurred at [{}, {}]: unexpected FIN received.",
-                        file!(),
-                        line!()
-                    ));
+                    return Err(AppError::new("unexpected FIN received", file!(), line!()));
                 }
-                IoResult::Err(msg) => {
-                    return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
+                IoResult::Err(err) => {
+                    return Err(err.add_entry(file!(), line!()));
                 }
                 IoResult::Ok(_) => {
                     break;
@@ -427,12 +334,7 @@ impl UserService {
 
         let b_open_big = bincode::deserialize::<BigUint>(&b_open_buf);
         if let Err(e) = b_open_big {
-            return Err(format!(
-                "An error occurred at [{}, {}]: {:?}.",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
         }
         let b_open_big = b_open_big.unwrap();
 
@@ -442,10 +344,10 @@ impl UserService {
 
         if secret_key_str.len() < KEY_LENGTH_IN_BYTES {
             if secret_key_str.is_empty() {
-                return Err(format!(
-                    "An error occurred at [{}, {}]: generated secret key is empty.",
+                return Err(AppError::new(
+                    "generated secret key is empty",
                     file!(),
-                    line!()
+                    line!(),
                 ));
             }
 
@@ -499,10 +401,10 @@ impl UserService {
         socket: &mut TcpStream,
         secret_key: &[u8],
         packet: OutPacket,
-    ) -> Result<(), String> {
+    ) -> Result<(), AppError> {
         if secret_key.is_empty() {
-            return Err(format!(
-                "An error occurred at [{}, {}]: secure connected is not established - can't send a packet.",
+            return Err(AppError::new(
+                "can't send packet - secure connected is not established",
                 file!(),
                 line!(),
             ));
@@ -517,12 +419,14 @@ impl UserService {
         let result = mac.finalize();
         let mut tag_bytes = result.into_bytes().to_vec();
         if tag_bytes.len() != CMAC_TAG_LENGTH {
-            return Err(format!(
-                "An error occurred at [{}, {}]: unexpected tag length: {} != {}.",
+            return Err(AppError::new(
+                &format!(
+                    "unexpected tag length: {} != {}",
+                    tag_bytes.len(),
+                    CMAC_TAG_LENGTH
+                ),
                 file!(),
                 line!(),
-                tag_bytes.len(),
-                CMAC_TAG_LENGTH
             ));
         }
 
@@ -538,23 +442,20 @@ impl UserService {
         // Prepare encrypted packet len buffer.
         if encrypted_packet.len() + IV_LENGTH > std::u32::MAX as usize {
             // should never happen
-            return Err(format!(
-                "An error occurred at [{}, {}]: resulting packet is too big ({} > {})",
+            return Err(AppError::new(
+                &format!(
+                    "resulting packet is too big ({} > {})",
+                    encrypted_packet.len() + IV_LENGTH,
+                    std::u32::MAX
+                ),
                 file!(),
                 line!(),
-                encrypted_packet.len() + IV_LENGTH,
-                std::u32::MAX
             ));
         }
         let encrypted_len = (encrypted_packet.len() + IV_LENGTH) as u32;
         let encrypted_len_buf = bincode::serialize(&encrypted_len);
         if let Err(e) = encrypted_len_buf {
-            return Err(format!(
-                "An error occurred at [{}, {}]: {:?}",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
         }
         let mut send_buffer = encrypted_len_buf.unwrap();
 
@@ -566,15 +467,9 @@ impl UserService {
         loop {
             match UserService::write_to_socket(socket, &mut send_buffer) {
                 IoResult::Fin => {
-                    return Err(format!(
-                        "An error occurred at [{}, {}]: unexpected FIN received.",
-                        file!(),
-                        line!()
-                    ));
+                    return Err(AppError::new("unexpected FIN received", file!(), line!()));
                 }
-                IoResult::Err(msg) => {
-                    return Err(format!("{} at [{}, {}]\n\n", msg, file!(), line!()));
-                }
+                IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
                 IoResult::Ok(_) => {
                     break;
                 }
@@ -583,10 +478,10 @@ impl UserService {
 
         Ok(())
     }
-    fn receive_packet(&mut self) -> Result<InPacket, String> {
+    fn receive_packet(&mut self) -> Result<InPacket, AppError> {
         if self.secret_key.is_empty() {
-            return Err(format!(
-                "An error occurred at [{}, {}]: secure connected is not established - can't receive a packet.",
+            return Err(AppError::new(
+                "can't receive packet - secure connected is not established",
                 file!(),
                 line!(),
             ));
@@ -597,46 +492,36 @@ impl UserService {
         let mut _next_packet_size: u32 = 0;
         match UserService::read_from_socket(&mut self.socket, &mut packet_size_buf) {
             IoResult::Fin => {
-                return Err(format!(
-                    "An error occurred at [{}, {}]: unexpected FIN received (socket: {}:{}).",
+                return Err(AppError::new(
+                    &format!(
+                        "unexpected FIN received (socket: {})",
+                        self.socket.peer_addr().unwrap()
+                    ),
                     file!(),
                     line!(),
-                    self.addr.ip(),
-                    self.addr.port(),
                 ));
             }
-            IoResult::Err(msg) => {
-                return Err(format!(
-                    "{} at [{}, {}] (socket: {}:{})\n\n",
-                    msg,
-                    file!(),
-                    line!(),
-                    self.addr.ip(),
-                    self.addr.port(),
-                ));
-            }
+            IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
             IoResult::Ok(byte_count) => {
                 if byte_count != packet_size_buf.len() {
-                    return Err(format!(
-                        "An error occurred at [{}, {}]: not all data received (got: {}, expected: {}) (socket: {}:{}).",
+                    return Err(AppError::new(
+                        &format!(
+                            "not all data received (got: {}, expected: {}) (socket: {})",
+                            byte_count,
+                            packet_size_buf.len(),
+                            self.socket.peer_addr().unwrap()
+                        ),
                         file!(),
                         line!(),
-                        byte_count,
-                        packet_size_buf.len(),
-                        self.addr.ip(),
-                        self.addr.port(),
                     ));
                 }
 
                 let res = bincode::deserialize(&packet_size_buf);
                 if let Err(e) = res {
-                    return Err(format!(
-                        "An error occurred at [{}, {}]: {:?} (socket: {}:{})\n\n",
+                    return Err(AppError::new(
+                        &format!("{:?} (socket: {})", e, self.socket.peer_addr().unwrap()),
                         file!(),
                         line!(),
-                        e,
-                        self.addr.ip(),
-                        self.addr.port(),
                     ));
                 }
 
@@ -646,14 +531,15 @@ impl UserService {
 
         // Check packet size.
         if _next_packet_size > MAX_PACKET_SIZE_IN_BYTES {
-            return Err(format!(
-                "An error occurred at [{}, {}]: incoming packet is too big to receive ({} > {} bytes) (socket: {}:{}).",
+            return Err(AppError::new(
+                &format!(
+                    "incoming packet is too big to receive ({} > {} bytes) (socket: {})",
+                    _next_packet_size,
+                    MAX_PACKET_SIZE_IN_BYTES,
+                    self.socket.peer_addr().unwrap()
+                ),
                 file!(),
                 line!(),
-                _next_packet_size,
-                MAX_PACKET_SIZE_IN_BYTES,
-                self.addr.ip(),
-                self.addr.port(),
             ));
         }
 
@@ -661,36 +547,29 @@ impl UserService {
         let mut encrypted_packet = vec![0u8; _next_packet_size as usize];
         match UserService::read_from_socket(&mut self.socket, &mut encrypted_packet) {
             IoResult::Fin => {
-                return Err(format!(
-                    "An error occurred at [{}, {}]: unexpected FIN received (socket: {}:{}).",
+                return Err(AppError::new(
+                    &format!(
+                        "unexpected FIN received (socket: {})",
+                        self.socket.peer_addr().unwrap()
+                    ),
                     file!(),
                     line!(),
-                    self.addr.ip(),
-                    self.addr.port(),
                 ));
             }
-            IoResult::Err(msg) => {
-                return Err(format!(
-                    "{} at [{}, {}] (socket: {}:{})\n\n",
-                    msg,
-                    file!(),
-                    line!(),
-                    self.addr.ip(),
-                    self.addr.port(),
-                ));
-            }
+            IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
             IoResult::Ok(_) => {}
         };
 
         // Get IV.
         if encrypted_packet.len() < IV_LENGTH {
-            return Err(format!(
-                "An error occurred at [{}, {}]: unexpected packet length ({}) (socket: {}:{}).",
+            return Err(AppError::new(
+                &format!(
+                    "unexpected packet length ({}) (socket: {})",
+                    encrypted_packet.len(),
+                    self.socket.peer_addr().unwrap()
+                ),
                 file!(),
                 line!(),
-                encrypted_packet.len(),
-                self.addr.ip(),
-                self.addr.port(),
             ));
         }
         let iv = &encrypted_packet[..IV_LENGTH].to_vec();
@@ -700,13 +579,10 @@ impl UserService {
         let cipher = Aes256Cbc::new_from_slices(&self.secret_key, &iv).unwrap();
         let decrypted_packet = cipher.decrypt_vec(&encrypted_packet);
         if let Err(e) = decrypted_packet {
-            return Err(format!(
-                "An error occurred at [{}, {}]: {:?} (socket: {}:{})\n\n",
+            return Err(AppError::new(
+                &format!("{:?} (socket: {})", e, self.socket.peer_addr().unwrap()),
                 file!(),
                 line!(),
-                e,
-                self.addr.ip(),
-                self.addr.port(),
             ));
         }
         let mut decrypted_packet = decrypted_packet.unwrap();
@@ -718,26 +594,20 @@ impl UserService {
             .collect();
         mac.update(&decrypted_packet);
         if let Err(e) = mac.verify(&tag) {
-            return Err(format!(
-                "An error occurred at [{}, {}]: {:?} (socket: {}:{})\n\n",
+            return Err(AppError::new(
+                &format!("{:?} (socket: {})", e, self.socket.peer_addr().unwrap()),
                 file!(),
                 line!(),
-                e,
-                self.addr.ip(),
-                self.addr.port(),
             ));
         }
 
         // Deserialize.
         let packet = bincode::deserialize::<InPacket>(&decrypted_packet);
         if let Err(e) = packet {
-            return Err(format!(
-                "An error occurred at [{}, {}]: {:?} (socket: {}:{})\n\n",
+            return Err(AppError::new(
+                &format!("{:?} (socket: {})", e, self.socket.peer_addr().unwrap()),
                 file!(),
                 line!(),
-                e,
-                self.addr.ip(),
-                self.addr.port(),
             ));
         }
 
@@ -745,11 +615,7 @@ impl UserService {
     }
     fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
         if buf.is_empty() {
-            return IoResult::Err(format!(
-                "An error occurred at [{}, {}]: passed 'buf' has 0 length.\n\n",
-                file!(),
-                line!()
-            ));
+            return IoResult::Err(AppError::new("passed 'buf' has 0 length", file!(), line!()));
         }
 
         loop {
@@ -759,12 +625,15 @@ impl UserService {
                 }
                 Ok(n) => {
                     if n != buf.len() {
-                        return IoResult::Err(format!(
-                            "An error occurred at [{}, {}]: failed to read (got: {}, expected: {})",
+                        return IoResult::Err(AppError::new(
+                            &format!(
+                                "failed to read (got: {}, expected: {}) (socket {})",
+                                n,
+                                buf.len(),
+                                socket.peer_addr().unwrap(),
+                            ),
                             file!(),
                             line!(),
-                            n,
-                            buf.len()
                         ));
                     }
 
@@ -775,11 +644,10 @@ impl UserService {
                     continue;
                 }
                 Err(e) => {
-                    return IoResult::Err(format!(
-                        "An error occurred at [{}, {}]: {:?}.\n\n",
+                    return IoResult::Err(AppError::new(
+                        &format!("{:?} (socket {})", e, socket.peer_addr().unwrap(),),
                         file!(),
                         line!(),
-                        e
                     ));
                 }
             };
@@ -787,11 +655,7 @@ impl UserService {
     }
     fn write_to_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
         if buf.is_empty() {
-            return IoResult::Err(format!(
-                "An error occurred at [{}, {}]: passed 'buf' has 0 length.\n\n",
-                file!(),
-                line!()
-            ));
+            return IoResult::Err(AppError::new("passed 'buf' has 0 length", file!(), line!()));
         }
 
         loop {
@@ -801,12 +665,15 @@ impl UserService {
                 }
                 Ok(n) => {
                     if n != buf.len() {
-                        return IoResult::Err(format!(
-                            "An error occurred at [{}, {}]: failed to write (got: {}, expected: {}).",
+                        return IoResult::Err(AppError::new(
+                            &format!(
+                                "failed to write (got: {}, expected: {}) (socket {})",
+                                n,
+                                buf.len(),
+                                socket.peer_addr().unwrap(),
+                            ),
                             file!(),
                             line!(),
-                            n,
-                            buf.len()
                         ));
                     }
 
@@ -817,11 +684,10 @@ impl UserService {
                     continue;
                 }
                 Err(e) => {
-                    return IoResult::Err(format!(
-                        "An error occurred at [{}, {}]: {:?}.\n\n",
+                    return IoResult::Err(AppError::new(
+                        &format!("{:?} (socket {})", e, socket.peer_addr().unwrap()),
                         file!(),
                         line!(),
-                        e
                     ));
                 }
             };
@@ -832,15 +698,14 @@ impl UserService {
 impl Drop for UserService {
     fn drop(&mut self) {
         let mut message = format!(
-            "Closing connection with {}:{}",
-            self.addr.ip(),
-            self.addr.port()
+            "Closing connection with {}",
+            self.socket.peer_addr().unwrap()
         );
 
         if self.exit_error.is_some() {
             message += " due to error:\n";
             message += &format!("({:?}): ", self.exit_error.as_ref().unwrap().0);
-            message += &self.exit_error.as_ref().unwrap().1;
+            message += &self.exit_error.as_ref().unwrap().1.to_string();
         }
 
         message += "\n";

@@ -6,6 +6,9 @@ use std::path::Path;
 // External.
 use chrono::Local;
 
+// Custom.
+use crate::error::AppError;
+
 pub const LOG_FILE_NAME: &str = "server.log";
 
 pub struct Logger;

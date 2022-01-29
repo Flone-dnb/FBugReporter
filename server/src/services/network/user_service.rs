@@ -140,7 +140,11 @@ impl UserService {
                 if reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
                     let result_code = ReportResult::WrongProtocol;
 
-                    if let Err(msg) = self.send_packet(OutPacket::ReportAnswer { result_code }) {
+                    if let Err(msg) = UserService::send_packet(
+                        &mut self.socket,
+                        &self.secret_key,
+                        OutPacket::ReportAnswer { result_code },
+                    ) {
                         self.logger.lock().unwrap().print_and_log(&format!(
                             "An error occurred at [{}, {}]: {:?}.\n\n",
                             file!(),
@@ -165,7 +169,11 @@ impl UserService {
                 if let Err((field, length)) = UserService::check_report_field_limits(&game_report) {
                     let result_code = ReportResult::ServerRejected;
 
-                    if let Err(msg) = self.send_packet(OutPacket::ReportAnswer { result_code }) {
+                    if let Err(msg) = UserService::send_packet(
+                        &mut self.socket,
+                        &self.secret_key,
+                        OutPacket::ReportAnswer { result_code },
+                    ) {
                         self.logger.lock().unwrap().print_and_log(&format!(
                             "An error occurred at [{}, {}]: {:?}.\n\n",
                             file!(),
@@ -188,15 +196,63 @@ impl UserService {
                 }
 
                 self.logger.lock().unwrap().print_and_log(&format!(
-                    "Received and saved a report from socket {}:{}",
+                    "Received a report from socket {}:{}",
+                    self.addr.ip(),
+                    self.addr.port()
+                ));
+
+                {
+                    if let Err(msg) = self.database.lock().unwrap().save_report(game_report) {
+                        self.logger.lock().unwrap().print_and_log(&format!(
+                            "{} at [{}, {}]\n\n",
+                            msg,
+                            file!(),
+                            line!(),
+                        ));
+
+                        let result_code = ReportResult::InternalError;
+
+                        if let Err(msg) = UserService::send_packet(
+                            &mut self.socket,
+                            &self.secret_key,
+                            OutPacket::ReportAnswer { result_code },
+                        ) {
+                            self.logger.lock().unwrap().print_and_log(&format!(
+                                "An error occurred at [{}, {}]: {:?}.\n\n",
+                                file!(),
+                                line!(),
+                                msg
+                            ));
+                        }
+
+                        return Err((
+                            result_code,
+                            format!(
+                                "{} at [{}, {}] (socket: {}:{})\n\n",
+                                msg,
+                                file!(),
+                                line!(),
+                                self.addr.ip(),
+                                self.addr.port(),
+                            ),
+                        ));
+                    }
+                }
+
+                self.logger.lock().unwrap().print_and_log(&format!(
+                    "Saved a report from socket {}:{}",
                     self.addr.ip(),
                     self.addr.port()
                 ));
 
                 // Answer "OK".
-                if let Err(msg) = self.send_packet(OutPacket::ReportAnswer {
-                    result_code: ReportResult::Ok,
-                }) {
+                if let Err(msg) = UserService::send_packet(
+                    &mut self.socket,
+                    &self.secret_key,
+                    OutPacket::ReportAnswer {
+                        result_code: ReportResult::Ok,
+                    },
+                ) {
                     self.logger.lock().unwrap().print_and_log(&format!(
                         "An error occurred at [{}, {}]: {:?}.\n\n",
                         file!(),
@@ -446,8 +502,12 @@ impl UserService {
 
         Ok(())
     }
-    fn send_packet(&mut self, packet: OutPacket) -> Result<(), String> {
-        if self.secret_key.is_empty() {
+    fn send_packet(
+        socket: &mut TcpStream,
+        secret_key: &[u8],
+        packet: OutPacket,
+    ) -> Result<(), String> {
+        if secret_key.is_empty() {
             return Err(format!(
                 "An error occurred at [{}, {}]: secure connected is not established - can't send a packet.",
                 file!(),
@@ -459,7 +519,7 @@ impl UserService {
         let mut binary_packet = bincode::serialize(&packet).unwrap();
 
         // CMAC.
-        let mut mac = Cmac::<Aes256>::new_from_slice(&self.secret_key).unwrap();
+        let mut mac = Cmac::<Aes256>::new_from_slice(&secret_key).unwrap();
         mac.update(&binary_packet);
         let result = mac.finalize();
         let mut tag_bytes = result.into_bytes().to_vec();
@@ -479,7 +539,7 @@ impl UserService {
         let mut rng = rand::thread_rng();
         let mut iv = vec![0u8; IV_LENGTH];
         rng.fill_bytes(&mut iv);
-        let cipher = Aes256Cbc::new_from_slices(&self.secret_key, &iv).unwrap();
+        let cipher = Aes256Cbc::new_from_slices(&secret_key, &iv).unwrap();
         let mut encrypted_packet = cipher.encrypt_vec(&binary_packet);
 
         // Prepare encrypted packet len buffer.
@@ -511,7 +571,7 @@ impl UserService {
 
         // Send to the server.
         loop {
-            match UserService::write_to_socket(&mut self.socket, &mut send_buffer) {
+            match UserService::write_to_socket(socket, &mut send_buffer) {
                 IoResult::Fin => {
                     return Err(format!(
                         "An error occurred at [{}, {}]: unexpected FIN received.",

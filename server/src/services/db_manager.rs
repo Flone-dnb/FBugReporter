@@ -1,6 +1,9 @@
-use std::char::REPLACEMENT_CHARACTER;
-
+// External.
+use chrono::prelude::*;
 use rusqlite::{params, Connection, Result};
+
+// Custom.
+use crate::misc::GameReport;
 
 const DATABASE_NAME: &str = "database.db3";
 const REPORT_TABLE_NAME: &str = "report";
@@ -83,7 +86,47 @@ impl DatabaseManager {
 
         Ok(Self { connection })
     }
-    pub fn save_report() -> Result<(), String> {
+    pub fn save_report(&self, game_report: GameReport) -> Result<(), String> {
+        let datetime = Local::now();
+
+        if let Err(e) = self.connection.execute(
+            &format!(
+                "INSERT INTO {} 
+            (
+                report_name, 
+                report_text, 
+                sender_name, 
+                sender_email, 
+                game_name, 
+                game_version, 
+                os_info, 
+                date_created_at, 
+                time_created_at
+            ) 
+            VALUES 
+            (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                REPORT_TABLE_NAME
+            ),
+            params![
+                game_report.report_name,
+                game_report.report_text,
+                game_report.sender_name,
+                game_report.sender_email,
+                game_report.game_name,
+                game_report.game_version,
+                game_report.client_os_info.to_string(),
+                datetime.date().naive_local().to_string(),
+                datetime.time().format("%H:%M:%S").to_string()
+            ],
+        ) {
+            return Err(format!(
+                "An error occurred at [{}, {}]: {:?}.\n\n",
+                file!(),
+                line!(),
+                e
+            ));
+        }
+
         Ok(())
     }
 }

@@ -203,13 +203,6 @@ impl UserService {
 
                 {
                     if let Err(msg) = self.database.lock().unwrap().save_report(game_report) {
-                        self.logger.lock().unwrap().print_and_log(&format!(
-                            "{} at [{}, {}]\n\n",
-                            msg,
-                            file!(),
-                            line!(),
-                        ));
-
                         let result_code = ReportResult::InternalError;
 
                         if let Err(msg) = UserService::send_packet(

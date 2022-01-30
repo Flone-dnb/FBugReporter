@@ -107,101 +107,109 @@ impl UserService {
                 reporter_net_protocol,
                 game_report,
             } => {
-                // Check protocol version.
-                if reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
-                    let result_code = ReportResult::WrongProtocol;
-
-                    if let Err(err) = UserService::send_packet(
-                        &mut self.socket,
-                        &self.secret_key,
-                        OutPacket::ReportAnswer { result_code },
-                    ) {
-                        return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
-                    }
-
-                    return Err((
-                        result_code,
-                        AppError::new(
-                            &format!(
-                                "wrong protocol version ({} != {}) (socket: {})",
-                                reporter_net_protocol,
-                                NETWORK_PROTOCOL_VERSION,
-                                self.socket.peer_addr().unwrap()
-                            ),
-                            file!(),
-                            line!(),
-                        ),
-                    ));
+                if let Err(err) = self.handle_reporter(reporter_net_protocol, game_report) {
+                    return Err((err.0, err.1.add_entry(file!(), line!())));
                 }
+            }
+        }
 
-                // Check field limits.
-                if let Err((field, length)) = UserService::check_report_field_limits(&game_report) {
-                    let result_code = ReportResult::ServerRejected;
+        Ok(())
+    }
+    fn handle_reporter(
+        &mut self,
+        reporter_net_protocol: u16,
+        game_report: GameReport,
+    ) -> Result<(), (ReportResult, AppError)> {
+        // Check protocol version.
+        if reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
+            let result_code = ReportResult::WrongProtocol;
 
-                    if let Err(err) = UserService::send_packet(
-                        &mut self.socket,
-                        &self.secret_key,
-                        OutPacket::ReportAnswer { result_code },
-                    ) {
-                        return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
-                    }
+            if let Err(err) = UserService::send_packet(
+                &mut self.socket,
+                &self.secret_key,
+                OutPacket::ReportAnswer { result_code },
+            ) {
+                return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
+            }
 
-                    return Err((
-                        result_code,
-                        AppError::new(
-                            &format!(
-                                "report exceeds report field limits ({:?} has length of {} characters while the limit is {}) (socket: {})",
-                                field,
-                                length,
-                                field.max_length(),
-                                self.socket.peer_addr().unwrap()
-                            ),
-                            file!(),
-                            line!(),
-                        ),
-                    ));
-                }
+            return Err((
+                result_code,
+                AppError::new(
+                    &format!(
+                        "wrong protocol version ({} != {}) (socket: {})",
+                        reporter_net_protocol,
+                        NETWORK_PROTOCOL_VERSION,
+                        self.socket.peer_addr().unwrap()
+                    ),
+                    file!(),
+                    line!(),
+                ),
+            ));
+        }
 
-                self.logger.lock().unwrap().print_and_log(&format!(
-                    "Received a report from socket {}",
-                    self.socket.peer_addr().unwrap()
-                ));
+        // Check field limits.
+        if let Err((field, length)) = UserService::check_report_field_limits(&game_report) {
+            let result_code = ReportResult::ServerRejected;
 
-                {
-                    if let Err(err) = self.database.lock().unwrap().save_report(game_report) {
-                        let result_code = ReportResult::InternalError;
+            if let Err(err) = UserService::send_packet(
+                &mut self.socket,
+                &self.secret_key,
+                OutPacket::ReportAnswer { result_code },
+            ) {
+                return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
+            }
 
-                        if let Err(err) = UserService::send_packet(
-                            &mut self.socket,
-                            &self.secret_key,
-                            OutPacket::ReportAnswer { result_code },
-                        ) {
-                            return Err((
-                                ReportResult::InternalError,
-                                err.add_entry(file!(), line!()),
-                            ));
-                        }
+            return Err((
+                result_code,
+                AppError::new(
+            &format!(
+                        "report exceeds report field limits ({:?} has length of {} characters while the limit is {}) (socket: {})",
+                        field,
+                        length,
+                        field.max_length(),
+                        self.socket.peer_addr().unwrap()
+                    ),
+               file!(),
+               line!(),
+                ),
+            ));
+        }
 
-                        return Err((result_code, err.add_entry(file!(), line!())));
-                    }
-                }
+        self.logger.lock().unwrap().print_and_log(&format!(
+            "Received a report from socket {}",
+            self.socket.peer_addr().unwrap()
+        ));
 
-                self.logger.lock().unwrap().print_and_log(&format!(
-                    "Saved a report from socket {}",
-                    self.socket.peer_addr().unwrap()
-                ));
+        {
+            if let Err(err) = self.database.lock().unwrap().save_report(game_report) {
+                let result_code = ReportResult::InternalError;
 
-                // Answer "OK".
                 if let Err(err) = UserService::send_packet(
                     &mut self.socket,
                     &self.secret_key,
-                    OutPacket::ReportAnswer {
-                        result_code: ReportResult::Ok,
-                    },
+                    OutPacket::ReportAnswer { result_code },
                 ) {
                     return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
                 }
+
+                return Err((result_code, err.add_entry(file!(), line!())));
             }
+        }
+
+        self.logger.lock().unwrap().print_and_log(&format!(
+            "Saved a report from socket {}",
+            self.socket.peer_addr().unwrap()
+        ));
+
+        // Answer "OK".
+        if let Err(err) = UserService::send_packet(
+            &mut self.socket,
+            &self.secret_key,
+            OutPacket::ReportAnswer {
+                result_code: ReportResult::Ok,
+            },
+        ) {
+            return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
         }
 
         Ok(())

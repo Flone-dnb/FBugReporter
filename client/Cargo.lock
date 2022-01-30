@@ -120,6 +120,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 name = "client"
 version = "1.0.0"
 dependencies = [
+ "configparser",
  "druid",
  "rdev",
 ]
@@ -169,6 +170,12 @@ dependencies = [
  "libc",
  "objc",
 ]
+
+[[package]]
+name = "configparser"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06821ea598337a8412cf47c5b71c3bc694a7f0aed188ac28b836fab164a2c202"
 
 [[package]]
 name = "console_error_panic_hook"

@@ -11,8 +11,10 @@ use rdev::display_size;
 use layouts::connect_layout::ConnectLayout;
 use layouts::main_layout::MainLayout;
 use layouts::settings_layout::SettingsLayout;
+use theme::*;
 
 mod layouts;
+mod theme;
 
 #[derive(Clone, Copy, Data, PartialEq)]
 pub enum Layout {
@@ -23,6 +25,7 @@ pub enum Layout {
 #[derive(Clone, Data)]
 pub struct ApplicationState {
     current_layout: Layout,
+    theme: ApplicationTheme,
 }
 
 pub fn main() {
@@ -45,13 +48,60 @@ pub fn main() {
     // Create the initial app state.
     let initial_state = ApplicationState {
         current_layout: Layout::Connect,
+        theme: ApplicationTheme::new(),
     };
 
     // Start the application. Here we pass in the application state.
     AppLauncher::with_window(main_window)
         .log_to_console()
+        .configure_env(apply_theme)
         .launch(initial_state)
         .expect("Failed to launch the application.");
+}
+
+fn apply_theme(env: &mut Env, data: &ApplicationState) {
+    env.set(
+        druid::theme::WINDOW_BACKGROUND_COLOR,
+        data.theme.background_color.clone(),
+    );
+    env.set(
+        druid::theme::TEXTBOX_BORDER_RADIUS,
+        data.theme.border_radius,
+    );
+    env.set(druid::theme::BUTTON_BORDER_RADIUS, data.theme.border_radius);
+    env.set(
+        druid::theme::PLACEHOLDER_COLOR,
+        data.theme.placeholder_color.clone(),
+    );
+    env.set(
+        druid::theme::BACKGROUND_LIGHT,
+        data.theme.textbox_background_color.clone(),
+    );
+    env.set(
+        druid::theme::BORDER_DARK,
+        data.theme.inactive_border_color.clone(),
+    );
+    env.set(
+        druid::theme::SELECTED_TEXT_BACKGROUND_COLOR,
+        data.theme.text_selection_color.clone(),
+    );
+    env.set(
+        druid::theme::PRIMARY_LIGHT,
+        data.theme.active_border_color.clone(),
+    );
+    env.set(
+        druid::theme::BUTTON_DARK,
+        data.theme.button_dark_color.clone(),
+    );
+    env.set(
+        druid::theme::BUTTON_LIGHT,
+        data.theme.button_light_color.clone(),
+    );
+
+    env.set(
+        BACKGROUND_SPECIAL_COLOR,
+        data.theme.background_special_color.clone(),
+    );
 }
 
 fn build_root_widget() -> impl Widget<ApplicationState> {

@@ -1,0 +1,10 @@
+[package]
+name = "client"
+authors = ["Aleksandr \"Flone\" Tretyakov"]
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+druid = { git = "https://github.com/linebender/druid.git" }
+rdev = "0.5.1"

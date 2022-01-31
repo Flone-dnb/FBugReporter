@@ -1,11 +1,23 @@
 // External.
-use druid::widget::prelude::*;
-use druid::widget::{Flex, Label, MainAxisAlignment};
+use druid::widget::{prelude::*, SizedBox};
+use druid::widget::{Button, Flex, Label, MainAxisAlignment, TextBox};
+use druid::{Lens, LensExt, WidgetExt};
 
 // Custom.
 use crate::ApplicationState;
 
-#[derive(Clone, Data)]
+// Layout customization.
+const WIDTH_PADDING: f64 = 0.25;
+const LEFT_SIDE_SIZE: f64 = 0.5;
+const RIGHT_SIDE_SIZE: f64 = 1.0;
+const TOP_PADDING: f64 = 0.5;
+const BOTTOM_PADDING: f64 = 0.75;
+const ROW_SPACING: f64 = 0.5;
+const BUTTONS_WIDTH_PADDING: f64 = 1.0;
+const BUTTON_HEIGHT: f64 = 0.3;
+const TEXT_SIZE: f64 = 20.0;
+
+#[derive(Clone, Data, Lens)]
 pub struct ConnectLayout {
     pub server: String,
     pub port: String,
@@ -24,6 +36,97 @@ impl ConnectLayout {
         Flex::column()
             .main_axis_alignment(MainAxisAlignment::Center)
             .must_fill_main_axis(true)
-            .with_flex_child(Label::new("Hello World from connect layout!"), 100.0)
+            .with_flex_child(SizedBox::empty().expand(), TOP_PADDING)
+            .with_flex_child(
+                Flex::row()
+                    .main_axis_alignment(MainAxisAlignment::Center)
+                    .must_fill_main_axis(true)
+                    .with_flex_child(SizedBox::empty().expand(), WIDTH_PADDING)
+                    .with_flex_child(
+                        Flex::column()
+                            .with_flex_child(
+                                Label::new("Server:").with_text_size(TEXT_SIZE).expand(),
+                                1.0,
+                            )
+                            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
+                            .with_flex_child(
+                                Label::new("Port:").with_text_size(TEXT_SIZE).expand(),
+                                1.0,
+                            )
+                            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
+                            .with_flex_child(
+                                Label::new("Password:").with_text_size(TEXT_SIZE).expand(),
+                                1.0,
+                            ),
+                        LEFT_SIDE_SIZE,
+                    )
+                    .with_default_spacer()
+                    .with_flex_child(
+                        Flex::column()
+                            .with_flex_child(
+                                TextBox::new()
+                                    .with_text_size(TEXT_SIZE)
+                                    .lens(
+                                        ApplicationState::connect_layout
+                                            .then(ConnectLayout::server),
+                                    )
+                                    .expand(),
+                                1.0,
+                            )
+                            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
+                            .with_flex_child(
+                                TextBox::new()
+                                    .with_text_size(TEXT_SIZE)
+                                    .lens(
+                                        ApplicationState::connect_layout.then(ConnectLayout::port),
+                                    )
+                                    .expand(),
+                                1.0,
+                            )
+                            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
+                            .with_flex_child(
+                                TextBox::new()
+                                    .with_text_size(TEXT_SIZE)
+                                    .lens(
+                                        ApplicationState::connect_layout
+                                            .then(ConnectLayout::password),
+                                    )
+                                    .expand(),
+                                1.0,
+                            ),
+                        RIGHT_SIDE_SIZE,
+                    )
+                    .with_flex_child(SizedBox::empty().expand(), WIDTH_PADDING),
+                1.0,
+            )
+            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
+            .with_flex_child(
+                Flex::row()
+                    .main_axis_alignment(MainAxisAlignment::Center)
+                    .must_fill_main_axis(true)
+                    .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING)
+                    .with_flex_child(
+                        Button::from_label(Label::new("Connect").with_text_size(TEXT_SIZE))
+                            .expand(),
+                        1.0,
+                    )
+                    .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING),
+                BUTTON_HEIGHT,
+            )
+            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
+            .with_flex_child(
+                Flex::row()
+                    .main_axis_alignment(MainAxisAlignment::Center)
+                    .must_fill_main_axis(true)
+                    .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING)
+                    .with_flex_child(
+                        Button::from_label(Label::new("Settings").with_text_size(TEXT_SIZE))
+                            .expand(),
+                        1.0,
+                    )
+                    .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING),
+                BUTTON_HEIGHT,
+            )
+            .with_flex_child(SizedBox::empty().expand(), BOTTOM_PADDING)
     }
 }

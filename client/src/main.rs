@@ -5,6 +5,7 @@
 use druid::widget::prelude::*;
 use druid::widget::ViewSwitcher;
 use druid::{AppLauncher, Data, WindowDesc};
+use druid::{Lens, LensExt, TextAlignment, WidgetExt};
 use rdev::display_size;
 
 // Custom.
@@ -22,9 +23,10 @@ pub enum Layout {
     Settings,
     Main,
 }
-#[derive(Clone, Data)]
+#[derive(Clone, Data, Lens)]
 pub struct ApplicationState {
     current_layout: Layout,
+    connect_layout: ConnectLayout,
     theme: ApplicationTheme,
 }
 
@@ -48,6 +50,7 @@ pub fn main() {
     // Create the initial app state.
     let initial_state = ApplicationState {
         current_layout: Layout::Connect,
+        connect_layout: ConnectLayout::new(),
         theme: ApplicationTheme::new(),
     };
 

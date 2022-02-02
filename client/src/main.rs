@@ -27,6 +27,8 @@ pub enum Layout {
 pub struct ApplicationState {
     current_layout: Layout,
     connect_layout: ConnectLayout,
+    main_layout: MainLayout,
+    settings_layout: SettingsLayout,
     theme: ApplicationTheme,
 }
 
@@ -51,6 +53,8 @@ pub fn main() {
     let initial_state = ApplicationState {
         current_layout: Layout::Connect,
         connect_layout: ConnectLayout::new(),
+        main_layout: MainLayout::new(),
+        settings_layout: SettingsLayout::new(),
         theme: ApplicationTheme::new(),
     };
 

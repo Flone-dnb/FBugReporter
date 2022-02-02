@@ -4,7 +4,7 @@ todo
 
 # Client
 
-Theme can be customized but copy-pasting the <b>theme.ini</b> file from <b>client</b> folder next to the client binary file.<br>
+Theme can be customized by copy-pasting the <b>theme.ini</b> file from <b>client</b> folder next to the client executable file.<br>
 If there is a file <b>theme.ini</b> next to the client binary it will read theme values from it instead of using default values.
 
 # Build

@@ -4,7 +4,7 @@ use druid::widget::{Button, Flex, Label, MainAxisAlignment, TextBox};
 use druid::{Lens, LensExt, WidgetExt};
 
 // Custom.
-use crate::ApplicationState;
+use crate::{ApplicationState, Layout};
 
 // Layout customization.
 const WIDTH_PADDING: f64 = 0.25;
@@ -107,6 +107,7 @@ impl ConnectLayout {
                     .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING)
                     .with_flex_child(
                         Button::from_label(Label::new("Connect").with_text_size(TEXT_SIZE))
+                            .on_click(ConnectLayout::on_connect_clicked)
                             .expand(),
                         1.0,
                     )
@@ -121,6 +122,7 @@ impl ConnectLayout {
                     .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING)
                     .with_flex_child(
                         Button::from_label(Label::new("Settings").with_text_size(TEXT_SIZE))
+                            .on_click(ConnectLayout::on_settings_clicked)
                             .expand(),
                         1.0,
                     )
@@ -128,5 +130,11 @@ impl ConnectLayout {
                 BUTTON_HEIGHT,
             )
             .with_flex_child(SizedBox::empty().expand(), BOTTOM_PADDING)
+    }
+    fn on_connect_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
+        data.current_layout = Layout::Main;
+    }
+    fn on_settings_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
+        data.current_layout = Layout::Settings;
     }
 }

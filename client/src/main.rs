@@ -4,8 +4,7 @@
 // External.
 use druid::widget::prelude::*;
 use druid::widget::ViewSwitcher;
-use druid::{AppLauncher, Data, WindowDesc};
-use druid::{Lens, LensExt, TextAlignment, WidgetExt};
+use druid::{AppLauncher, Data, Lens, WindowDesc};
 use rdev::display_size;
 
 // Custom.
@@ -30,6 +29,7 @@ pub struct ApplicationState {
     main_layout: MainLayout,
     settings_layout: SettingsLayout,
     theme: ApplicationTheme,
+    is_connected: bool,
 }
 
 pub fn main() {
@@ -56,6 +56,7 @@ pub fn main() {
         main_layout: MainLayout::new(),
         settings_layout: SettingsLayout::new(),
         theme: ApplicationTheme::new(),
+        is_connected: false,
     };
 
     // Start the application. Here we pass in the application state.

@@ -9,3 +9,4 @@ license = "MIT"
 druid = { git = "https://github.com/linebender/druid.git" }
 rdev = "0.5.1"
 configparser = "3.0.0"
+opener = "0.5.0"

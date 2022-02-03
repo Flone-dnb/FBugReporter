@@ -15,6 +15,7 @@ use theme::*;
 
 mod layouts;
 mod theme;
+mod widgets;
 
 #[derive(Clone, Copy, Data, PartialEq)]
 pub enum Layout {

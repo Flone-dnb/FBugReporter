@@ -32,14 +32,6 @@ impl MainLayout {
             Flex::column()
                 .main_axis_alignment(MainAxisAlignment::Start)
                 .must_fill_main_axis(true)
-                .with_child(
-                    Button::from_label(Label::new("settings").with_text_size(TEXT_SIZE))
-                        .on_click(|_ctx, data: &mut ApplicationState, _env| {
-                            data.current_layout = Layout::Settings
-                        })
-                        .align_left(),
-                )
-                .with_default_spacer()
                 .with_flex_child(
                     Flex::column()
                         .with_child(ReportWidget::build_title_ui())

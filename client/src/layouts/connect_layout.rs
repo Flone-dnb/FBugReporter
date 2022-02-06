@@ -121,7 +121,7 @@ impl ConnectLayout {
                     .must_fill_main_axis(true)
                     .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING)
                     .with_flex_child(
-                        Button::from_label(Label::new("Settings").with_text_size(TEXT_SIZE))
+                        Button::from_label(Label::new("About").with_text_size(TEXT_SIZE))
                             .on_click(ConnectLayout::on_settings_clicked)
                             .expand(),
                         1.0,

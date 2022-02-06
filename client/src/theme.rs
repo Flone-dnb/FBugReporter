@@ -1,18 +1,13 @@
-// Std.
-use std::str::FromStr;
-
 // External.
 use configparser::ini::Ini;
 use druid::widget::prelude::*;
-use druid::{Color, Key, Lens};
+use druid::{Color, Lens};
 
-pub const BACKGROUND_SPECIAL_COLOR: Key<Color> = Key::new("color.background_color_special");
 const CONFIG_THEME_SECTION_NAME: &str = "theme";
 
 #[derive(Clone, Data, Lens, Debug)]
 pub struct ApplicationTheme {
     pub background_color: Color,
-    pub background_special_color: Color,
     pub placeholder_color: Color,
     pub textbox_background_color: Color,
     pub text_selection_color: Color,
@@ -37,11 +32,6 @@ impl ApplicationTheme {
         let mut theme = Self::default();
 
         read_theme_color_hex("background_color", &mut theme.background_color, &config);
-        read_theme_color_hex(
-            "background_special_color",
-            &mut theme.background_special_color,
-            &config,
-        );
         read_theme_color_hex("placeholder_color", &mut theme.placeholder_color, &config);
         read_theme_color_hex(
             "textbox_background_color",
@@ -75,7 +65,6 @@ impl Default for ApplicationTheme {
     fn default() -> Self {
         ApplicationTheme {
             background_color: Color::rgb8(30, 26, 22),
-            background_special_color: Color::rgb8(35, 30, 25),
             placeholder_color: Color::rgb8(65, 60, 55),
             textbox_background_color: Color::rgb8(35, 30, 25),
             inactive_border_color: Color::rgba(0.0, 0.0, 0.0, 0.0),

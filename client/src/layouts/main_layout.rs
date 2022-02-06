@@ -7,14 +7,17 @@ use crate::widgets::report::ReportWidget;
 use crate::ApplicationState;
 
 #[derive(Clone, Data)]
-pub struct MainLayout {}
+pub struct MainLayout {
+    pub refresh_ui: bool,
+}
 
 impl MainLayout {
     pub fn new() -> Self {
-        Self {}
+        Self { refresh_ui: false }
     }
     pub fn build_ui() -> impl Widget<ApplicationState> {
         let report = ReportWidget::new(
+            0,
             String::from("12345678901234567890123456789012345678901234567890"),
             String::from("03.02.2022"),
             String::from("23:21"),

@@ -4,16 +4,20 @@
 // External.
 use druid::widget::prelude::*;
 use druid::widget::ViewSwitcher;
-use druid::{AppLauncher, Data, Lens, WindowDesc};
+use druid::{
+    AppDelegate, AppLauncher, Command, Data, DelegateCtx, Env, Handled, Lens, Target, WindowDesc,
+};
 use rdev::display_size;
 
 // Custom.
 use layouts::connect_layout::ConnectLayout;
 use layouts::main_layout::MainLayout;
 use layouts::settings_layout::SettingsLayout;
+use misc::custom_data_button_controller::CUSTOM_DATA_BUTTON_CLICKED;
 use theme::*;
 
 mod layouts;
+mod misc;
 mod theme;
 mod widgets;
 
@@ -64,6 +68,7 @@ pub fn main() {
     AppLauncher::with_window(main_window)
         .log_to_console()
         .configure_env(apply_theme)
+        .delegate(MyDelegate {})
         .launch(initial_state)
         .expect("Failed to launch the application.");
 }
@@ -106,11 +111,6 @@ fn apply_theme(env: &mut Env, data: &ApplicationState) {
         druid::theme::BUTTON_LIGHT,
         data.theme.button_light_color.clone(),
     );
-
-    env.set(
-        BACKGROUND_SPECIAL_COLOR,
-        data.theme.background_special_color.clone(),
-    );
 }
 
 fn build_root_widget() -> impl Widget<ApplicationState> {
@@ -122,4 +122,24 @@ fn build_root_widget() -> impl Widget<ApplicationState> {
             Layout::Main => Box::new(MainLayout::build_ui()),
         },
     )
+}
+
+struct MyDelegate;
+
+impl AppDelegate<ApplicationState> for MyDelegate {
+    fn command(
+        &mut self,
+        _ctx: &mut DelegateCtx,
+        _target: Target,
+        cmd: &Command,
+        data: &mut ApplicationState,
+        _env: &Env,
+    ) -> Handled {
+        if let Some(button_data) = cmd.get(CUSTOM_DATA_BUTTON_CLICKED) {
+            println!("open report with id {}", button_data.report_id);
+            Handled::Yes
+        } else {
+            Handled::No
+        }
+    }
 }

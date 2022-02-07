@@ -1,6 +1,9 @@
 // On Windows platform, don't show a console when opening the app.
 #![windows_subsystem = "windows"]
 
+// Std.
+use std::rc::Rc;
+
 // External.
 use druid::widget::prelude::*;
 use druid::widget::ViewSwitcher;
@@ -14,10 +17,13 @@ use layouts::connect_layout::ConnectLayout;
 use layouts::main_layout::MainLayout;
 use layouts::settings_layout::SettingsLayout;
 use misc::custom_data_button_controller::CUSTOM_DATA_BUTTON_CLICKED;
+use services::logger_service::LoggerService;
+use services::net_service::NetService;
 use theme::*;
 
 mod layouts;
 mod misc;
+mod services;
 mod theme;
 mod widgets;
 
@@ -27,12 +33,22 @@ pub enum Layout {
     Settings,
     Main,
 }
-#[derive(Clone, Data, Lens)]
+#[derive(Clone, Data, Lens)] // Clone is required by `AppDelegate`.
 pub struct ApplicationState {
     current_layout: Layout,
+
+    // layouts
     connect_layout: ConnectLayout,
     main_layout: MainLayout,
     settings_layout: SettingsLayout,
+
+    // services
+    #[data(ignore)]
+    net_service: Rc<NetService>, // Using `Rc` because need `Clone`.
+    #[data(ignore)]
+    logger_service: Rc<LoggerService>, // Using `Rc` because need `Clone`.
+
+    // misc
     theme: ApplicationTheme,
     is_connected: bool,
 }
@@ -60,6 +76,8 @@ pub fn main() {
         connect_layout: ConnectLayout::new(),
         main_layout: MainLayout::new(),
         settings_layout: SettingsLayout::new(),
+        net_service: Rc::new(NetService::new()),
+        logger_service: Rc::new(LoggerService::new()),
         theme: ApplicationTheme::new(),
         is_connected: false,
     };
@@ -123,7 +141,6 @@ fn build_root_widget() -> impl Widget<ApplicationState> {
         },
     )
 }
-
 struct MyDelegate;
 
 impl AppDelegate<ApplicationState> for MyDelegate {

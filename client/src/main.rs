@@ -2,7 +2,7 @@
 #![windows_subsystem = "windows"]
 
 // Std.
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 // External.
 use druid::widget::prelude::*;
@@ -44,9 +44,9 @@ pub struct ApplicationState {
 
     // services
     #[data(ignore)]
-    net_service: Rc<NetService>, // Using `Rc` because need `Clone`.
+    net_service: Arc<Mutex<NetService>>, // Using `Arc<Mutex>` because need `Clone` and need to modify.
     #[data(ignore)]
-    logger_service: Rc<LoggerService>, // Using `Rc` because need `Clone`.
+    logger_service: Arc<Mutex<LoggerService>>, // Using `Arc<Mutex>` because need `Clone` and need to modify.
 
     // misc
     theme: ApplicationTheme,
@@ -75,8 +75,8 @@ pub fn main() {
         connect_layout: ConnectLayout::new(),
         main_layout: MainLayout::new(),
         settings_layout: SettingsLayout::new(),
-        net_service: Rc::new(NetService::new()),
-        logger_service: Rc::new(LoggerService::new()),
+        net_service: Arc::new(Mutex::new(NetService::new())),
+        logger_service: Arc::new(Mutex::new(LoggerService::new())),
         theme: ApplicationTheme::new(),
     };
 

@@ -132,9 +132,29 @@ impl ConnectLayout {
             .with_flex_child(SizedBox::empty().expand(), BOTTOM_PADDING)
     }
     fn on_connect_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
-        // TODO: connect...
-        // if connected:
-        data.current_layout = Layout::Main;
+        let port = data.connect_layout.port.parse::<u16>();
+        if port.is_err() {
+            data.connect_layout.port = String::new();
+            // TODO: add to screen.
+            return;
+        }
+        let port = port.unwrap();
+
+        let result = data.net_service.lock().unwrap().connect(
+            data.connect_layout.server.clone(),
+            port,
+            data.connect_layout.password.clone(),
+        );
+        if let Err(app_error) = result {
+            println!("{}", app_error);
+            data.logger_service
+                .lock()
+                .unwrap()
+                .log(&app_error.to_string());
+            // TODO: add to screen.
+        } else {
+            data.current_layout = Layout::Main;
+        }
     }
     fn on_settings_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
         data.current_layout = Layout::Settings;

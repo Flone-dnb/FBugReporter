@@ -134,7 +134,6 @@ impl ConnectLayout {
     fn on_connect_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
         // TODO: connect...
         // if connected:
-        data.is_connected = true;
         data.current_layout = Layout::Main;
     }
     fn on_settings_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {

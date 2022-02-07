@@ -50,7 +50,6 @@ pub struct ApplicationState {
 
     // misc
     theme: ApplicationTheme,
-    is_connected: bool,
 }
 
 pub fn main() {
@@ -79,7 +78,6 @@ pub fn main() {
         net_service: Rc::new(NetService::new()),
         logger_service: Rc::new(LoggerService::new()),
         theme: ApplicationTheme::new(),
-        is_connected: false,
     };
 
     // Start the application. Here we pass in the application state.

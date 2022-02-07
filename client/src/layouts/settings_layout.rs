@@ -72,11 +72,7 @@ impl SettingsLayout {
                             .with_text_size(TEXT_SIZE),
                     )
                     .on_click(|_ctx, data: &mut ApplicationState, _env| {
-                        if data.is_connected {
-                            data.current_layout = Layout::Main;
-                        } else {
-                            data.current_layout = Layout::Connect;
-                        }
+                        data.current_layout = Layout::Connect;
                     }),
                     1.0,
                 ),

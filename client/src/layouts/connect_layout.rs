@@ -1,7 +1,7 @@
 // External.
 use druid::widget::{prelude::*, SizedBox};
-use druid::widget::{Button, Flex, Label, MainAxisAlignment, TextBox};
-use druid::{Lens, LensExt, WidgetExt};
+use druid::widget::{Button, Flex, Label, LineBreaking, MainAxisAlignment, TextBox};
+use druid::{Lens, LensExt, TextAlignment, WidgetExt};
 
 // Custom.
 use crate::{ApplicationState, Layout};
@@ -22,6 +22,7 @@ pub struct ConnectLayout {
     pub server: String,
     pub port: String,
     pub password: String,
+    connect_error: String,
 }
 
 impl ConnectLayout {
@@ -30,6 +31,7 @@ impl ConnectLayout {
             server: String::new(),
             port: String::new(),
             password: String::new(),
+            connect_error: String::new(),
         }
     }
     pub fn build_ui() -> impl Widget<ApplicationState> {
@@ -66,6 +68,7 @@ impl ConnectLayout {
                             .with_flex_child(
                                 TextBox::new()
                                     .with_text_size(TEXT_SIZE)
+                                    .with_placeholder("Server's address or a domain name...")
                                     .lens(
                                         ApplicationState::connect_layout
                                             .then(ConnectLayout::server),
@@ -77,6 +80,7 @@ impl ConnectLayout {
                             .with_flex_child(
                                 TextBox::new()
                                     .with_text_size(TEXT_SIZE)
+                                    .with_placeholder("Server's port...")
                                     .lens(
                                         ApplicationState::connect_layout.then(ConnectLayout::port),
                                     )
@@ -87,6 +91,7 @@ impl ConnectLayout {
                             .with_flex_child(
                                 TextBox::new()
                                     .with_text_size(TEXT_SIZE)
+                                    .with_placeholder("Server's password...")
                                     .lens(
                                         ApplicationState::connect_layout
                                             .then(ConnectLayout::password),
@@ -98,6 +103,15 @@ impl ConnectLayout {
                     )
                     .with_flex_child(SizedBox::empty().expand(), WIDTH_PADDING),
                 1.0,
+            )
+            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
+            .with_child(
+                Label::new(|data: &ApplicationState, _env: &Env| {
+                    data.connect_layout.connect_error.clone()
+                })
+                .with_text_size(TEXT_SIZE)
+                .with_text_alignment(TextAlignment::Center)
+                .with_line_break_mode(LineBreaking::WordWrap),
             )
             .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
             .with_flex_child(
@@ -132,14 +146,25 @@ impl ConnectLayout {
             .with_flex_child(SizedBox::empty().expand(), BOTTOM_PADDING)
     }
     fn on_connect_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
+        // Check if all essential fields are filled.
+        if data.connect_layout.server.is_empty()
+            || data.connect_layout.port.is_empty()
+            || data.connect_layout.password.is_empty()
+        {
+            data.connect_layout.connect_error = String::from("All fields must be filled.");
+            return;
+        }
+
+        // Try to parse the port string.
         let port = data.connect_layout.port.parse::<u16>();
         if port.is_err() {
             data.connect_layout.port = String::new();
-            // TODO: add to screen.
+            data.connect_layout.connect_error = String::from("Could not parse port value.");
             return;
         }
         let port = port.unwrap();
 
+        // Try to connect.
         let result = data.net_service.lock().unwrap().connect(
             data.connect_layout.server.clone(),
             port,
@@ -151,7 +176,7 @@ impl ConnectLayout {
                 .lock()
                 .unwrap()
                 .log(&app_error.to_string());
-            // TODO: add to screen.
+            data.connect_layout.connect_error = app_error.to_string();
         } else {
             data.current_layout = Layout::Main;
         }

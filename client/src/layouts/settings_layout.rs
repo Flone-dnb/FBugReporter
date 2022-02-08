@@ -3,6 +3,7 @@ use druid::widget::{prelude::*, Button, Padding};
 use druid::widget::{CrossAxisAlignment, Flex, Label, LineBreaking, SizedBox};
 
 // Custom.
+use crate::services::logger_service::LoggerService;
 use crate::{ApplicationState, Layout};
 
 const TEXT_SIZE: f64 = 20.0;
@@ -49,8 +50,11 @@ impl SettingsLayout {
                 .with_default_spacer()
                 .with_default_spacer()
                 .with_flex_child(
-                    Label::new(|data: &ApplicationState, _env: &Env| "Log file location: TODO.")
-                        .with_text_size(TEXT_SIZE),
+                    Label::new(format!(
+                        "Log file location: {}.",
+                        LoggerService::get_log_file_path()
+                    ))
+                    .with_text_size(TEXT_SIZE),
                     1.0,
                 )
                 .with_default_spacer()

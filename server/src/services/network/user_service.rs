@@ -111,6 +111,12 @@ impl UserService {
                     return Err((err.0, err.1.add_entry(file!(), line!())));
                 }
             }
+            InPacket::ClientAuth {
+                client_net_protocol,
+                password_hash,
+            } => {
+                // TODO.
+            }
         }
 
         Ok(())
@@ -471,7 +477,7 @@ impl UserService {
         send_buffer.append(&mut iv);
         send_buffer.append(&mut encrypted_packet);
 
-        // Send to the server.
+        // Send.
         loop {
             match UserService::write_to_socket(socket, &mut send_buffer) {
                 IoResult::Fin => {

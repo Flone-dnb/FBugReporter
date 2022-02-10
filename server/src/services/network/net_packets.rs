@@ -11,6 +11,10 @@ pub enum InPacket {
         reporter_net_protocol: u16,
         game_report: GameReport,
     },
+    ClientAuth {
+        client_net_protocol: u16,
+        password_hash: Vec<u8>,
+    },
 }
 
 #[derive(Serialize, Deserialize)]

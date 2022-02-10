@@ -11,11 +11,13 @@ use block_modes::{BlockMode, Cbc};
 use cmac::{Cmac, Mac, NewMac};
 use num_bigint::{BigUint, RandomBits};
 use rand::{Rng, RngCore};
+use sha2::{Digest, Sha512};
 
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
 
 // Custom.
+use super::net_packets::*;
 use crate::misc::app_error::AppError;
 
 const A_B_BITS: u64 = 2048; // if changed, change protocol version
@@ -69,7 +71,19 @@ impl NetService {
         self.secret_key = secret_key.unwrap();
 
         // Login using password hash.
-        // TODO: pass password hash, etc...
+        let mut hasher = Sha512::new();
+        hasher.update(password.as_bytes());
+        let password_hash = hasher.finalize().to_vec();
+        println!("\npassword: {}\nhash: {:?}\n", password, password_hash);
+
+        let packet = OutPacket::ClientAuth {
+            client_net_protocol: NETWORK_PROTOCOL_VERSION,
+            password_hash,
+        };
+
+        if let Err(app_error) = self.send_packet(packet) {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
 
         // return control here, don't drop connection, wait for further commands from the user
         Ok(())
@@ -259,6 +273,83 @@ impl NetService {
         }
 
         Ok(Vec::from(&secret_key_str[0..KEY_LENGTH_IN_BYTES]))
+    }
+    fn send_packet(&mut self, packet: OutPacket) -> Result<(), AppError> {
+        if self.secret_key.is_empty() {
+            return Err(AppError::new(
+                "can't send packet - secure connected is not established",
+                file!(),
+                line!(),
+            ));
+        }
+
+        // Serialize.
+        let mut binary_packet = bincode::serialize(&packet).unwrap();
+
+        // CMAC.
+        let mut mac = Cmac::<Aes256>::new_from_slice(&self.secret_key).unwrap();
+        mac.update(&binary_packet);
+        let result = mac.finalize();
+        let mut tag_bytes = result.into_bytes().to_vec();
+        if tag_bytes.len() != CMAC_TAG_LENGTH {
+            return Err(AppError::new(
+                &format!(
+                    "unexpected tag length: {} != {}",
+                    tag_bytes.len(),
+                    CMAC_TAG_LENGTH
+                ),
+                file!(),
+                line!(),
+            ));
+        }
+
+        binary_packet.append(&mut tag_bytes);
+
+        // Encrypt packet.
+        let mut rng = rand::thread_rng();
+        let mut iv = vec![0u8; IV_LENGTH];
+        rng.fill_bytes(&mut iv);
+        let cipher = Aes256Cbc::new_from_slices(&self.secret_key, &iv).unwrap();
+        let mut encrypted_packet = cipher.encrypt_vec(&binary_packet);
+
+        // Prepare encrypted packet len buffer.
+        if encrypted_packet.len() + IV_LENGTH > std::u32::MAX as usize {
+            // should never happen
+            return Err(AppError::new(
+                &format!(
+                    "resulting packet is too big ({} > {})",
+                    encrypted_packet.len() + IV_LENGTH,
+                    std::u32::MAX
+                ),
+                file!(),
+                line!(),
+            ));
+        }
+        let encrypted_len = (encrypted_packet.len() + IV_LENGTH) as u32;
+        let encrypted_len_buf = bincode::serialize(&encrypted_len);
+        if let Err(e) = encrypted_len_buf {
+            return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
+        }
+        let mut send_buffer = encrypted_len_buf.unwrap();
+
+        // Merge all to one buffer.
+        send_buffer.append(&mut iv);
+        send_buffer.append(&mut encrypted_packet);
+
+        // Send.
+        loop {
+            match self.write_to_socket(&mut send_buffer) {
+                IoResult::Fin => {
+                    return Err(AppError::new("unexpected FIN received", file!(), line!()));
+                }
+                IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
+                IoResult::Ok(_) => {
+                    break;
+                }
+            }
+        }
+
+        Ok(())
     }
     fn read_from_socket(&mut self, buf: &mut [u8]) -> IoResult {
         if buf.is_empty() {

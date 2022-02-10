@@ -74,7 +74,6 @@ impl NetService {
         let mut hasher = Sha512::new();
         hasher.update(password.as_bytes());
         let password_hash = hasher.finalize().to_vec();
-        println!("\npassword: {}\nhash: {:?}\n", password, password_hash);
 
         let packet = OutPacket::ClientAuth {
             client_net_protocol: NETWORK_PROTOCOL_VERSION,

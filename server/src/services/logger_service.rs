@@ -6,9 +6,6 @@ use std::path::Path;
 // External.
 use chrono::Local;
 
-// Custom.
-use crate::error::AppError;
-
 pub const LOG_FILE_NAME: &str = "server.log";
 
 pub struct Logger;
@@ -20,14 +17,14 @@ impl Logger {
         Self {}
     }
     pub fn print_and_log(&self, text: &str) {
-        println!("{}", text);
-
         let mut log_file = self.open_log_file();
 
         let datetime = Local::now();
 
         if let Err(e) = writeln!(log_file, "[{}]: {}", datetime.naive_local(), text) {
             panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
+        } else {
+            println!("[{}]: {}", datetime.naive_local(), text);
         }
     }
     fn open_log_file(&self) -> std::fs::File {

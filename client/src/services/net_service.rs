@@ -45,7 +45,13 @@ impl NetService {
             secret_key: Vec::new(),
         }
     }
-    pub fn connect(&mut self, server: String, port: u16, password: String) -> Result<(), AppError> {
+    pub fn connect(
+        &mut self,
+        server: String,
+        port: u16,
+        username: String,
+        password: String,
+    ) -> Result<(), AppError> {
         // Connect socket.
         let tcp_socket = TcpStream::connect(format!("{}:{}", server, port));
         if let Err(e) = tcp_socket {
@@ -70,19 +76,23 @@ impl NetService {
         }
         self.secret_key = secret_key.unwrap();
 
-        // Login using password hash.
+        // Generate password hash.
         let mut hasher = Sha512::new();
         hasher.update(password.as_bytes());
-        let password_hash = hasher.finalize().to_vec();
+        let password = hasher.finalize().to_vec();
 
-        let packet = OutPacket::ClientAuth {
+        let packet = OutPacket::ClientLogin {
             client_net_protocol: NETWORK_PROTOCOL_VERSION,
-            password_hash,
+            username,
+            password,
         };
 
         if let Err(app_error) = self.send_packet(packet) {
             return Err(app_error.add_entry(file!(), line!()));
         }
+
+        // Receive answer.
+        // TODO: if OK then save server, port, username and password.
 
         // return control here, don't drop connection, wait for further commands from the user
         Ok(())

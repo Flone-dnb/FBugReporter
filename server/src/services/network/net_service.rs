@@ -10,11 +10,28 @@ use crate::services::db_manager::DatabaseManager;
 use crate::services::logger_service::Logger;
 use crate::services::network::user_service::UserService;
 
+// External.
+use chrono::{DateTime, Local};
+use sha2::{Digest, Sha512};
+
+const WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN: u64 = 5;
+// if a client used wrong password for the second time,
+// new ban duration will be
+// 'WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN' multiplied by this value.
+const FAILED_ATTEMPT_BAN_TIME_DURATION_MULTIPLIER: u64 = 2;
+
+struct BannedIP {
+    ip: IpAddr,
+    ban_start_time: DateTime<Local>,
+    current_ban_duration_in_min: u64,
+}
+
 pub struct NetService {
     pub logger: Arc<Mutex<Logger>>,
     pub server_config: ServerConfig,
     connected_socket_count: Arc<Mutex<usize>>,
     database: Arc<Mutex<DatabaseManager>>,
+    banned_ip_list: Vec<BannedIP>,
 }
 
 impl NetService {
@@ -34,14 +51,8 @@ impl NetService {
             logger: Arc::new(Mutex::new(logger)),
             connected_socket_count: Arc::new(Mutex::new(0)),
             database: Arc::new(Mutex::new(db.unwrap())),
+            banned_ip_list: Vec::new(),
         })
-    }
-    pub fn refresh_password(&mut self) -> Result<(), AppError> {
-        if let Err(err) = self.server_config.refresh_password() {
-            return Err(err.add_entry(file!(), line!()));
-        }
-
-        Ok(())
     }
     pub fn refresh_port(&mut self) -> Result<(), AppError> {
         if let Err(err) = self.server_config.refresh_port() {
@@ -56,6 +67,18 @@ impl NetService {
         }
 
         Ok(())
+    }
+    /// Register a new user in the database.
+    ///
+    /// On success returns user's password.
+    /// On failure returns error description via `AppError`.
+    pub fn register_user(&mut self, username: &str) -> Result<String, AppError> {
+        let result = self.database.lock().unwrap().register_user(username);
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        } else {
+            return Ok(result.unwrap());
+        }
     }
     pub fn start(&mut self) {
         {
@@ -82,6 +105,9 @@ impl NetService {
             ));
         }
 
+        self.process_users(listener_socket);
+    }
+    fn process_users(&mut self, listener_socket: TcpListener) {
         loop {
             // Wait for connection.
             let accept_result = listener_socket.accept();

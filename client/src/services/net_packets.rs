@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 pub enum OutPacket {
     // should be in sync with server's enum
     ReportPacket {}, // not used in client
-    ClientAuth {
+    ClientLogin {
         client_net_protocol: u16,
-        password_hash: Vec<u8>,
+        username: String,
+        password: Vec<u8>,
     },
 }

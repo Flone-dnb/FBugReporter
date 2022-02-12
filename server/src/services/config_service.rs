@@ -1,5 +1,4 @@
 // External.
-use num_bigint::{BigUint, RandomBits};
 #[cfg(target_os = "windows")]
 use platform_dirs::UserDirs;
 use rand::Rng;
@@ -17,12 +16,10 @@ const CONFIG_FILE_VERSION: u32 = 0;
 const CONFIG_FILE_MAGIC_NUMBER: u16 = 1919;
 const CONFIG_FILE_NAME: &str = "server.config";
 const PORT_RANGE: std::ops::Range<u16> = 7000..65535;
-const SERVER_PASSWORD_BIT_COUNT: u64 = 1024;
 
 #[derive(Debug)]
 pub struct ServerConfig {
     pub server_port: u16,
-    pub server_password: String,
     pub config_file_path: String,
     pub log_file_path: String,
 }
@@ -48,19 +45,6 @@ impl ServerConfig {
 
         Ok(server_config)
     }
-    pub fn refresh_password(&mut self) -> Result<(), AppError> {
-        let mut rng = rand::thread_rng();
-        let server_key: BigUint = rng.sample(RandomBits::new(SERVER_PASSWORD_BIT_COUNT));
-
-        self.server_password = server_key.to_str_radix(16);
-
-        // Save to config.
-        if let Err(err) = self.save_config() {
-            return Err(err.add_entry(file!(), line!()));
-        }
-
-        Ok(())
-    }
     pub fn refresh_port(&mut self) -> Result<(), AppError> {
         let mut rng = rand::thread_rng();
         self.server_port = rng.gen_range(PORT_RANGE);
@@ -84,11 +68,9 @@ impl ServerConfig {
     }
     fn default() -> Self {
         let mut rng = rand::thread_rng();
-        let server_key: BigUint = rng.sample(RandomBits::new(SERVER_PASSWORD_BIT_COUNT));
 
         Self {
             server_port: rng.gen_range(PORT_RANGE),
-            server_password: server_key.to_str_radix(16),
             config_file_path: ServerConfig::get_config_file_path(),
             log_file_path: ServerConfig::get_log_file_path(),
         }
@@ -145,27 +127,6 @@ impl ServerConfig {
                 file!(),
                 line!(),
             ));
-        }
-
-        // Write server password size.
-        let pass_size: u32 = self.server_password.len() as u32;
-        if let Err(e) = config_file.write(&bincode::serialize(&pass_size).unwrap()) {
-            return Err(AppError::new(
-                &format!("{:?} (config path: {})", e, config_file_path),
-                file!(),
-                line!(),
-            ));
-        }
-
-        // Write server password.
-        if !self.server_password.is_empty() {
-            if let Err(e) = config_file.write(self.server_password.as_bytes()) {
-                return Err(AppError::new(
-                    &format!("{:?} (config path: {})", e, config_file_path),
-                    file!(),
-                    line!(),
-                ));
-            }
         }
 
         Ok(())
@@ -239,41 +200,6 @@ impl ServerConfig {
             ));
         }
         self.server_port = bincode::deserialize::<u16>(&buf).unwrap();
-
-        // Read server password size.
-        let mut buf = vec![0u8; std::mem::size_of::<u32>()];
-        let mut _password_byte_count = 0u32;
-        if let Err(e) = config_file.read(&mut buf) {
-            return Err(AppError::new(
-                &format!("{:?} (config path: {})", e, config_file_path),
-                file!(),
-                line!(),
-            ));
-        }
-        _password_byte_count = bincode::deserialize::<u32>(&buf).unwrap();
-
-        // Read server password.
-        let mut buf = vec![0u8; _password_byte_count as usize];
-        if _password_byte_count > 0 {
-            if let Err(e) = config_file.read(&mut buf) {
-                return Err(AppError::new(
-                    &format!("{:?} (config path: {})", e, config_file_path),
-                    file!(),
-                    line!(),
-                ));
-            }
-
-            let server_pass = std::str::from_utf8(&buf);
-            if let Err(e) = server_pass {
-                return Err(AppError::new(
-                    &format!("{:?} (config path: {})", e, config_file_path),
-                    file!(),
-                    line!(),
-                ));
-            }
-
-            self.server_password = String::from(server_pass.unwrap());
-        }
 
         // ---------------------------------------------------------------------
         //

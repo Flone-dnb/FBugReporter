@@ -12,6 +12,7 @@ use block_modes::{BlockMode, Cbc};
 use cmac::{Cmac, Mac, NewMac};
 use num_bigint::{BigUint, RandomBits};
 use rand::{Rng, RngCore};
+use sha2::{Digest, Sha512};
 
 // Custom.
 use crate::error::AppError;
@@ -111,11 +112,44 @@ impl UserService {
                     return Err((err.0, err.1.add_entry(file!(), line!())));
                 }
             }
-            InPacket::ClientAuth {
+            InPacket::ClientLogin {
                 client_net_protocol,
-                password_hash,
+                username,
+                mut password,
             } => {
-                // TODO.
+                let database_guard = self.database.lock().unwrap();
+                let result = database_guard.get_user_password_and_salt(&username);
+                drop(database_guard);
+
+                if let Err(app_error) = result {
+                    return Err((
+                        ReportResult::InternalError,
+                        app_error.add_entry(file!(), line!()),
+                    ));
+                }
+
+                let (db_password, salt) = result.unwrap();
+                if db_password.is_empty() {
+                    println!("wrong");
+                }
+
+                let mut password_to_check = Vec::from(salt.as_bytes());
+                password_to_check.append(&mut password);
+
+                // Password hash.
+                let mut hasher = Sha512::new();
+                hasher.update(password_to_check.as_slice());
+                let password_hash = hasher.finalize().to_vec();
+
+                if password_hash != db_password {
+                    println!("wrong");
+                }
+                println!("correct");
+                // Check username, password, etc.
+                // TODO: if something wrong - ban, and write to log
+                // TODO: if successful write to log + update database values
+                // TODO: if 'need_change_password' is '1', ask user of new password
+                // and update 'need_change_password' to '0'.
             }
         }
 

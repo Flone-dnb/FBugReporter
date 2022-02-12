@@ -1,90 +1,165 @@
 // External.
 use chrono::prelude::*;
+use rand::Rng;
 use rusqlite::{params, Connection, Result};
+use sha2::{Digest, Sha512};
 
 // Custom.
 use crate::{error::AppError, misc::GameReport};
 
 const DATABASE_NAME: &str = "database.db3";
 const REPORT_TABLE_NAME: &str = "report";
+const USER_TABLE_NAME: &str = "user";
+
+const SALT_LENGTH: u64 = 32;
+const PASSWORD_LENGTH: u64 = 32;
+
+// Used for generating random salt, password and etc.
+const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                        abcdefghijklmnopqrstuvwxyz\
+                        0123456789)(*&^%$#@!~";
 
 pub struct DatabaseManager {
     connection: Connection,
 }
 
 impl DatabaseManager {
-    pub fn new() -> Result<Self, String> {
+    pub fn new() -> Result<Self, AppError> {
         let result = Connection::open(DATABASE_NAME);
         if let Err(e) = result {
-            return Err(format!(
-                "An error occurred at [{}, {}]: {:?}.\n\n",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
 
-        let connection = result.unwrap();
+        let mut connection = result.unwrap();
 
-        // Check if table exists.
-        let mut stmt = connection
+        // Check 'report' table.
+        if let Err(app_error) = DatabaseManager::create_report_table_if_not_found(&mut connection) {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        // Check 'user' table.
+        if let Err(app_error) = DatabaseManager::create_user_table_if_not_found(&mut connection) {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        Ok(Self { connection })
+    }
+    /// Register a new user in the database.
+    ///
+    /// On success returns user's password.
+    /// On failure returns error description via `AppError`.
+    pub fn register_user(&self, username: &str) -> Result<String, AppError> {
+        let datetime = Local::now();
+
+        // Generate password and salt.
+        let mut rng = rand::thread_rng();
+        let plaintext_password: String = (0..PASSWORD_LENGTH)
+            .map(|_| {
+                let idx = rng.gen_range(0..CHARSET.len());
+                CHARSET[idx] as char
+            })
+            .collect();
+        let salt: String = (0..SALT_LENGTH)
+            .map(|_| {
+                let idx = rng.gen_range(0..CHARSET.len());
+                CHARSET[idx] as char
+            })
+            .collect();
+
+        // Password hash.
+        let mut hasher = Sha512::new();
+        hasher.update(plaintext_password.as_bytes());
+        let mut password_hash = hasher.finalize().to_vec();
+
+        // Salt + 'password hash' hash.
+        let mut value: Vec<u8> = Vec::from(salt.as_bytes());
+        value.append(&mut password_hash);
+        let mut hasher = Sha512::new();
+        hasher.update(value.as_slice());
+        let password = hasher.finalize().to_ascii_lowercase();
+
+        if let Err(e) = self.connection.execute(
+            // password = hash(salt + hash(password))
+            &format!(
+                "INSERT INTO {} 
+            (
+                username, 
+                salt, 
+                password,
+                need_change_password,
+                last_login_date,
+                last_login_time,
+                last_login_ip,
+                date_registered,
+                time_registered
+            ) 
+            VALUES 
+            (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                USER_TABLE_NAME
+            ),
+            params![
+                username,
+                salt,
+                password,
+                1,
+                datetime.date().naive_local().to_string(),
+                datetime.time().format("%H:%M:%S").to_string(),
+                "",
+                datetime.date().naive_local().to_string(),
+                datetime.time().format("%H:%M:%S").to_string()
+            ],
+        ) {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        Ok(plaintext_password)
+    }
+    /// Get password and salt of a user.
+    ///
+    /// If the user is not found returned `Ok` values will be empty.
+    pub fn get_user_password_and_salt(
+        &self,
+        username: &str,
+    ) -> Result<(Vec<u8>, String), AppError> {
+        let mut stmt = self
+            .connection
             .prepare(&format!(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='{}'",
-                REPORT_TABLE_NAME
+                "SELECT password, salt FROM {} WHERE username='{}'",
+                USER_TABLE_NAME, username
             ))
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(format!(
-                "An error occurred at [{}, {}]: {:?}.\n\n",
-                file!(),
-                line!(),
-                e
-            ));
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
 
         let mut rows = result.unwrap();
-        let row = rows.next().unwrap();
 
-        if row.is_none() {
-            println!(
-                "INFO: No table \"{}\" was found in database, creating a new table.\n",
-                REPORT_TABLE_NAME
-            );
-            // Create this table.
-            let result = connection.execute(
-                &format!(
-                    "CREATE TABLE {}(
-                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                    report_name     TEXT NOT NULL,
-                    report_text     TEXT NOT NULL,
-                    sender_name     TEXT NOT NULL,
-                    sender_email    TEXT NOT NULL,
-                    game_name       TEXT NOT NULL,
-                    game_version    TEXT NOT NULL,
-                    os_info         TEXT NOT NULL,
-                    date_created_at TEXT NOT NULL,
-                    time_created_at TEXT NOT NULL     
-                )",
-                    REPORT_TABLE_NAME
-                ),
-                [],
-            );
-            if let Err(e) = result {
-                return Err(format!(
-                    "An error occurred at [{}, {}]: {:?}.\n\n",
-                    file!(),
-                    line!(),
-                    e
-                ));
-            }
+        let row = rows.next();
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
+        let row = row.unwrap();
+        if row.is_none() {
+            return Ok((Vec::new(), String::from("")));
+        }
+        let row = row.unwrap();
 
-        drop(row);
-        drop(rows);
-        drop(stmt);
+        // Get password.
+        let password: Result<Vec<u8>> = row.get(0);
+        if let Err(e) = password {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let password = password.unwrap();
 
-        Ok(Self { connection })
+        // Get salt.
+        let salt: Result<String> = row.get(1);
+        if let Err(e) = salt {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let salt = salt.unwrap();
+
+        Ok((password, salt))
     }
     pub fn save_report(&self, game_report: GameReport) -> Result<(), AppError> {
         let datetime = Local::now();
@@ -119,8 +194,113 @@ impl DatabaseManager {
                 datetime.time().format("%H:%M:%S").to_string()
             ],
         ) {
-            return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
+
+        Ok(())
+    }
+    fn create_report_table_if_not_found(connection: &mut Connection) -> Result<(), AppError> {
+        // Check if table exists.
+        let mut stmt = connection
+            .prepare(&format!(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='{}'",
+                REPORT_TABLE_NAME
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+        let row = rows.next().unwrap();
+
+        if row.is_none() {
+            println!(
+                "INFO: No table \"{}\" was found in database, creating a new table.\n",
+                REPORT_TABLE_NAME
+            );
+            // Create this table.
+            let result = connection.execute(
+                &format!(
+                    "CREATE TABLE {}(
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    report_name     TEXT NOT NULL,
+                    report_text     TEXT NOT NULL,
+                    sender_name     TEXT NOT NULL,
+                    sender_email    TEXT NOT NULL,
+                    game_name       TEXT NOT NULL,
+                    game_version    TEXT NOT NULL,
+                    os_info         TEXT NOT NULL,
+                    date_created_at TEXT NOT NULL,
+                    time_created_at TEXT NOT NULL     
+                )",
+                    REPORT_TABLE_NAME
+                ),
+                [],
+            );
+            if let Err(e) = result {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+        }
+
+        drop(row);
+        drop(rows);
+        drop(stmt);
+
+        Ok(())
+    }
+    fn create_user_table_if_not_found(connection: &mut Connection) -> Result<(), AppError> {
+        // Check if table exists.
+        let mut stmt = connection
+            .prepare(&format!(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='{}'",
+                USER_TABLE_NAME
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+        let row = rows.next().unwrap();
+
+        if row.is_none() {
+            println!(
+                "INFO: No table \"{}\" was found in database, creating a new table.\n",
+                USER_TABLE_NAME
+            );
+            // Create this table.
+            let result = connection.execute(
+                // password = hash(salt + hash(password))
+                // need_change_password is '1' if the user
+                // just registered, thus we need to ask him of a new password.
+                &format!(
+                    "CREATE TABLE {}(
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username             TEXT NOT NULL UNIQUE,
+                    salt                 TEXT NOT NULL,
+                    password             TEXT NOT NULL,
+                    need_change_password INTEGER NOT NULL,
+                    last_login_date      TEXT NOT NULL,
+                    last_login_time      TEXT NOT NULL,
+                    last_login_ip        TEXT NOT NULL,
+                    date_registered      TEXT NOT NULL,
+                    time_registered      TEXT NOT NULL
+                )",
+                    USER_TABLE_NAME
+                ),
+                [],
+            );
+            if let Err(e) = result {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+        }
+
+        drop(row);
+        drop(rows);
+        drop(stmt);
 
         Ok(())
     }

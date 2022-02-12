@@ -48,14 +48,13 @@ fn main() {
             println!("--start - starts the server on launch");
             println!("\ncommands:");
             println!("start - starts the server with the current configuration");
+            println!("register-user <username> - registers a new user");
             println!("config - show the current server configuration");
             println!("config.port = <value> - set custom server port value");
-            println!("refresh-password - generates new server password");
             println!("refresh-port - generates new server port");
             println!("exit - exit the application");
         } else if input == "start" {
             net_service.start();
-            break;
         } else if input.contains("config") {
             if input == "config" {
                 println!("{:#?}", net_service.server_config);
@@ -82,11 +81,27 @@ fn main() {
             } else {
                 println!("command '{}' not found", input);
             }
-        } else if input == "refresh-password" {
-            if let Err(msg) = net_service.refresh_password() {
-                panic!("{} at [{}, {}]", msg, file!(), line!());
+        } else if input.contains("register-user ") {
+            let username_str: String = input
+                .chars()
+                .take(0)
+                .chain(input.chars().skip("register-user ".chars().count()))
+                .collect();
+
+            if username_str.is_empty() {
+                println!("username is empty");
+            } else {
+                let result = net_service.register_user(&username_str);
+                if let Err(app_error) = result {
+                    panic!("{} at [{}, {}]", app_error.to_string(), file!(), line!());
+                } else {
+                    println!(
+                        "New user \"{}\" was registered, user's password is \"{}\".",
+                        username_str,
+                        result.unwrap()
+                    );
+                }
             }
-            println!("New password is generated. Please update the server password in all client applications in order for them to connect to this server.");
         } else if input == "refresh-port" {
             if let Err(msg) = net_service.refresh_port() {
                 panic!("{} at [{}, {}]", msg, file!(), line!());

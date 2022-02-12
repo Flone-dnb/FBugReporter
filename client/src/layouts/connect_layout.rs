@@ -12,7 +12,7 @@ const LEFT_SIDE_SIZE: f64 = 0.5;
 const RIGHT_SIDE_SIZE: f64 = 1.0;
 const TOP_PADDING: f64 = 0.5;
 const BOTTOM_PADDING: f64 = 0.75;
-const ROW_SPACING: f64 = 0.4;
+const ROW_SPACING: f64 = 0.25;
 const BUTTONS_WIDTH_PADDING: f64 = 1.0;
 const BUTTON_HEIGHT: f64 = 0.3;
 const TEXT_SIZE: f64 = 20.0;
@@ -21,6 +21,7 @@ const TEXT_SIZE: f64 = 20.0;
 pub struct ConnectLayout {
     pub server: String,
     pub port: String,
+    pub username: String,
     pub password: String,
     connect_error: String,
 }
@@ -30,6 +31,7 @@ impl ConnectLayout {
         Self {
             server: String::new(),
             port: String::new(),
+            username: String::new(),
             password: String::new(),
             connect_error: String::new(),
         }
@@ -53,6 +55,11 @@ impl ConnectLayout {
                             .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
                             .with_flex_child(
                                 Label::new("Port:").with_text_size(TEXT_SIZE).expand(),
+                                1.0,
+                            )
+                            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
+                            .with_flex_child(
+                                Label::new("Username:").with_text_size(TEXT_SIZE).expand(),
                                 1.0,
                             )
                             .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
@@ -91,7 +98,19 @@ impl ConnectLayout {
                             .with_flex_child(
                                 TextBox::new()
                                     .with_text_size(TEXT_SIZE)
-                                    .with_placeholder("Server's password...")
+                                    .with_placeholder("Your username...")
+                                    .lens(
+                                        ApplicationState::connect_layout
+                                            .then(ConnectLayout::username),
+                                    )
+                                    .expand(),
+                                1.0,
+                            )
+                            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
+                            .with_flex_child(
+                                TextBox::new()
+                                    .with_text_size(TEXT_SIZE)
+                                    .with_placeholder("Your password...")
                                     .lens(
                                         ApplicationState::connect_layout
                                             .then(ConnectLayout::password),
@@ -168,6 +187,7 @@ impl ConnectLayout {
         let result = data.net_service.lock().unwrap().connect(
             data.connect_layout.server.clone(),
             port,
+            data.connect_layout.username.clone(),
             data.connect_layout.password.clone(),
         );
         if let Err(app_error) = result {

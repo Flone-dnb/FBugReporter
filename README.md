@@ -5,7 +5,9 @@ todo
 # Server
 
 On first start, the server will create a server configuration file <b>server_config.ini</b> next to the binary file.<br>
-You can customize values in this config file. In order for them to be applied, restart the server.
+You can customize values in this config file. In order for them to be applied, restart the server.<br>
+<br>
+The server processes reporters and clients on different ports (see <b>server_config.ini</b>).
 
 # Client
 

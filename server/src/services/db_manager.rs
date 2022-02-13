@@ -76,7 +76,7 @@ impl DatabaseManager {
         value.append(&mut password_hash);
         let mut hasher = Sha512::new();
         hasher.update(value.as_slice());
-        let password = hasher.finalize().to_ascii_lowercase();
+        let password = hasher.finalize().to_vec();
 
         if let Err(e) = self.connection.execute(
             // password = hash(salt + hash(password))

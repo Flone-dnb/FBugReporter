@@ -139,12 +139,13 @@ impl UserService {
                 // Password hash.
                 let mut hasher = Sha512::new();
                 hasher.update(password_to_check.as_slice());
-                let password_hash = hasher.finalize().to_vec();
+                let password_hash: Vec<u8> = hasher.finalize().to_vec();
 
                 if password_hash != db_password {
                     println!("wrong");
+                } else {
+                    println!("correct");
                 }
-                println!("correct");
                 // Check username, password, etc.
                 // TODO: if something wrong - ban, and write to log
                 // TODO: if successful write to log + update database values

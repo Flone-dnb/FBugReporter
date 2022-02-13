@@ -16,7 +16,12 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
 
 // Custom.
+use super::net_packets::*;
+use super::net_service::WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN;
 use crate::error::AppError;
+use crate::misc::*;
+use crate::services::db_manager::DatabaseManager;
+use crate::services::logger_service::Logger;
 
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
@@ -28,12 +33,6 @@ const NETWORK_PROTOCOL_VERSION: u16 = 0;
 const MAX_PACKET_SIZE_IN_BYTES: u32 = 131_072; // 128 kB for now
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 
-// Custom.
-use super::net_packets::*;
-use crate::misc::*;
-use crate::services::db_manager::DatabaseManager;
-use crate::services::logger_service::Logger;
-
 enum IoResult {
     Ok(usize),
     Fin,
@@ -44,7 +43,7 @@ pub struct UserService {
     socket: TcpStream,
     secret_key: Vec<u8>,
     connected_users_count: Arc<Mutex<usize>>,
-    exit_error: Option<(ReportResult, AppError)>,
+    exit_error: Option<Result<String, AppError>>,
     database: Arc<Mutex<DatabaseManager>>,
     is_for_reporter: bool,
 }
@@ -88,18 +87,18 @@ impl UserService {
             is_for_reporter,
         }
     }
-    /// After this function is finished the object is destroyed.
+    /// After this function is finished the object should be destroyed.
     pub fn process_reporter(&mut self) {
         let secret_key = UserService::establish_secure_connection(&mut self.socket);
-        if let Err(err) = secret_key {
-            self.exit_error = Some((ReportResult::InternalError, err.add_entry(file!(), line!())));
+        if let Err(app_error) = secret_key {
+            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
             return;
         }
         self.secret_key = secret_key.unwrap();
 
         let packet = self.receive_packet();
-        if let Err(err) = packet {
-            self.exit_error = Some((ReportResult::InternalError, err.add_entry(file!(), line!())));
+        if let Err(app_error) = packet {
+            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
             return;
         }
         let packet = packet.unwrap();
@@ -107,35 +106,34 @@ impl UserService {
         // Deserialize.
         let packet = bincode::deserialize::<InReporterPacket>(&packet);
         if let Err(e) = packet {
-            self.exit_error = Some((
-                ReportResult::InternalError,
-                AppError::new(
-                    &format!("{:?} (socket: {})", e, self.socket.peer_addr().unwrap()),
-                    file!(),
-                    line!(),
-                ),
-            ));
+            self.exit_error = Some(Err(AppError::new(&e.to_string(), file!(), line!())));
             return;
         }
         let packet = packet.unwrap();
 
-        if let Err(result) = self.handle_reporter_packet(packet) {
-            self.exit_error = Some((result.0, result.1.add_entry(file!(), line!())));
+        let result = self.handle_reporter_packet(packet);
+        if let Err(app_error) = result {
+            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
+            return;
+        }
+        let result = result.unwrap();
+        if result.is_some() {
+            self.exit_error = Some(Ok(result.unwrap()));
             return;
         }
     }
-    /// After this function is finished the object is destroyed.
+    /// After this function is finished the object should be destroyed.
     pub fn process_client(&mut self) {
         let secret_key = UserService::establish_secure_connection(&mut self.socket);
-        if let Err(err) = secret_key {
-            self.exit_error = Some((ReportResult::InternalError, err.add_entry(file!(), line!())));
+        if let Err(app_error) = secret_key {
+            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
             return;
         }
         self.secret_key = secret_key.unwrap();
 
         let packet = self.receive_packet();
-        if let Err(err) = packet {
-            self.exit_error = Some((ReportResult::InternalError, err.add_entry(file!(), line!())));
+        if let Err(app_error) = packet {
+            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
             return;
         }
         let packet = packet.unwrap();
@@ -143,49 +141,141 @@ impl UserService {
         // Deserialize.
         let packet = bincode::deserialize::<InClientPacket>(&packet);
         if let Err(e) = packet {
-            self.exit_error = Some((
-                ReportResult::InternalError,
-                AppError::new(
-                    &format!("{:?} (socket: {})", e, self.socket.peer_addr().unwrap()),
-                    file!(),
-                    line!(),
-                ),
-            ));
+            self.exit_error = Some(Err(AppError::new(&e.to_string(), file!(), line!())));
             return;
         }
         let packet = packet.unwrap();
 
-        if let Err(app_error) = self.handle_client_packet(packet) {
-            self.exit_error = Some((
-                ReportResult::InternalError,
-                app_error.add_entry(file!(), line!()),
-            ));
+        // TODO: in wouldblock (read/write functions) have loop limit as a variable
+        //       never set the limit when waiting for user messages!
+        //       pass loop limit to read/write functions
+        // TODO: add keep alive timer (for clients only)
+        let result = self.handle_client_packet(packet);
+        if let Err(app_error) = result {
+            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
+            return;
+        }
+        let result = result.unwrap();
+        if result.is_some() {
+            self.exit_error = Some(Ok(result.unwrap()));
             return;
         }
     }
+    /// Processes the client packet.
+    ///
+    /// Returns `Option<String>` as `Ok`:
+    /// - if `Some(String)` then there was a "soft" error
+    /// (typically means that there was an error in client
+    /// data (wrong credentials, protocol version, etc...)
+    /// and we don't need to consider this as a bug,
+    /// - if `None` then the operation finished successfully.
+    ///
+    /// Returns `AppError` as `Err` if there was an internal error
+    /// (bug).
     fn handle_reporter_packet(
         &mut self,
         packet: InReporterPacket,
-    ) -> Result<(), (ReportResult, AppError)> {
+    ) -> Result<Option<String>, AppError> {
         match packet {
             InReporterPacket::ReportPacket {
                 reporter_net_protocol,
                 game_report,
             } => {
-                if let Err(err) = self.handle_reporter(reporter_net_protocol, game_report) {
-                    return Err((err.0, err.1.add_entry(file!(), line!())));
+                // Check protocol version.
+                if reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
+                    let result_code = ReportResult::WrongProtocol;
+
+                    // Notify reporter.
+                    if let Err(err) = UserService::send_packet(
+                        &mut self.socket,
+                        &self.secret_key,
+                        OutReporterPacket::ReportAnswer { result_code },
+                    ) {
+                        return Err(err.add_entry(file!(), line!()));
+                    }
+
+                    return Ok(Some(format!(
+                        "wrong protocol version (reporter: {}, our: {})",
+                        reporter_net_protocol, NETWORK_PROTOCOL_VERSION
+                    )));
+                }
+
+                // Check field limits.
+                if let Err((field, length)) = UserService::check_report_field_limits(&game_report) {
+                    let result_code = ReportResult::ServerRejected;
+
+                    // Notify reporter.
+                    if let Err(err) = UserService::send_packet(
+                        &mut self.socket,
+                        &self.secret_key,
+                        OutReporterPacket::ReportAnswer { result_code },
+                    ) {
+                        return Err(err.add_entry(file!(), line!()));
+                    }
+
+                    return Ok(Some(format!(
+                        "report exceeds report field limits ({:?} has length of {} characters \
+                    while the limit is {})",
+                        field,
+                        length,
+                        field.max_length()
+                    )));
+                }
+
+                self.logger.lock().unwrap().print_and_log(&format!(
+                    "Received a report from socket {}",
+                    self.socket.peer_addr().unwrap()
+                ));
+
+                {
+                    if let Err(err) = self.database.lock().unwrap().save_report(game_report) {
+                        let result_code = ReportResult::InternalError;
+
+                        // Notify reporter of our failure.
+                        if let Err(err) = UserService::send_packet(
+                            &mut self.socket,
+                            &self.secret_key,
+                            OutReporterPacket::ReportAnswer { result_code },
+                        ) {
+                            return Err(err.add_entry(file!(), line!()));
+                        }
+
+                        return Err(err.add_entry(file!(), line!()));
+                    }
+                }
+
+                self.logger.lock().unwrap().print_and_log(&format!(
+                    "Saved a report from socket {}",
+                    self.socket.peer_addr().unwrap()
+                ));
+
+                // Answer "OK".
+                if let Err(err) = UserService::send_packet(
+                    &mut self.socket,
+                    &self.secret_key,
+                    OutReporterPacket::ReportAnswer {
+                        result_code: ReportResult::Ok,
+                    },
+                ) {
+                    return Err(err.add_entry(file!(), line!()));
                 }
             }
         }
 
-        Ok(())
+        Ok(None)
     }
-    fn handle_client_packet(&mut self, packet: InClientPacket) -> Result<(), AppError> {
-        // TODO: in wouldblock (read/write functions) have loop limit as a variable
-        //       never set the limit when waiting for user messages!
-        //       pass loop limit to read/write functions
-        // TODO: add keep alive timer (for clients only)
-        // TODO: (only for clients, not for reporters) check password hash and etc (send ReportResult::NetworkIssue if cmac or other errors)
+    /// Processes the client packet.
+    ///
+    /// Returns `Option<String>` as `Ok`:
+    /// - if `Some(String)` then there was a "soft" error
+    /// (typically means that there was an error in client
+    /// data (wrong credentials, protocol version, etc...)
+    /// and we don't need to consider this as a bug,
+    /// - if `None` then the operation finished successfully.
+    ///
+    /// Returns `AppError` as `Err` if there was an internal error
+    /// (bug).
+    fn handle_client_packet(&mut self, packet: InClientPacket) -> Result<Option<String>, AppError> {
         match packet {
             InClientPacket::ClientLogin {
                 client_net_protocol,
@@ -200,20 +290,16 @@ impl UserService {
                             server_protocol: NETWORK_PROTOCOL_VERSION,
                         }),
                     };
-                    if let Err(err) =
+                    if let Err(app_error) =
                         UserService::send_packet(&mut self.socket, &self.secret_key, answer)
                     {
-                        return Err(err.add_entry(file!(), line!()));
+                        return Err(app_error.add_entry(file!(), line!()));
                     }
 
-                    return Err(AppError::new(
-                        &format!(
-                            "wrong protocol version ({} != {}) (username: {})",
-                            client_net_protocol, NETWORK_PROTOCOL_VERSION, username
-                        ),
-                        file!(),
-                        line!(),
-                    ));
+                    return Ok(Some(format!(
+                        "wrong protocol version ({} != {}) (username: {})",
+                        client_net_protocol, NETWORK_PROTOCOL_VERSION, username
+                    )));
                 }
 
                 let database_guard = self.database.lock().unwrap();
@@ -226,7 +312,13 @@ impl UserService {
 
                 let (db_password, salt) = result.unwrap();
                 if db_password.is_empty() {
-                    println!("wrong");
+                    // No user was found for this username.
+                    let result = self.answer_client_wrong_credentials(&username);
+                    if let Err(app_error) = result {
+                        return Err(app_error.add_entry(file!(), line!()));
+                    }
+
+                    return Ok(Some(result.unwrap()));
                 }
 
                 let mut password_to_check = Vec::from(salt.as_bytes());
@@ -238,10 +330,14 @@ impl UserService {
                 let password_hash: Vec<u8> = hasher.finalize().to_vec();
 
                 if password_hash != db_password {
-                    println!("wrong");
-                } else {
-                    println!("correct");
+                    let result = self.answer_client_wrong_credentials(&username);
+                    if let Err(app_error) = result {
+                        return Err(app_error.add_entry(file!(), line!()));
+                    }
+
+                    return Ok(Some(result.unwrap()));
                 }
+
                 // Check username, password, etc.
                 // TODO: if something wrong - ban, and write to log
                 // TODO: if successful write to log + update database values
@@ -250,106 +346,28 @@ impl UserService {
             }
         }
 
-        Ok(())
+        Ok(None)
     }
-    fn handle_reporter(
-        &mut self,
-        reporter_net_protocol: u16,
-        game_report: GameReport,
-    ) -> Result<(), (ReportResult, AppError)> {
-        // Check protocol version.
-        if reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
-            let result_code = ReportResult::WrongProtocol;
-
-            if let Err(err) = UserService::send_packet(
-                &mut self.socket,
-                &self.secret_key,
-                OutReporterPacket::ReportAnswer { result_code },
-            ) {
-                return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
-            }
-
-            return Err((
-                result_code,
-                AppError::new(
-                    &format!(
-                        "wrong protocol version ({} != {}) (socket: {})",
-                        reporter_net_protocol,
-                        NETWORK_PROTOCOL_VERSION,
-                        self.socket.peer_addr().unwrap()
-                    ),
-                    file!(),
-                    line!(),
-                ),
-            ));
+    /// Sends `ClientLoginAnswer` with `WrongCredentials` packet
+    /// to the client.
+    ///
+    /// Returns `String` as `Ok` with message to show
+    /// (i.e. "wrong credentials for username ...").
+    ///
+    /// Returns `AppError` as `Err` if there was an internal error
+    /// (bug).
+    fn answer_client_wrong_credentials(&mut self, username: &str) -> Result<String, AppError> {
+        let answer = OutClientPacket::ClientLoginAnswer {
+            is_ok: false,
+            reason: Some(ClientLoginFailReason::WrongCredentials {
+                ban_time_in_min: WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN,
+            }),
+        };
+        if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, answer) {
+            return Err(err.add_entry(file!(), line!()));
         }
 
-        // Check field limits.
-        if let Err((field, length)) = UserService::check_report_field_limits(&game_report) {
-            let result_code = ReportResult::ServerRejected;
-
-            if let Err(err) = UserService::send_packet(
-                &mut self.socket,
-                &self.secret_key,
-                OutReporterPacket::ReportAnswer { result_code },
-            ) {
-                return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
-            }
-
-            return Err((
-                result_code,
-                AppError::new(
-            &format!(
-                        "report exceeds report field limits ({:?} has length of {} characters while the limit is {}) (socket: {})",
-                        field,
-                        length,
-                        field.max_length(),
-                        self.socket.peer_addr().unwrap()
-                    ),
-               file!(),
-               line!(),
-                ),
-            ));
-        }
-
-        self.logger.lock().unwrap().print_and_log(&format!(
-            "Received a report from socket {}",
-            self.socket.peer_addr().unwrap()
-        ));
-
-        {
-            if let Err(err) = self.database.lock().unwrap().save_report(game_report) {
-                let result_code = ReportResult::InternalError;
-
-                if let Err(err) = UserService::send_packet(
-                    &mut self.socket,
-                    &self.secret_key,
-                    OutReporterPacket::ReportAnswer { result_code },
-                ) {
-                    return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
-                }
-
-                return Err((result_code, err.add_entry(file!(), line!())));
-            }
-        }
-
-        self.logger.lock().unwrap().print_and_log(&format!(
-            "Saved a report from socket {}",
-            self.socket.peer_addr().unwrap()
-        ));
-
-        // Answer "OK".
-        if let Err(err) = UserService::send_packet(
-            &mut self.socket,
-            &self.secret_key,
-            OutReporterPacket::ReportAnswer {
-                result_code: ReportResult::Ok,
-            },
-        ) {
-            return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
-        }
-
-        Ok(())
+        return Ok(format!("wrong credentials (login username: {})", username));
     }
     fn establish_secure_connection(socket: &mut TcpStream) -> Result<Vec<u8>, AppError> {
         // taken from https://www.rfc-editor.org/rfc/rfc5114#section-2.1
@@ -837,9 +855,13 @@ impl Drop for UserService {
         );
 
         if self.exit_error.is_some() {
-            message += " due to error:\n";
-            message += &format!("({:?}): ", self.exit_error.as_ref().unwrap().0);
-            message += &self.exit_error.as_ref().unwrap().1.to_string();
+            let error = self.exit_error.as_ref().unwrap();
+
+            if let Err(app_error) = error {
+                message += &format!(" due to internal error (bug):\n{}", app_error);
+            } else {
+                message += &format!(", reason: {}", error.as_ref().unwrap());
+            }
         }
 
         message += "\n";
@@ -847,9 +869,9 @@ impl Drop for UserService {
         let mut guard = self.connected_users_count.lock().unwrap();
         *guard -= 1;
         if self.is_for_reporter {
-            message += &format!("--- [connected reporters: {}]", guard);
+            message += &format!("--- [connected reporters: {}] ---", guard);
         } else {
-            message += &format!("--- [connected clients: {}]", guard);
+            message += &format!("--- [connected clients: {}] ---", guard);
         }
 
         self.logger.lock().unwrap().print_and_log(&message);

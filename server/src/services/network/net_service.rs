@@ -14,7 +14,7 @@ use crate::services::network::user_service::UserService;
 use chrono::{DateTime, Local};
 use sha2::{Digest, Sha512};
 
-const WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN: u64 = 1;
+pub const WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN: u64 = 1;
 // if a client used wrong password for the second time,
 // new ban duration will be
 // 'WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN' multiplied by this value.

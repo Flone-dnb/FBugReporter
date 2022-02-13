@@ -1,4 +1,4 @@
 /target
-server.config
 server.log
+server_config.ini
 *.db3

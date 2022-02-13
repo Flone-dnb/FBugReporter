@@ -2,6 +2,11 @@
 
 todo
 
+# Server
+
+On first start, the server will create a server configuration file <b>server_config.ini</b> next to the binary file.<br>
+You can customize values in this config file. In order for them to be applied, restart the server.
+
 # Client
 
 Theme can be customized by copy-pasting the <b>theme.ini</b> file from <b>client</b> folder next to the client executable file.<br>

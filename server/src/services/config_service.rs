@@ -1,21 +1,20 @@
+// Std.
+use std::ops::Range;
+
 // External.
+use configparser::ini::Ini;
 #[cfg(target_os = "windows")]
 use platform_dirs::UserDirs;
 use rand::Rng;
-
-// Std.
-use std::fs::*;
-use std::io::prelude::*;
-use std::path::Path;
 
 // Custom.
 use super::logger_service::LOG_FILE_NAME;
 use crate::error::AppError;
 
-const CONFIG_FILE_VERSION: u32 = 0;
-const CONFIG_FILE_MAGIC_NUMBER: u16 = 1919;
-const CONFIG_FILE_NAME: &str = "server.config";
-const PORT_RANGE: std::ops::Range<u16> = 7000..65535;
+const RANDOM_PORT_RANGE: Range<u16> = 7000..65535;
+const CONFIG_FILE_NAME: &str = "server_config.ini";
+const CONFIG_SECTION_NAME: &str = "server";
+const CONFIG_PORT_PARAM: &str = "server_port";
 
 #[derive(Debug)]
 pub struct ServerConfig {
@@ -25,189 +24,98 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
-    pub fn new() -> Result<Self, AppError> {
+    /// Reads config values from .ini file if it exists,
+    /// otherwise using default values and creating a new config .ini file.
+    pub fn new() -> Self {
         let mut server_config = ServerConfig::default();
 
-        // Get config path.
-        let config_file_path = ServerConfig::get_config_file_path();
-
-        if Path::new(&config_file_path).exists() {
-            // Read existing config file.
-            if let Err(err) = server_config.read_config() {
-                return Err(err.add_entry(file!(), line!()));
+        // Try reading config from .ini file.
+        let mut config = Ini::new();
+        let map = config.load(CONFIG_FILE_NAME);
+        if map.is_err() {
+            println!(
+                "INFO: could not open the config file \"{0}\", using default values \
+                and creating a new \"{0}\" configuration file.",
+                CONFIG_FILE_NAME
+            );
+            // No file found, create a new file.
+            if let Err(e) = server_config.save_config() {
+                // Non-critical error.
+                print!(
+                    "WARNING: {}",
+                    AppError::new(&e.to_string(), file!(), line!())
+                );
             }
-        } else {
-            // Create new config file with default settings.
-            if let Err(err) = server_config.save_config() {
-                return Err(err.add_entry(file!(), line!()));
+            return server_config;
+        }
+
+        // Read settings from .ini file.
+        if server_config.read_config(&config) == true {
+            if let Err(e) = server_config.save_config() {
+                // Non-critical error.
+                print!(
+                    "WARNING: {}",
+                    AppError::new(&e.to_string(), file!(), line!())
+                );
             }
         }
 
-        Ok(server_config)
-    }
-    pub fn refresh_port(&mut self) -> Result<(), AppError> {
-        let mut rng = rand::thread_rng();
-        self.server_port = rng.gen_range(PORT_RANGE);
-
-        // Save to config.
-        if let Err(err) = self.save_config() {
-            return Err(err.add_entry(file!(), line!()));
-        }
-
-        Ok(())
-    }
-    pub fn set_port(&mut self, port: u16) -> Result<(), AppError> {
-        self.server_port = port;
-
-        // Save to config.
-        if let Err(err) = self.save_config() {
-            return Err(err.add_entry(file!(), line!()));
-        }
-
-        Ok(())
+        server_config
     }
     fn default() -> Self {
-        let mut rng = rand::thread_rng();
-
         Self {
-            server_port: rng.gen_range(PORT_RANGE),
+            server_port: ServerConfig::generate_random_port(),
             config_file_path: ServerConfig::get_config_file_path(),
             log_file_path: ServerConfig::get_log_file_path(),
         }
     }
     fn save_config(&self) -> Result<(), AppError> {
-        // Get config path.
-        let config_file_path = ServerConfig::get_config_file_path();
+        let mut config = Ini::new();
 
-        if Path::new(&config_file_path).exists() {
-            // Remove existing (old) config file.
-            if let Err(e) = std::fs::remove_file(&config_file_path) {
-                return Err(AppError::new(
-                    &format!("{:?} (config path: {})", e, config_file_path),
-                    file!(),
-                    line!(),
-                ));
-            }
-        }
+        config.set(
+            CONFIG_SECTION_NAME,
+            CONFIG_PORT_PARAM,
+            Some(self.server_port.to_string()),
+        );
 
-        // Create new config file.
-        let config_file = File::create(&config_file_path);
-        if let Err(e) = config_file {
-            return Err(AppError::new(
-                &format!("{:?} (config path: {})", e, config_file_path),
-                file!(),
-                line!(),
-            ));
-        }
-        let mut config_file = config_file.unwrap();
-
-        // Write magic number.
-        if let Err(e) = config_file.write(&bincode::serialize(&CONFIG_FILE_MAGIC_NUMBER).unwrap()) {
-            return Err(AppError::new(
-                &format!("{:?} (config path: {})", e, config_file_path),
-                file!(),
-                line!(),
-            ));
-        }
-
-        // Write config file version.
-        let config_version = CONFIG_FILE_VERSION;
-        if let Err(e) = config_file.write(&bincode::serialize(&config_version).unwrap()) {
-            return Err(AppError::new(
-                &format!("{:?} (config path: {})", e, config_file_path),
-                file!(),
-                line!(),
-            ));
-        }
-
-        // Write server port.
-        if let Err(e) = config_file.write(&bincode::serialize(&self.server_port).unwrap()) {
-            return Err(AppError::new(
-                &format!("{:?} (config path: {})", e, config_file_path),
-                file!(),
-                line!(),
-            ));
+        // Write to disk.
+        if let Err(e) = config.write(CONFIG_FILE_NAME) {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
 
         Ok(())
     }
-    fn read_config(&mut self) -> Result<(), AppError> {
-        // Get config path.
-        let config_file_path = ServerConfig::get_config_file_path();
+    /// Read config from file.
+    ///
+    /// Returns `true` if some values were empty and now we are using
+    /// default values for them, `false` if the file had all needed values set.
+    fn read_config(&mut self, config: &Ini) -> bool {
+        let mut some_values_were_empty = false;
 
-        if !Path::new(&config_file_path).exists() {
-            return Err(AppError::new(
-                &format!(
-                    "config file does not exist (config path: {})",
-                    config_file_path
-                ),
-                file!(),
-                line!(),
-            ));
+        // Read port.
+        let port = config.get(CONFIG_SECTION_NAME, CONFIG_PORT_PARAM);
+        if port.is_none() {
+            self.server_port = ServerConfig::generate_random_port();
+            some_values_were_empty = true;
+        } else {
+            let port = port.unwrap().parse::<u16>();
+            if let Err(e) = port {
+                println!(
+                    "WARNING: could not parse \"{}\" value, using random port instead (error: {}).",
+                    CONFIG_PORT_PARAM,
+                    e.to_string()
+                );
+                self.server_port = ServerConfig::generate_random_port();
+                some_values_were_empty = true;
+            } else {
+                self.server_port = port.unwrap();
+            }
         }
 
-        // Open config file.
-        let config_file = File::open(&config_file_path);
-        if let Err(e) = config_file {
-            return Err(AppError::new(
-                &format!("{:?} (config path: {})", e, config_file_path),
-                file!(),
-                line!(),
-            ));
-        }
-        let mut config_file = config_file.unwrap();
+        // New settings go here.
+        // Please, don't forget to use 'some_values_were_empty'.
 
-        // Read magic number.
-        let mut buf = vec![0u8; std::mem::size_of::<u16>()];
-        if let Err(e) = config_file.read(&mut buf) {
-            return Err(AppError::new(
-                &format!("{:?} (config path: {})", e, config_file_path),
-                file!(),
-                line!(),
-            ));
-        }
-        let magic_number = bincode::deserialize::<u16>(&buf).unwrap();
-        if magic_number != CONFIG_FILE_MAGIC_NUMBER {
-            return Err(AppError::new(
-                &format!(
-                    "file magic number ({}) is not equal to config magic number ({})",
-                    magic_number, CONFIG_FILE_MAGIC_NUMBER,
-                ),
-                file!(),
-                line!(),
-            ));
-        }
-
-        // Read config version.
-        let mut buf = vec![0u8; std::mem::size_of::<u32>()];
-        if let Err(e) = config_file.read(&mut buf) {
-            return Err(AppError::new(
-                &format!("{:?} (config path: {})", e, config_file_path),
-                file!(),
-                line!(),
-            ));
-        }
-        // use it to handle old config versions
-        let config_version = bincode::deserialize::<u32>(&buf).unwrap();
-
-        // Read server port.
-        let mut buf = vec![0u8; std::mem::size_of::<u16>()];
-        if let Err(e) = config_file.read(&mut buf) {
-            return Err(AppError::new(
-                &format!("{:?} (config path: {})", e, config_file_path),
-                file!(),
-                line!(),
-            ));
-        }
-        self.server_port = bincode::deserialize::<u16>(&buf).unwrap();
-
-        // ---------------------------------------------------------------------
-        //
-        // please use 'config_version' variable to handle old config versions...
-        //
-        // ---------------------------------------------------------------------
-
-        Ok(())
+        some_values_were_empty
     }
     fn get_config_file_path() -> String {
         let mut config_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
@@ -247,5 +155,9 @@ impl ServerConfig {
         }
 
         log_path + LOG_FILE_NAME
+    }
+    fn generate_random_port() -> u16 {
+        let mut rng = rand::thread_rng();
+        rng.gen_range(RANDOM_PORT_RANGE)
     }
 }

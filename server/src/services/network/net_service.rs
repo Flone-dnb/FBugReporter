@@ -37,36 +37,19 @@ pub struct NetService {
 impl NetService {
     pub fn new(logger: Logger) -> Result<Self, AppError> {
         let config = ServerConfig::new();
-        if let Err(err) = config {
-            return Err(err.add_entry(file!(), line!()));
-        }
 
         let db = DatabaseManager::new();
-        if let Err(err) = config {
+        if let Err(err) = db {
             return Err(err.add_entry(file!(), line!()));
         }
 
         Ok(Self {
-            server_config: config.unwrap(),
+            server_config: config,
             logger: Arc::new(Mutex::new(logger)),
             connected_socket_count: Arc::new(Mutex::new(0)),
             database: Arc::new(Mutex::new(db.unwrap())),
             banned_ip_list: Vec::new(),
         })
-    }
-    pub fn refresh_port(&mut self) -> Result<(), AppError> {
-        if let Err(err) = self.server_config.refresh_port() {
-            return Err(err.add_entry(file!(), line!()));
-        }
-
-        Ok(())
-    }
-    pub fn set_port(&mut self, port: u16) -> Result<(), AppError> {
-        if let Err(err) = self.server_config.set_port(port) {
-            return Err(err.add_entry(file!(), line!()));
-        }
-
-        Ok(())
     }
     /// Adds a new user to the database.
     ///

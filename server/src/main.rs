@@ -50,37 +50,11 @@ fn main() {
             println!("start - starts the server with the current configuration");
             println!("add-user <username> - adds a new user");
             println!("config - show the current server configuration");
-            println!("config.port = <value> - set custom server port value");
-            println!("refresh-port - generates new server port");
             println!("exit - exit the application");
         } else if input == "start" {
             net_service.start();
-        } else if input.contains("config") {
-            if input == "config" {
-                println!("{:#?}", net_service.server_config);
-            } else if input.contains("config.port = ") {
-                let port_str: String = input
-                    .chars()
-                    .take(0)
-                    .chain(input.chars().skip("config.port = ".chars().count()))
-                    .collect();
-
-                let port_u16 = port_str.parse::<u16>();
-                if let Ok(value) = port_u16 {
-                    if let Err(msg) = net_service.set_port(value) {
-                        panic!("{} at [{}, {}]", msg, file!(), line!());
-                    } else {
-                        println!("New port ({}) is saved. Please update the server port in the reporter and the client application in order for them to connect to this server.", value);
-                    }
-                } else {
-                    println!(
-                        "can't parse value (maximum value for port is {})",
-                        std::u16::MAX
-                    );
-                }
-            } else {
-                println!("command '{}' not found", input);
-            }
+        } else if input == "config" {
+            println!("{:#?}", net_service.server_config);
         } else if input.contains("add-user ") {
             let username_str: String = input
                 .chars()
@@ -102,11 +76,6 @@ fn main() {
                     );
                 }
             }
-        } else if input == "refresh-port" {
-            if let Err(msg) = net_service.refresh_port() {
-                panic!("{} at [{}, {}]", msg, file!(), line!());
-            }
-            println!("New port is generated. Please update the server port in all client applications in order for them to connect to this server.");
         } else if input == "exit" {
             break;
         } else {

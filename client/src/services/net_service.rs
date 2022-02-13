@@ -81,7 +81,7 @@ impl NetService {
         hasher.update(password.as_bytes());
         let password = hasher.finalize().to_vec();
 
-        let packet = OutPacket::ClientLogin {
+        let packet = OutClientPacket::ClientLogin {
             client_net_protocol: NETWORK_PROTOCOL_VERSION,
             username,
             password,
@@ -283,7 +283,7 @@ impl NetService {
 
         Ok(Vec::from(&secret_key_str[0..KEY_LENGTH_IN_BYTES]))
     }
-    fn send_packet(&mut self, packet: OutPacket) -> Result<(), AppError> {
+    fn send_packet(&mut self, packet: OutClientPacket) -> Result<(), AppError> {
         if self.secret_key.is_empty() {
             return Err(AppError::new(
                 "can't send packet - secure connected is not established",

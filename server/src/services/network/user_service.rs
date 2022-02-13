@@ -12,6 +12,7 @@ use block_modes::{BlockMode, Cbc};
 use cmac::{Cmac, Mac, NewMac};
 use num_bigint::{BigUint, RandomBits};
 use rand::{Rng, RngCore};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
 
 // Custom.
@@ -28,7 +29,7 @@ const MAX_PACKET_SIZE_IN_BYTES: u32 = 131_072; // 128 kB for now
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 
 // Custom.
-use super::net_packets::{InPacket, OutPacket};
+use super::net_packets::*;
 use crate::misc::*;
 use crate::services::db_manager::DatabaseManager;
 use crate::services::logger_service::Logger;
@@ -45,6 +46,7 @@ pub struct UserService {
     connected_users_count: Arc<Mutex<usize>>,
     exit_error: Option<(ReportResult, AppError)>,
     database: Arc<Mutex<DatabaseManager>>,
+    is_for_reporter: bool,
 }
 
 impl UserService {
@@ -54,16 +56,26 @@ impl UserService {
         addr: SocketAddr,
         connected_users_count: Arc<Mutex<usize>>,
         database: Arc<Mutex<DatabaseManager>>,
+        is_for_reporter: bool,
     ) -> Self {
         {
             let mut guard = connected_users_count.lock().unwrap();
             *guard += 1;
-            logger.lock().unwrap().print_and_log(&format!(
-                "Accepted connection with {}:{}\n--- [connected: {}]",
-                addr.ip(),
-                addr.port(),
-                guard
-            ));
+            if is_for_reporter {
+                logger.lock().unwrap().print_and_log(&format!(
+                    "Accepted connection with {}:{}\n--- [connected reporters: {}]",
+                    addr.ip(),
+                    addr.port(),
+                    guard
+                ));
+            } else {
+                logger.lock().unwrap().print_and_log(&format!(
+                    "Accepted connection with {}:{}\n--- [connected clients: {}]",
+                    addr.ip(),
+                    addr.port(),
+                    guard
+                ));
+            }
         }
 
         UserService {
@@ -73,10 +85,11 @@ impl UserService {
             exit_error: None,
             secret_key: Vec::new(),
             database,
+            is_for_reporter,
         }
     }
     /// After this function is finished the object is destroyed.
-    pub fn process_user(&mut self) {
+    pub fn process_reporter(&mut self) {
         let secret_key = UserService::establish_secure_connection(&mut self.socket);
         if let Err(err) = secret_key {
             self.exit_error = Some((ReportResult::InternalError, err.add_entry(file!(), line!())));
@@ -91,20 +104,71 @@ impl UserService {
         }
         let packet = packet.unwrap();
 
-        if let Err(result) = self.handle_packet(packet) {
+        // Deserialize.
+        let packet = bincode::deserialize::<InReporterPacket>(&packet);
+        if let Err(e) = packet {
+            self.exit_error = Some((
+                ReportResult::InternalError,
+                AppError::new(
+                    &format!("{:?} (socket: {})", e, self.socket.peer_addr().unwrap()),
+                    file!(),
+                    line!(),
+                ),
+            ));
+            return;
+        }
+        let packet = packet.unwrap();
+
+        if let Err(result) = self.handle_reporter_packet(packet) {
             self.exit_error = Some((result.0, result.1.add_entry(file!(), line!())));
             return;
         }
     }
-    fn handle_packet(&mut self, packet: InPacket) -> Result<(), (ReportResult, AppError)> {
-        // TODO: check protocol version (send ReportResult::WrongProtocol if different)
-        // TODO: in wouldblock (read/write functions) have loop limit as a variable
-        //       never set the limit when waiting for user messages!
-        //       pass loop limit to read/write functions
-        // TODO: add keep alive timer (for clients only)
-        // TODO: (only for clients, not for reporters) check password hash and etc (send ReportResult::NetworkIssue if cmac or other errors)
+    /// After this function is finished the object is destroyed.
+    pub fn process_client(&mut self) {
+        let secret_key = UserService::establish_secure_connection(&mut self.socket);
+        if let Err(err) = secret_key {
+            self.exit_error = Some((ReportResult::InternalError, err.add_entry(file!(), line!())));
+            return;
+        }
+        self.secret_key = secret_key.unwrap();
+
+        let packet = self.receive_packet();
+        if let Err(err) = packet {
+            self.exit_error = Some((ReportResult::InternalError, err.add_entry(file!(), line!())));
+            return;
+        }
+        let packet = packet.unwrap();
+
+        // Deserialize.
+        let packet = bincode::deserialize::<InClientPacket>(&packet);
+        if let Err(e) = packet {
+            self.exit_error = Some((
+                ReportResult::InternalError,
+                AppError::new(
+                    &format!("{:?} (socket: {})", e, self.socket.peer_addr().unwrap()),
+                    file!(),
+                    line!(),
+                ),
+            ));
+            return;
+        }
+        let packet = packet.unwrap();
+
+        if let Err(app_error) = self.handle_client_packet(packet) {
+            self.exit_error = Some((
+                ReportResult::InternalError,
+                app_error.add_entry(file!(), line!()),
+            ));
+            return;
+        }
+    }
+    fn handle_reporter_packet(
+        &mut self,
+        packet: InReporterPacket,
+    ) -> Result<(), (ReportResult, AppError)> {
         match packet {
-            InPacket::ReportPacket {
+            InReporterPacket::ReportPacket {
                 reporter_net_protocol,
                 game_report,
             } => {
@@ -112,20 +176,52 @@ impl UserService {
                     return Err((err.0, err.1.add_entry(file!(), line!())));
                 }
             }
-            InPacket::ClientLogin {
+        }
+
+        Ok(())
+    }
+    fn handle_client_packet(&mut self, packet: InClientPacket) -> Result<(), AppError> {
+        // TODO: in wouldblock (read/write functions) have loop limit as a variable
+        //       never set the limit when waiting for user messages!
+        //       pass loop limit to read/write functions
+        // TODO: add keep alive timer (for clients only)
+        // TODO: (only for clients, not for reporters) check password hash and etc (send ReportResult::NetworkIssue if cmac or other errors)
+        match packet {
+            InClientPacket::ClientLogin {
                 client_net_protocol,
                 username,
                 mut password,
             } => {
+                // Check protocol version.
+                if client_net_protocol != NETWORK_PROTOCOL_VERSION {
+                    let answer = OutClientPacket::ClientLoginAnswer {
+                        is_ok: false,
+                        reason: Some(ClientLoginFailReason::WrongProtocol {
+                            server_protocol: NETWORK_PROTOCOL_VERSION,
+                        }),
+                    };
+                    if let Err(err) =
+                        UserService::send_packet(&mut self.socket, &self.secret_key, answer)
+                    {
+                        return Err(err.add_entry(file!(), line!()));
+                    }
+
+                    return Err(AppError::new(
+                        &format!(
+                            "wrong protocol version ({} != {}) (username: {})",
+                            client_net_protocol, NETWORK_PROTOCOL_VERSION, username
+                        ),
+                        file!(),
+                        line!(),
+                    ));
+                }
+
                 let database_guard = self.database.lock().unwrap();
                 let result = database_guard.get_user_password_and_salt(&username);
                 drop(database_guard);
 
                 if let Err(app_error) = result {
-                    return Err((
-                        ReportResult::InternalError,
-                        app_error.add_entry(file!(), line!()),
-                    ));
+                    return Err(app_error.add_entry(file!(), line!()));
                 }
 
                 let (db_password, salt) = result.unwrap();
@@ -168,7 +264,7 @@ impl UserService {
             if let Err(err) = UserService::send_packet(
                 &mut self.socket,
                 &self.secret_key,
-                OutPacket::ReportAnswer { result_code },
+                OutReporterPacket::ReportAnswer { result_code },
             ) {
                 return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
             }
@@ -195,7 +291,7 @@ impl UserService {
             if let Err(err) = UserService::send_packet(
                 &mut self.socket,
                 &self.secret_key,
-                OutPacket::ReportAnswer { result_code },
+                OutReporterPacket::ReportAnswer { result_code },
             ) {
                 return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
             }
@@ -228,7 +324,7 @@ impl UserService {
                 if let Err(err) = UserService::send_packet(
                     &mut self.socket,
                     &self.secret_key,
-                    OutPacket::ReportAnswer { result_code },
+                    OutReporterPacket::ReportAnswer { result_code },
                 ) {
                     return Err((ReportResult::InternalError, err.add_entry(file!(), line!())));
                 }
@@ -246,7 +342,7 @@ impl UserService {
         if let Err(err) = UserService::send_packet(
             &mut self.socket,
             &self.secret_key,
-            OutPacket::ReportAnswer {
+            OutReporterPacket::ReportAnswer {
                 result_code: ReportResult::Ok,
             },
         ) {
@@ -446,11 +542,10 @@ impl UserService {
 
         Ok(())
     }
-    fn send_packet(
-        socket: &mut TcpStream,
-        secret_key: &[u8],
-        packet: OutPacket,
-    ) -> Result<(), AppError> {
+    fn send_packet<T>(socket: &mut TcpStream, secret_key: &[u8], packet: T) -> Result<(), AppError>
+    where
+        T: Serialize,
+    {
         if secret_key.is_empty() {
             return Err(AppError::new(
                 "can't send packet - secure connected is not established",
@@ -527,7 +622,7 @@ impl UserService {
 
         Ok(())
     }
-    fn receive_packet(&mut self) -> Result<InPacket, AppError> {
+    fn receive_packet(&mut self) -> Result<Vec<u8>, AppError> {
         if self.secret_key.is_empty() {
             return Err(AppError::new(
                 "can't receive packet - secure connected is not established",
@@ -650,17 +745,7 @@ impl UserService {
             ));
         }
 
-        // Deserialize.
-        let packet = bincode::deserialize::<InPacket>(&decrypted_packet);
-        if let Err(e) = packet {
-            return Err(AppError::new(
-                &format!("{:?} (socket: {})", e, self.socket.peer_addr().unwrap()),
-                file!(),
-                line!(),
-            ));
-        }
-
-        Ok(packet.unwrap())
+        Ok(decrypted_packet)
     }
     fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
         if buf.is_empty() {
@@ -761,7 +846,11 @@ impl Drop for UserService {
 
         let mut guard = self.connected_users_count.lock().unwrap();
         *guard -= 1;
-        message += &format!("--- [connected: {}]", guard);
+        if self.is_for_reporter {
+            message += &format!("--- [connected reporters: {}]", guard);
+        } else {
+            message += &format!("--- [connected clients: {}]", guard);
+        }
 
         self.logger.lock().unwrap().print_and_log(&message);
     }

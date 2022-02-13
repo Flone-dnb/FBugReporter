@@ -14,7 +14,7 @@ use crate::services::network::user_service::UserService;
 use chrono::{DateTime, Local};
 use sha2::{Digest, Sha512};
 
-const WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN: u64 = 5;
+const WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN: u64 = 1;
 // if a client used wrong password for the second time,
 // new ban duration will be
 // 'WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN' multiplied by this value.
@@ -68,10 +68,10 @@ impl NetService {
             self.logger.lock().unwrap().print_and_log("Starting...");
         }
 
-        // Create socket.
-        let listener_socker =
-            TcpListener::bind(format!("0.0.0.0:{}", self.server_config.server_port));
-        if let Err(ref e) = listener_socker {
+        // Create socket for reporters.
+        let listener_socker_reporters =
+            TcpListener::bind(format!("0.0.0.0:{}", self.server_config.port_for_reporters));
+        if let Err(ref e) = listener_socker_reporters {
             self.logger.lock().unwrap().print_and_log(&format!(
                 "An error occurred at [{}, {}]: {:?}\n\n",
                 file!(),
@@ -79,23 +79,71 @@ impl NetService {
                 e
             ));
         }
-        let listener_socket = listener_socker.unwrap();
+        let listener_socker_reporters = listener_socker_reporters.unwrap();
 
-        {
+        // Create socket for clients.
+        let listener_socker_clients =
+            TcpListener::bind(format!("0.0.0.0:{}", self.server_config.port_for_clients));
+        if let Err(ref e) = listener_socker_clients {
             self.logger.lock().unwrap().print_and_log(&format!(
-                "Ready to accept connections on port {}",
-                self.server_config.server_port
+                "An error occurred at [{}, {}]: {:?}\n\n",
+                file!(),
+                line!(),
+                e
             ));
         }
+        let listener_socker_clients = listener_socker_clients.unwrap();
 
-        self.process_users(listener_socket);
+        // Process reporters.
+        let logger_copy = self.logger.clone();
+        let connected_clone = self.connected_socket_count.clone();
+        let database_clone = self.database.clone();
+        thread::spawn(move || {
+            NetService::process_connection(
+                listener_socker_reporters,
+                logger_copy,
+                connected_clone,
+                database_clone,
+                true,
+            );
+        });
+
+        // Process clients.
+        let logger_copy = self.logger.clone();
+        let connected_clone = self.connected_socket_count.clone();
+        let database_clone = self.database.clone();
+        thread::spawn(move || {
+            NetService::process_connection(
+                listener_socker_clients,
+                logger_copy,
+                connected_clone,
+                database_clone,
+                false,
+            );
+        });
+
+        let logger_guard = self.logger.lock().unwrap();
+        logger_guard.print_and_log(&format!(
+            "Ready to accept client connections on port {}",
+            self.server_config.port_for_clients
+        ));
+        logger_guard.print_and_log(&format!(
+            "Ready to accept reporter connections on port {}",
+            self.server_config.port_for_reporters
+        ));
     }
-    fn process_users(&mut self, listener_socket: TcpListener) {
+    fn process_connection(
+        listener_socket: TcpListener,
+        logger: Arc<Mutex<Logger>>,
+        connected_count: Arc<Mutex<usize>>,
+        database_manager: Arc<Mutex<DatabaseManager>>,
+        is_reporter: bool,
+    ) {
         loop {
             // Wait for connection.
             let accept_result = listener_socket.accept();
             if let Err(ref e) = accept_result {
-                self.logger.lock().unwrap().print_and_log(&format!(
+                logger.lock().unwrap().print_and_log(&format!(
                     "An error occurred at [{}, {}]: {:?}\n\n",
                     file!(),
                     line!(),
@@ -106,7 +154,7 @@ impl NetService {
             let (socket, addr) = accept_result.unwrap();
 
             if let Err(e) = socket.set_nodelay(true) {
-                self.logger.lock().unwrap().print_and_log(&format!(
+                logger.lock().unwrap().print_and_log(&format!(
                     "An error occurred at [{}, {}]: {:?}\n\n",
                     file!(),
                     line!(),
@@ -114,7 +162,7 @@ impl NetService {
                 ));
             }
             if let Err(e) = socket.set_nonblocking(true) {
-                self.logger.lock().unwrap().print_and_log(&format!(
+                logger.lock().unwrap().print_and_log(&format!(
                     "An error occurred at [{}, {}]: {:?}\n\n",
                     file!(),
                     line!(),
@@ -122,9 +170,9 @@ impl NetService {
                 ));
             }
 
-            let logger_copy = self.logger.clone();
-            let connected_clone = self.connected_socket_count.clone();
-            let database_clone = self.database.clone();
+            let logger_copy = logger.clone();
+            let connected_clone = connected_count.clone();
+            let database_clone = database_manager.clone();
 
             let handle = thread::Builder::new()
                 .name(format!("socket {}:{}", addr.ip(), addr.port()))
@@ -135,11 +183,16 @@ impl NetService {
                         addr,
                         connected_clone,
                         database_clone,
+                        is_reporter,
                     );
-                    user_service.process_user();
+                    if is_reporter {
+                        user_service.process_reporter();
+                    } else {
+                        user_service.process_client();
+                    }
                 });
             if let Err(ref e) = handle {
-                self.logger.lock().unwrap().print_and_log(&format!(
+                logger.lock().unwrap().print_and_log(&format!(
                     "An error occurred at [{}, {}]: {:?}\n\n",
                     file!(),
                     line!(),

@@ -217,7 +217,7 @@ impl DatabaseManager {
 
         if row.is_none() {
             println!(
-                "INFO: No table \"{}\" was found in database, creating a new table.\n",
+                "INFO: No table \"{}\" was found in database, creating a new table.",
                 REPORT_TABLE_NAME
             );
             // Create this table.

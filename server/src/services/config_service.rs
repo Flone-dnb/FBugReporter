@@ -14,11 +14,13 @@ use crate::error::AppError;
 const RANDOM_PORT_RANGE: Range<u16> = 7000..65535;
 const CONFIG_FILE_NAME: &str = "server_config.ini";
 const CONFIG_SECTION_NAME: &str = "server";
-const CONFIG_PORT_PARAM: &str = "server_port";
+const CONFIG_PORT_REPORTER_PARAM: &str = "port_for_reporters";
+const CONFIG_PORT_CLIENT_PARAM: &str = "port_for_clients";
 
 #[derive(Debug)]
 pub struct ServerConfig {
-    pub server_port: u16,
+    pub port_for_reporters: u16,
+    pub port_for_clients: u16,
     pub config_file_path: String,
     pub log_file_path: String,
 }
@@ -64,7 +66,8 @@ impl ServerConfig {
     }
     fn default() -> Self {
         Self {
-            server_port: ServerConfig::generate_random_port(),
+            port_for_reporters: ServerConfig::generate_random_port(),
+            port_for_clients: ServerConfig::generate_random_port(),
             config_file_path: ServerConfig::get_config_file_path(),
             log_file_path: ServerConfig::get_log_file_path(),
         }
@@ -72,10 +75,18 @@ impl ServerConfig {
     fn save_config(&self) -> Result<(), AppError> {
         let mut config = Ini::new();
 
+        // Port for reporters.
         config.set(
             CONFIG_SECTION_NAME,
-            CONFIG_PORT_PARAM,
-            Some(self.server_port.to_string()),
+            CONFIG_PORT_REPORTER_PARAM,
+            Some(self.port_for_reporters.to_string()),
+        );
+
+        // Port for clients.
+        config.set(
+            CONFIG_SECTION_NAME,
+            CONFIG_PORT_CLIENT_PARAM,
+            Some(self.port_for_clients.to_string()),
         );
 
         // Write to disk.
@@ -92,23 +103,43 @@ impl ServerConfig {
     fn read_config(&mut self, config: &Ini) -> bool {
         let mut some_values_were_empty = false;
 
-        // Read port.
-        let port = config.get(CONFIG_SECTION_NAME, CONFIG_PORT_PARAM);
+        // Read port for reporters.
+        let port = config.get(CONFIG_SECTION_NAME, CONFIG_PORT_REPORTER_PARAM);
         if port.is_none() {
-            self.server_port = ServerConfig::generate_random_port();
+            self.port_for_reporters = ServerConfig::generate_random_port();
             some_values_were_empty = true;
         } else {
             let port = port.unwrap().parse::<u16>();
             if let Err(e) = port {
                 println!(
                     "WARNING: could not parse \"{}\" value, using random port instead (error: {}).",
-                    CONFIG_PORT_PARAM,
+                    CONFIG_PORT_REPORTER_PARAM,
                     e.to_string()
                 );
-                self.server_port = ServerConfig::generate_random_port();
+                self.port_for_reporters = ServerConfig::generate_random_port();
                 some_values_were_empty = true;
             } else {
-                self.server_port = port.unwrap();
+                self.port_for_reporters = port.unwrap();
+            }
+        }
+
+        // Read port for clients.
+        let port = config.get(CONFIG_SECTION_NAME, CONFIG_PORT_CLIENT_PARAM);
+        if port.is_none() {
+            self.port_for_clients = ServerConfig::generate_random_port();
+            some_values_were_empty = true;
+        } else {
+            let port = port.unwrap().parse::<u16>();
+            if let Err(e) = port {
+                println!(
+                    "WARNING: could not parse \"{}\" value, using random port instead (error: {}).",
+                    CONFIG_PORT_CLIENT_PARAM,
+                    e.to_string()
+                );
+                self.port_for_clients = ServerConfig::generate_random_port();
+                some_values_were_empty = true;
+            } else {
+                self.port_for_clients = port.unwrap();
             }
         }
 

@@ -44,11 +44,11 @@ impl DatabaseManager {
 
         Ok(Self { connection })
     }
-    /// Register a new user in the database.
+    /// Adds a new user to the database.
     ///
     /// On success returns user's password.
     /// On failure returns error description via `AppError`.
-    pub fn register_user(&self, username: &str) -> Result<String, AppError> {
+    pub fn add_user(&self, username: &str) -> Result<String, AppError> {
         let datetime = Local::now();
 
         // Generate password and salt.

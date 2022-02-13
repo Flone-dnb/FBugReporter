@@ -91,7 +91,7 @@ fn main() {
             if username_str.is_empty() {
                 println!("username is empty");
             } else {
-                let result = net_service.register_user(&username_str);
+                let result = net_service.add_user(&username_str);
                 if let Err(app_error) = result {
                     panic!("{} at [{}, {}]", app_error.to_string(), file!(), line!());
                 } else {

@@ -68,12 +68,12 @@ impl NetService {
 
         Ok(())
     }
-    /// Register a new user in the database.
+    /// Adds a new user to the database.
     ///
     /// On success returns user's password.
     /// On failure returns error description via `AppError`.
-    pub fn register_user(&mut self, username: &str) -> Result<String, AppError> {
-        let result = self.database.lock().unwrap().register_user(username);
+    pub fn add_user(&mut self, username: &str) -> Result<String, AppError> {
+        let result = self.database.lock().unwrap().add_user(username);
         if let Err(app_error) = result {
             return Err(app_error.add_entry(file!(), line!()));
         } else {

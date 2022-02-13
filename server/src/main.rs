@@ -48,7 +48,7 @@ fn main() {
             println!("--start - starts the server on launch");
             println!("\ncommands:");
             println!("start - starts the server with the current configuration");
-            println!("register-user <username> - registers a new user");
+            println!("add-user <username> - adds a new user");
             println!("config - show the current server configuration");
             println!("config.port = <value> - set custom server port value");
             println!("refresh-port - generates new server port");
@@ -81,11 +81,11 @@ fn main() {
             } else {
                 println!("command '{}' not found", input);
             }
-        } else if input.contains("register-user ") {
+        } else if input.contains("add-user ") {
             let username_str: String = input
                 .chars()
                 .take(0)
-                .chain(input.chars().skip("register-user ".chars().count()))
+                .chain(input.chars().skip("add-user ".chars().count()))
                 .collect();
 
             if username_str.is_empty() {

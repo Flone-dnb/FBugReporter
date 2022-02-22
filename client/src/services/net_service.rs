@@ -27,6 +27,12 @@ const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 
 pub const NETWORK_PROTOCOL_VERSION: u16 = 0;
 
+pub enum ConnectResult {
+    Connected,
+    ConnectFailed(ClientLoginFailReason),
+    InternalError(AppError),
+}
+
 enum IoResult {
     Ok(usize),
     Fin,
@@ -51,20 +57,20 @@ impl NetService {
         port: u16,
         username: String,
         password: String,
-    ) -> Result<(), AppError> {
+    ) -> ConnectResult {
         // Connect socket.
         let tcp_socket = TcpStream::connect(format!("{}:{}", server, port));
         if let Err(e) = tcp_socket {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return ConnectResult::InternalError(AppError::new(&e.to_string(), file!(), line!()));
         }
         let tcp_socket = tcp_socket.unwrap();
 
         // Configure socket.
         if let Err(e) = tcp_socket.set_nodelay(true) {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return ConnectResult::InternalError(AppError::new(&e.to_string(), file!(), line!()));
         }
         if let Err(e) = tcp_socket.set_nonblocking(true) {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return ConnectResult::InternalError(AppError::new(&e.to_string(), file!(), line!()));
         }
 
         self.socket = Some(tcp_socket);
@@ -72,7 +78,7 @@ impl NetService {
         // Establish secure connection.
         let secret_key = self.establish_secure_connection();
         if let Err(app_error) = secret_key {
-            return Err(app_error.add_entry(file!(), line!()));
+            return ConnectResult::InternalError(app_error.add_entry(file!(), line!()));
         }
         self.secret_key = secret_key.unwrap();
 
@@ -88,14 +94,167 @@ impl NetService {
         };
 
         if let Err(app_error) = self.send_packet(packet) {
-            return Err(app_error.add_entry(file!(), line!()));
+            return ConnectResult::InternalError(app_error.add_entry(file!(), line!()));
         }
 
         // Receive answer.
+        let packet = self.receive_packet();
+        if let Err(app_error) = packet {
+            return ConnectResult::InternalError(app_error.add_entry(file!(), line!()));
+        }
+        let packet = packet.unwrap();
+
+        // Deserialize.
+        let packet = bincode::deserialize::<InClientPacket>(&packet);
+        if let Err(e) = packet {
+            return ConnectResult::InternalError(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let packet = packet.unwrap();
+
+        match packet {
+            InClientPacket::ClientLoginAnswer { is_ok, fail_reason } => {
+                if !is_ok {
+                    return ConnectResult::ConnectFailed(fail_reason.unwrap());
+                }
+            }
+            _ => {
+                return ConnectResult::InternalError(AppError::new(
+                    "unexpected packet received",
+                    file!(),
+                    line!(),
+                ));
+            }
+        }
+
+        // OK.
         // TODO: if OK then save server, port, username and password.
 
-        // return control here, don't drop connection, wait for further commands from the user
-        Ok(())
+        // return control here, don't drop connection,
+        // wait for further commands from the user
+        ConnectResult::Connected
+    }
+    fn receive_packet(&mut self) -> Result<Vec<u8>, AppError> {
+        if self.secret_key.is_empty() {
+            return Err(AppError::new(
+                "can't receive packet - secure connected is not established",
+                file!(),
+                line!(),
+            ));
+        }
+
+        // Read u32 (size of a packet)
+        let mut packet_size_buf = [0u8; std::mem::size_of::<u32>() as usize];
+        let mut _next_packet_size: u32 = 0;
+        match self.read_from_socket(&mut packet_size_buf) {
+            IoResult::Fin => {
+                return Err(AppError::new(
+                    &format!(
+                        "unexpected FIN received (socket: {})",
+                        self.socket.as_ref().unwrap().peer_addr().unwrap()
+                    ),
+                    file!(),
+                    line!(),
+                ));
+            }
+            IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
+            IoResult::Ok(byte_count) => {
+                if byte_count != packet_size_buf.len() {
+                    return Err(AppError::new(
+                        &format!(
+                            "not all data received (got: {}, expected: {}) (socket: {})",
+                            byte_count,
+                            packet_size_buf.len(),
+                            self.socket.as_ref().unwrap().peer_addr().unwrap()
+                        ),
+                        file!(),
+                        line!(),
+                    ));
+                }
+
+                let res = bincode::deserialize(&packet_size_buf);
+                if let Err(e) = res {
+                    return Err(AppError::new(
+                        &format!(
+                            "{:?} (socket: {})",
+                            e,
+                            self.socket.as_ref().unwrap().peer_addr().unwrap()
+                        ),
+                        file!(),
+                        line!(),
+                    ));
+                }
+
+                _next_packet_size = res.unwrap();
+            }
+        }
+
+        // Receive encrypted packet.
+        let mut encrypted_packet = vec![0u8; _next_packet_size as usize];
+        match self.read_from_socket(&mut encrypted_packet) {
+            IoResult::Fin => {
+                return Err(AppError::new(
+                    &format!(
+                        "unexpected FIN received (socket: {})",
+                        self.socket.as_ref().unwrap().peer_addr().unwrap()
+                    ),
+                    file!(),
+                    line!(),
+                ));
+            }
+            IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
+            IoResult::Ok(_) => {}
+        };
+
+        // Get IV.
+        if encrypted_packet.len() < IV_LENGTH {
+            return Err(AppError::new(
+                &format!(
+                    "unexpected packet length ({}) (socket: {})",
+                    encrypted_packet.len(),
+                    self.socket.as_ref().unwrap().peer_addr().unwrap()
+                ),
+                file!(),
+                line!(),
+            ));
+        }
+        let iv = &encrypted_packet[..IV_LENGTH].to_vec();
+        encrypted_packet = encrypted_packet[IV_LENGTH..].to_vec();
+
+        // Decrypt packet.
+        let cipher = Aes256Cbc::new_from_slices(&self.secret_key, &iv).unwrap();
+        let decrypted_packet = cipher.decrypt_vec(&encrypted_packet);
+        if let Err(e) = decrypted_packet {
+            return Err(AppError::new(
+                &format!(
+                    "{:?} (socket: {})",
+                    e,
+                    self.socket.as_ref().unwrap().peer_addr().unwrap()
+                ),
+                file!(),
+                line!(),
+            ));
+        }
+        let mut decrypted_packet = decrypted_packet.unwrap();
+
+        // CMAC
+        let mut mac = Cmac::<Aes256>::new_from_slice(&self.secret_key).unwrap();
+        let tag: Vec<u8> = decrypted_packet
+            .drain(decrypted_packet.len().saturating_sub(CMAC_TAG_LENGTH)..)
+            .collect();
+        mac.update(&decrypted_packet);
+        if let Err(e) = mac.verify(&tag) {
+            return Err(AppError::new(
+                &format!(
+                    "{:?} (socket: {})",
+                    e,
+                    self.socket.as_ref().unwrap().peer_addr().unwrap()
+                ),
+                file!(),
+                line!(),
+            ));
+        }
+
+        Ok(decrypted_packet)
     }
     fn establish_secure_connection(&mut self) -> Result<Vec<u8>, AppError> {
         // Generate secret key 'b'.

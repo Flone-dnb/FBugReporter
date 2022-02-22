@@ -12,18 +12,30 @@ use crate::services::network::user_service::UserService;
 
 // External.
 use chrono::{DateTime, Local};
-use sha2::{Digest, Sha512};
 
-pub const WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN: u64 = 1;
-// if a client used wrong password for the second time,
-// new ban duration will be
-// 'WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN' multiplied by this value.
-const FAILED_ATTEMPT_BAN_TIME_DURATION_MULTIPLIER: u64 = 2;
+/// If a user failed to login more than this value times,
+/// he will be banned. This value can be 0 to ban
+/// users on first failed login attempt.
+pub const MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN: u32 = 3;
+/// The amount of time a banned user will have to wait
+/// until he can try to login again.
+pub const BAN_TIME_DURATION_IN_MIN: i64 = 5;
 
-struct BannedIP {
-    ip: IpAddr,
-    ban_start_time: DateTime<Local>,
-    current_ban_duration_in_min: u64,
+/// This struct represents an IP address of a
+/// client who failed to login.
+/// New failed attempts will cause the client's IP
+/// to be banned.
+pub struct FailedIP {
+    pub ip: IpAddr,
+    pub failed_attempts_made: u32,
+}
+
+/// This struct represents an IP address of a
+/// client who failed to login multiple times.
+pub struct BannedIP {
+    pub ip: IpAddr,
+    pub ban_start_time: DateTime<Local>,
+    pub current_ban_duration_in_min: i64,
 }
 
 pub struct NetService {
@@ -31,10 +43,15 @@ pub struct NetService {
     pub server_config: ServerConfig,
     connected_socket_count: Arc<Mutex<usize>>,
     database: Arc<Mutex<DatabaseManager>>,
-    banned_ip_list: Vec<BannedIP>,
+    failed_ip_list: Arc<Mutex<Vec<FailedIP>>>,
+    banned_ip_list: Arc<Mutex<Vec<BannedIP>>>,
 }
 
 impl NetService {
+    /// Creates a new instance of the `NetService`.
+    ///
+    /// Returns `AppError` if something went wrong
+    /// when initializing/connecting to the database.
     pub fn new(logger: Logger) -> Result<Self, AppError> {
         let config = ServerConfig::new();
 
@@ -48,7 +65,8 @@ impl NetService {
             logger: Arc::new(Mutex::new(logger)),
             connected_socket_count: Arc::new(Mutex::new(0)),
             database: Arc::new(Mutex::new(db.unwrap())),
-            banned_ip_list: Vec::new(),
+            failed_ip_list: Arc::new(Mutex::new(Vec::new())),
+            banned_ip_list: Arc::new(Mutex::new(Vec::new())),
         })
     }
     /// Adds a new user to the database.
@@ -98,12 +116,16 @@ impl NetService {
         let logger_copy = self.logger.clone();
         let connected_clone = self.connected_socket_count.clone();
         let database_clone = self.database.clone();
+        let failed_ips_clone = self.failed_ip_list.clone();
+        let banned_ips_clone = self.banned_ip_list.clone();
         thread::spawn(move || {
             NetService::process_connection(
                 listener_socker_reporters,
                 logger_copy,
                 connected_clone,
                 database_clone,
+                failed_ips_clone,
+                banned_ips_clone,
                 true,
             );
         });
@@ -112,12 +134,16 @@ impl NetService {
         let logger_copy = self.logger.clone();
         let connected_clone = self.connected_socket_count.clone();
         let database_clone = self.database.clone();
+        let failed_ips_clone = self.failed_ip_list.clone();
+        let banned_ips_clone = self.banned_ip_list.clone();
         thread::spawn(move || {
             NetService::process_connection(
                 listener_socker_clients,
                 logger_copy,
                 connected_clone,
                 database_clone,
+                failed_ips_clone,
+                banned_ips_clone,
                 false,
             );
         });
@@ -137,6 +163,8 @@ impl NetService {
         logger: Arc<Mutex<Logger>>,
         connected_count: Arc<Mutex<usize>>,
         database_manager: Arc<Mutex<DatabaseManager>>,
+        failed_ip_list: Arc<Mutex<Vec<FailedIP>>>,
+        banned_ip_list: Arc<Mutex<Vec<BannedIP>>>,
         is_reporter: bool,
     ) {
         loop {
@@ -170,8 +198,38 @@ impl NetService {
                 ));
             }
 
+            if is_reporter == false {
+                // Check if this IP is banned.
+                let mut banned_list_guard = banned_ip_list.lock().unwrap();
+                let is_banned = banned_list_guard.iter().find(|x| x.ip == addr.ip());
+
+                if is_banned.is_some() {
+                    // This IP is banned, see if ban time is over.
+                    let banned_ip = is_banned.unwrap();
+                    let time_diff = Local::now() - banned_ip.ban_start_time;
+
+                    if time_diff.num_minutes() < banned_ip.current_ban_duration_in_min {
+                        logger.lock().unwrap().print_and_log(&format!(
+                            "Banned IP address ({}) attempted to connect. \
+                            Connection was rejected.",
+                            banned_ip.ip.to_string()
+                        ));
+                        continue; // still banned
+                    } else {
+                        // Remove from banned ips.
+                        let index_to_remove = banned_list_guard
+                            .iter()
+                            .position(|x| x.ip == addr.ip())
+                            .unwrap();
+                        banned_list_guard.remove(index_to_remove);
+                    }
+                }
+            }
+
             let logger_copy = logger.clone();
-            let connected_clone = connected_count.clone();
+            let banned_list_clone = banned_ip_list.clone();
+            let failed_list_clone = failed_ip_list.clone();
+            let connected_count_clone = connected_count.clone();
             let database_clone = database_manager.clone();
 
             let handle = thread::Builder::new()
@@ -181,8 +239,10 @@ impl NetService {
                         logger_copy,
                         socket,
                         addr,
-                        connected_clone,
+                        connected_count_clone,
                         database_clone,
+                        failed_list_clone,
+                        banned_list_clone,
                         is_reporter,
                     );
                     if is_reporter {

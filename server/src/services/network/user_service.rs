@@ -9,6 +9,7 @@ use std::time::Duration;
 use aes::Aes256;
 use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
+use chrono::Local;
 use cmac::{Cmac, Mac, NewMac};
 use num_bigint::{BigUint, RandomBits};
 use rand::{Rng, RngCore};
@@ -17,7 +18,7 @@ use sha2::{Digest, Sha512};
 
 // Custom.
 use super::net_packets::*;
-use super::net_service::WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN;
+use super::net_service::*;
 use crate::error::AppError;
 use crate::misc::*;
 use crate::services::db_manager::DatabaseManager;
@@ -45,6 +46,8 @@ pub struct UserService {
     connected_users_count: Arc<Mutex<usize>>,
     exit_error: Option<Result<String, AppError>>,
     database: Arc<Mutex<DatabaseManager>>,
+    failed_ip_list: Arc<Mutex<Vec<FailedIP>>>,
+    banned_ip_list: Arc<Mutex<Vec<BannedIP>>>,
     is_for_reporter: bool,
 }
 
@@ -55,6 +58,8 @@ impl UserService {
         addr: SocketAddr,
         connected_users_count: Arc<Mutex<usize>>,
         database: Arc<Mutex<DatabaseManager>>,
+        failed_ip_list: Arc<Mutex<Vec<FailedIP>>>,
+        banned_ip_list: Arc<Mutex<Vec<BannedIP>>>,
         is_for_reporter: bool,
     ) -> Self {
         {
@@ -84,6 +89,8 @@ impl UserService {
             exit_error: None,
             secret_key: Vec::new(),
             database,
+            failed_ip_list,
+            banned_ip_list,
             is_for_reporter,
         }
     }
@@ -123,6 +130,9 @@ impl UserService {
         }
     }
     /// After this function is finished the object should be destroyed.
+    ///
+    /// Only not banned clients should be processed here.
+    /// This function assumes the client is not banned.
     pub fn process_client(&mut self) {
         let secret_key = UserService::establish_secure_connection(&mut self.socket);
         if let Err(app_error) = secret_key {
@@ -286,7 +296,7 @@ impl UserService {
                 if client_net_protocol != NETWORK_PROTOCOL_VERSION {
                     let answer = OutClientPacket::ClientLoginAnswer {
                         is_ok: false,
-                        reason: Some(ClientLoginFailReason::WrongProtocol {
+                        fail_reason: Some(ClientLoginFailReason::WrongProtocol {
                             server_protocol: NETWORK_PROTOCOL_VERSION,
                         }),
                     };
@@ -330,6 +340,7 @@ impl UserService {
                 let password_hash: Vec<u8> = hasher.finalize().to_vec();
 
                 if password_hash != db_password {
+                    // Wrong password.
                     let result = self.answer_client_wrong_credentials(&username);
                     if let Err(app_error) = result {
                         return Err(app_error.add_entry(file!(), line!()));
@@ -338,11 +349,34 @@ impl UserService {
                     return Ok(Some(result.unwrap()));
                 }
 
-                // Check username, password, etc.
-                // TODO: if something wrong - ban, and write to log
-                // TODO: if successful write to log + update database values
+                {
+                    // update last login time/date/ip
+                    if let Err(app_error) = self.database.lock().unwrap().update_user_last_login(
+                        &username,
+                        &self.socket.peer_addr().unwrap().ip().to_string(),
+                    ) {
+                        return Err(app_error.add_entry(file!(), line!()));
+                    }
+                }
+
+                {
+                    self.logger
+                        .lock()
+                        .unwrap()
+                        .print_and_log(&format!("{} logged in.", &username));
+                }
+
                 // TODO: if 'need_change_password' is '1', ask user of new password
                 // and update 'need_change_password' to '0'.
+                let answer = OutClientPacket::ClientLoginAnswer {
+                    is_ok: true,
+                    fail_reason: None,
+                };
+                if let Err(err) =
+                    UserService::send_packet(&mut self.socket, &self.secret_key, answer)
+                {
+                    return Err(err.add_entry(file!(), line!()));
+                }
             }
         }
 
@@ -357,12 +391,126 @@ impl UserService {
     /// Returns `AppError` as `Err` if there was an internal error
     /// (bug).
     fn answer_client_wrong_credentials(&mut self, username: &str) -> Result<String, AppError> {
-        let answer = OutClientPacket::ClientLoginAnswer {
+        // Initialize answer value somehow.
+        let mut answer = OutClientPacket::ClientLoginAnswer {
             is_ok: false,
-            reason: Some(ClientLoginFailReason::WrongCredentials {
-                ban_time_in_min: WRONG_PASSWORD_FIRST_BAN_TIME_DURATION_IN_MIN,
+            fail_reason: Some(ClientLoginFailReason::WrongCredentials {
+                result: ClientLoginFailResult::Banned { ban_time_in_min: 0 },
             }),
         };
+
+        {
+            // See if this user failed to login before.
+            let mut failed_ip_list_guard = self.failed_ip_list.lock().unwrap();
+            let found_failed = failed_ip_list_guard
+                .iter_mut()
+                .find(|x| x.ip == self.socket.peer_addr().unwrap().ip());
+
+            if found_failed.is_none() {
+                // First time failed to login.
+                if MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN != 0 {
+                    // Add to failed ips.
+                    failed_ip_list_guard.push(FailedIP {
+                        ip: self.socket.peer_addr().unwrap().ip(),
+                        failed_attempts_made: 1,
+                    });
+
+                    answer = OutClientPacket::ClientLoginAnswer {
+                        is_ok: false,
+                        fail_reason: Some(ClientLoginFailReason::WrongCredentials {
+                            result: ClientLoginFailResult::FailedAttempt {
+                                failed_attempts_made: 1,
+                                max_failed_attempts: MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN,
+                            },
+                        }),
+                    };
+
+                    self.logger.lock().unwrap().print_and_log(&format!(
+                        "{} failed to login: {}/{} allowed failed login attempts.",
+                        username, 1, MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN
+                    ));
+                } else {
+                    // Add to banned ips.
+                    let mut banned_ip_list_guard = self.banned_ip_list.lock().unwrap();
+                    banned_ip_list_guard.push(BannedIP {
+                        ip: self.socket.peer_addr().unwrap().ip(),
+                        ban_start_time: Local::now(),
+                        current_ban_duration_in_min: BAN_TIME_DURATION_IN_MIN,
+                    });
+
+                    answer = OutClientPacket::ClientLoginAnswer {
+                        is_ok: false,
+                        fail_reason: Some(ClientLoginFailReason::WrongCredentials {
+                            result: ClientLoginFailResult::Banned {
+                                ban_time_in_min: BAN_TIME_DURATION_IN_MIN,
+                            },
+                        }),
+                    };
+
+                    self.logger.lock().unwrap().print_and_log(&format!(
+                        "{} was banned for {} minutes due to failed login attempt.",
+                        username, BAN_TIME_DURATION_IN_MIN
+                    ));
+                }
+            } else {
+                // Failed to login not the first time.
+                let failed_ip = found_failed.unwrap();
+
+                if failed_ip.failed_attempts_made == MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN {
+                    // Add to banned ips.
+                    let mut banned_ip_list_guard = self.banned_ip_list.lock().unwrap();
+                    banned_ip_list_guard.push(BannedIP {
+                        ip: self.socket.peer_addr().unwrap().ip(),
+                        ban_start_time: Local::now(),
+                        current_ban_duration_in_min: BAN_TIME_DURATION_IN_MIN,
+                    });
+
+                    // Remove from failed ips.
+                    let index_to_remove = failed_ip_list_guard
+                        .iter()
+                        .position(|x| x.ip == self.socket.peer_addr().unwrap().ip())
+                        .unwrap();
+                    failed_ip_list_guard.remove(index_to_remove);
+
+                    answer = OutClientPacket::ClientLoginAnswer {
+                        is_ok: false,
+                        fail_reason: Some(ClientLoginFailReason::WrongCredentials {
+                            result: ClientLoginFailResult::Banned {
+                                ban_time_in_min: BAN_TIME_DURATION_IN_MIN,
+                            },
+                        }),
+                    };
+
+                    self.logger.lock().unwrap().print_and_log(&format!(
+                        "{} was banned for {} minutes due to {} failed login attempts.",
+                        username,
+                        BAN_TIME_DURATION_IN_MIN,
+                        MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN + 1
+                    ));
+                } else {
+                    // Increase the failed attempts value.
+                    failed_ip.failed_attempts_made += 1;
+
+                    answer = OutClientPacket::ClientLoginAnswer {
+                        is_ok: false,
+                        fail_reason: Some(ClientLoginFailReason::WrongCredentials {
+                            result: ClientLoginFailResult::FailedAttempt {
+                                failed_attempts_made: failed_ip.failed_attempts_made,
+                                max_failed_attempts: MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN,
+                            },
+                        }),
+                    };
+
+                    self.logger.lock().unwrap().print_and_log(&format!(
+                        "{} failed to login: {}/{} failed attempts.",
+                        username,
+                        failed_ip.failed_attempts_made,
+                        MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN
+                    ));
+                }
+            }
+        }
+
         if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, answer) {
             return Err(err.add_entry(file!(), line!()));
         }
@@ -525,7 +673,7 @@ impl UserService {
 
         Ok(Vec::from(&secret_key_str[0..KEY_LENGTH_IN_BYTES]))
     }
-    /// Returns [`Ok`] if the fields have the corrent length (amount of characters, not byte count),
+    /// Returns [`Ok`] if the fields have the correct length (amount of characters, not byte count),
     /// otherwise returns the field type and its received length (not the limit, actual length).
     fn check_report_field_limits(report: &GameReport) -> Result<(), (ReportLimits, usize)> {
         if report.report_name.chars().count() > ReportLimits::ReportName.max_length() {

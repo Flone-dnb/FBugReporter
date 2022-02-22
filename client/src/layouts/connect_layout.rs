@@ -4,6 +4,10 @@ use druid::widget::{Button, Flex, Label, LineBreaking, MainAxisAlignment, TextBo
 use druid::{Lens, LensExt, TextAlignment, WidgetExt};
 
 // Custom.
+use crate::services::{
+    net_packets::*,
+    net_service::{ConnectResult, NETWORK_PROTOCOL_VERSION},
+};
 use crate::{ApplicationState, Layout};
 
 // Layout customization.
@@ -190,15 +194,60 @@ impl ConnectLayout {
             data.connect_layout.username.clone(),
             data.connect_layout.password.clone(),
         );
-        if let Err(app_error) = result {
-            println!("{}", app_error);
-            data.logger_service
-                .lock()
-                .unwrap()
-                .log(&app_error.to_string());
-            data.connect_layout.connect_error = app_error.to_string();
-        } else {
-            data.current_layout = Layout::Main;
+        match result {
+            ConnectResult::InternalError(app_error) => {
+                println!("{}", app_error);
+                data.logger_service
+                    .lock()
+                    .unwrap()
+                    .log(&app_error.to_string());
+                data.connect_layout.connect_error = app_error.to_string();
+            }
+            ConnectResult::ConnectFailed(reason) => {
+                let mut message = String::new();
+
+                match reason {
+                    ClientLoginFailReason::WrongProtocol { server_protocol } => {
+                        message = format!(
+                            "Failed to connect to the server \
+                            due to incompatible application version.\n\
+                            Your application uses network protocol version {}, \
+                            while the server supports version {}.",
+                            NETWORK_PROTOCOL_VERSION, server_protocol
+                        );
+                    }
+                    ClientLoginFailReason::WrongCredentials { result } => match result {
+                        ClientLoginFailResult::FailedAttempt {
+                            failed_attempts_made,
+                            max_failed_attempts,
+                        } => {
+                            message = format!(
+                                "Incorrect login/password.\n\
+                                Allowed failed login attempts: {0} out of {1}.\n\
+                                After {1} failed login attempts new failed login attempt \
+                                 will result in a ban.",
+                                failed_attempts_made, max_failed_attempts
+                            );
+                        }
+                        ClientLoginFailResult::Banned { ban_time_in_min } => {
+                            message = format!(
+                                "You were banned due to multiple failed login attempts.\n\
+                                Ban time: {} minute(-s).\n\
+                                During this time the server will reject any \
+                                login attempts without explanation.",
+                                ban_time_in_min
+                            );
+                        }
+                    },
+                }
+
+                println!("{}", message);
+                data.logger_service.lock().unwrap().log(&message);
+                data.connect_layout.connect_error = message;
+            }
+            ConnectResult::Connected => {
+                data.current_layout = Layout::Main;
+            }
         }
     }
     fn on_settings_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {

@@ -161,6 +161,35 @@ impl DatabaseManager {
 
         Ok((password, salt))
     }
+    /// Updates the following user's values in the database:
+    /// - last_login_date
+    /// - last_login_time
+    /// - last_login_ip
+    pub fn update_user_last_login(&self, username: &str, ip: &str) -> Result<(), AppError> {
+        let datetime = Local::now();
+
+        if let Err(e) = self.connection.execute(
+            &format!(
+                "UPDATE {} 
+                SET
+                last_login_date = ?1,
+                last_login_time = ?2,
+                last_login_ip = ?3
+                WHERE username = ?4",
+                USER_TABLE_NAME
+            ),
+            params![
+                datetime.date().naive_local().to_string(),
+                datetime.time().format("%H:%M:%S").to_string(),
+                ip,
+                username
+            ],
+        ) {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        Ok(())
+    }
     pub fn save_report(&self, game_report: GameReport) -> Result<(), AppError> {
         let datetime = Local::now();
 

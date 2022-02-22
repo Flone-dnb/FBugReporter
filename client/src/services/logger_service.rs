@@ -12,7 +12,7 @@ const LOG_FILE_NAME: &str = "client.log";
 #[cfg(target_os = "windows")]
 const LOG_FILE_DIR: &str = "FBugReporter";
 
-pub struct LoggerService {
+pub struct LoggerService {  
     log_file_path: String,
 }
 

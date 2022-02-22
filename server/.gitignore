@@ -2,3 +2,4 @@
 server.log
 server_config.ini
 *.db3
+.vscode

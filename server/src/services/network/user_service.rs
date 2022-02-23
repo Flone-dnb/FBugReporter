@@ -67,14 +67,14 @@ impl UserService {
             *guard += 1;
             if is_for_reporter {
                 logger.lock().unwrap().print_and_log(&format!(
-                    "Accepted connection with {}:{}\n--- [connected reporters: {}]",
+                    "Accepted connection with {}:{}\n--- [connected reporters: {}] ---",
                     addr.ip(),
                     addr.port(),
                     guard
                 ));
             } else {
                 logger.lock().unwrap().print_and_log(&format!(
-                    "Accepted connection with {}:{}\n--- [connected clients: {}]",
+                    "Accepted connection with {}:{}\n--- [connected clients: {}] ---",
                     addr.ip(),
                     addr.port(),
                     guard
@@ -392,7 +392,7 @@ impl UserService {
     /// (bug).
     fn answer_client_wrong_credentials(&mut self, username: &str) -> Result<String, AppError> {
         // Initialize answer value somehow.
-        let mut answer = OutClientPacket::ClientLoginAnswer {
+        let mut _answer = OutClientPacket::ClientLoginAnswer {
             is_ok: false,
             fail_reason: Some(ClientLoginFailReason::WrongCredentials {
                 result: ClientLoginFailResult::Banned { ban_time_in_min: 0 },
@@ -415,7 +415,7 @@ impl UserService {
                         failed_attempts_made: 1,
                     });
 
-                    answer = OutClientPacket::ClientLoginAnswer {
+                    _answer = OutClientPacket::ClientLoginAnswer {
                         is_ok: false,
                         fail_reason: Some(ClientLoginFailReason::WrongCredentials {
                             result: ClientLoginFailResult::FailedAttempt {
@@ -438,7 +438,7 @@ impl UserService {
                         current_ban_duration_in_min: BAN_TIME_DURATION_IN_MIN,
                     });
 
-                    answer = OutClientPacket::ClientLoginAnswer {
+                    _answer = OutClientPacket::ClientLoginAnswer {
                         is_ok: false,
                         fail_reason: Some(ClientLoginFailReason::WrongCredentials {
                             result: ClientLoginFailResult::Banned {
@@ -448,7 +448,7 @@ impl UserService {
                     };
 
                     self.logger.lock().unwrap().print_and_log(&format!(
-                        "{} was banned for {} minutes due to failed login attempt.",
+                        "{} was banned for {} minute(-s) due to failed login attempt.",
                         username, BAN_TIME_DURATION_IN_MIN
                     ));
                 }
@@ -472,7 +472,7 @@ impl UserService {
                         .unwrap();
                     failed_ip_list_guard.remove(index_to_remove);
 
-                    answer = OutClientPacket::ClientLoginAnswer {
+                    _answer = OutClientPacket::ClientLoginAnswer {
                         is_ok: false,
                         fail_reason: Some(ClientLoginFailReason::WrongCredentials {
                             result: ClientLoginFailResult::Banned {
@@ -482,7 +482,7 @@ impl UserService {
                     };
 
                     self.logger.lock().unwrap().print_and_log(&format!(
-                        "{} was banned for {} minutes due to {} failed login attempts.",
+                        "{} was banned for {} minute(-s) due to {} failed login attempts.",
                         username,
                         BAN_TIME_DURATION_IN_MIN,
                         MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN + 1
@@ -491,7 +491,7 @@ impl UserService {
                     // Increase the failed attempts value.
                     failed_ip.failed_attempts_made += 1;
 
-                    answer = OutClientPacket::ClientLoginAnswer {
+                    _answer = OutClientPacket::ClientLoginAnswer {
                         is_ok: false,
                         fail_reason: Some(ClientLoginFailReason::WrongCredentials {
                             result: ClientLoginFailResult::FailedAttempt {
@@ -511,7 +511,7 @@ impl UserService {
             }
         }
 
-        if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, answer) {
+        if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, _answer) {
             return Err(err.add_entry(file!(), line!()));
         }
 

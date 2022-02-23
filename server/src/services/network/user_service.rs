@@ -425,6 +425,7 @@ impl UserService {
                     failed_ip_list_guard.push(FailedIP {
                         ip: self.socket.peer_addr().unwrap().ip(),
                         failed_attempts_made: 1,
+                        last_attempt_time: Local::now(),
                     });
 
                     _answer = OutClientPacket::ClientLoginAnswer {

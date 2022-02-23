@@ -28,6 +28,7 @@ pub const BAN_TIME_DURATION_IN_MIN: i64 = 5;
 pub struct FailedIP {
     pub ip: IpAddr,
     pub failed_attempts_made: u32,
+    pub last_attempt_time: DateTime<Local>,
 }
 
 /// This struct represents an IP address of a
@@ -222,6 +223,23 @@ impl NetService {
                             .position(|x| x.ip == addr.ip())
                             .unwrap();
                         banned_list_guard.remove(index_to_remove);
+                    }
+                } else {
+                    // Check if user failed to login before.
+                    let mut failed_list_guard = failed_ip_list.lock().unwrap();
+                    let failed_before = failed_list_guard.iter().find(|x| x.ip == addr.ip());
+
+                    if failed_before.is_some() {
+                        // See if we can remove this ip from failed ips
+                        // if the last failed attempt was too long ago.
+                        let failed_before = failed_before.unwrap();
+                        let time_diff = Local::now() - failed_before.last_attempt_time;
+
+                        if time_diff.num_minutes() >= BAN_TIME_DURATION_IN_MIN {
+                            let index_to_remove =
+                                failed_list_guard.iter().position(|x| x.ip == addr.ip());
+                            failed_list_guard.remove(index_to_remove.unwrap());
+                        }
                     }
                 }
             }

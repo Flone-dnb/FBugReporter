@@ -350,12 +350,24 @@ impl UserService {
                 }
 
                 {
-                    // update last login time/date/ip
+                    // Update last login time/date/ip.
                     if let Err(app_error) = self.database.lock().unwrap().update_user_last_login(
                         &username,
                         &self.socket.peer_addr().unwrap().ip().to_string(),
                     ) {
                         return Err(app_error.add_entry(file!(), line!()));
+                    }
+                }
+
+                {
+                    // Remove user from failed ips.
+                    let mut failed_ip_list_guard = self.failed_ip_list.lock().unwrap();
+
+                    let index_to_remove = failed_ip_list_guard
+                        .iter()
+                        .position(|x| x.ip == self.socket.peer_addr().unwrap().ip());
+                    if index_to_remove.is_some() {
+                        failed_ip_list_guard.remove(index_to_remove.unwrap());
                     }
                 }
 

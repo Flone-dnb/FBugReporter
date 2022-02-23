@@ -46,40 +46,29 @@ pub struct UserService {
     connected_users_count: Arc<Mutex<usize>>,
     exit_error: Option<Result<String, AppError>>,
     database: Arc<Mutex<DatabaseManager>>,
-    failed_ip_list: Arc<Mutex<Vec<FailedIP>>>,
-    banned_ip_list: Arc<Mutex<Vec<BannedIP>>>,
-    is_for_reporter: bool,
+    failed_ip_list: Option<Arc<Mutex<Vec<FailedIP>>>>,
+    banned_ip_list: Option<Arc<Mutex<Vec<BannedIP>>>>,
 }
 
 impl UserService {
-    pub fn new(
+    pub fn new_client(
         logger: Arc<Mutex<Logger>>,
         socket: TcpStream,
         addr: SocketAddr,
         connected_users_count: Arc<Mutex<usize>>,
         database: Arc<Mutex<DatabaseManager>>,
-        failed_ip_list: Arc<Mutex<Vec<FailedIP>>>,
-        banned_ip_list: Arc<Mutex<Vec<BannedIP>>>,
-        is_for_reporter: bool,
+        failed_ip_list: Option<Arc<Mutex<Vec<FailedIP>>>>,
+        banned_ip_list: Option<Arc<Mutex<Vec<BannedIP>>>>,
     ) -> Self {
         {
             let mut guard = connected_users_count.lock().unwrap();
             *guard += 1;
-            if is_for_reporter {
-                logger.lock().unwrap().print_and_log(&format!(
-                    "Accepted connection with {}:{}\n--- [connected reporters: {}] ---",
-                    addr.ip(),
-                    addr.port(),
-                    guard
-                ));
-            } else {
-                logger.lock().unwrap().print_and_log(&format!(
-                    "Accepted connection with {}:{}\n--- [connected clients: {}] ---",
-                    addr.ip(),
-                    addr.port(),
-                    guard
-                ));
-            }
+            logger.lock().unwrap().print_and_log(&format!(
+                "Accepted connection with {}:{}\n--- [connected: {}] ---",
+                addr.ip(),
+                addr.port(),
+                guard
+            ));
         }
 
         UserService {
@@ -91,7 +80,35 @@ impl UserService {
             database,
             failed_ip_list,
             banned_ip_list,
-            is_for_reporter,
+        }
+    }
+    pub fn new_reporter(
+        logger: Arc<Mutex<Logger>>,
+        socket: TcpStream,
+        addr: SocketAddr,
+        connected_users_count: Arc<Mutex<usize>>,
+        database: Arc<Mutex<DatabaseManager>>,
+    ) -> Self {
+        {
+            let mut guard = connected_users_count.lock().unwrap();
+            *guard += 1;
+            logger.lock().unwrap().print_and_log(&format!(
+                "Accepted connection with {}:{}\n--- [connected: {}] ---",
+                addr.ip(),
+                addr.port(),
+                guard
+            ));
+        }
+
+        UserService {
+            logger,
+            socket,
+            connected_users_count,
+            exit_error: None,
+            secret_key: Vec::new(),
+            database,
+            failed_ip_list: None,
+            banned_ip_list: None,
         }
     }
     /// After this function is finished the object should be destroyed.
@@ -361,7 +378,8 @@ impl UserService {
 
                 {
                     // Remove user from failed ips.
-                    let mut failed_ip_list_guard = self.failed_ip_list.lock().unwrap();
+                    let mut failed_ip_list_guard =
+                        self.failed_ip_list.as_ref().unwrap().lock().unwrap();
 
                     let index_to_remove = failed_ip_list_guard
                         .iter()
@@ -413,7 +431,7 @@ impl UserService {
 
         {
             // See if this user failed to login before.
-            let mut failed_ip_list_guard = self.failed_ip_list.lock().unwrap();
+            let mut failed_ip_list_guard = self.failed_ip_list.as_ref().unwrap().lock().unwrap();
             let found_failed = failed_ip_list_guard
                 .iter_mut()
                 .find(|x| x.ip == self.socket.peer_addr().unwrap().ip());
@@ -444,7 +462,8 @@ impl UserService {
                     ));
                 } else {
                     // Add to banned ips.
-                    let mut banned_ip_list_guard = self.banned_ip_list.lock().unwrap();
+                    let mut banned_ip_list_guard =
+                        self.banned_ip_list.as_ref().unwrap().lock().unwrap();
                     banned_ip_list_guard.push(BannedIP {
                         ip: self.socket.peer_addr().unwrap().ip(),
                         ban_start_time: Local::now(),
@@ -471,7 +490,8 @@ impl UserService {
 
                 if failed_ip.failed_attempts_made == MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN {
                     // Add to banned ips.
-                    let mut banned_ip_list_guard = self.banned_ip_list.lock().unwrap();
+                    let mut banned_ip_list_guard =
+                        self.banned_ip_list.as_ref().unwrap().lock().unwrap();
                     banned_ip_list_guard.push(BannedIP {
                         ip: self.socket.peer_addr().unwrap().ip(),
                         ban_start_time: Local::now(),
@@ -1029,11 +1049,7 @@ impl Drop for UserService {
 
         let mut guard = self.connected_users_count.lock().unwrap();
         *guard -= 1;
-        if self.is_for_reporter {
-            message += &format!("--- [connected reporters: {}] ---", guard);
-        } else {
-            message += &format!("--- [connected clients: {}] ---", guard);
-        }
+        message += &format!("--- [connected: {}] ---", guard);
 
         self.logger.lock().unwrap().print_and_log(&message);
     }

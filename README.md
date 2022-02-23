@@ -4,10 +4,14 @@ todo
 
 # Server
 
+<h2>Requirements</h2>
+The server uses SQLite to store data. In order to build the server you need to have <b>sqlite3</b> installed.<br>
+Windows users are special 🙃, they need to build sqlite library in order to build the server, you can use (this guide)[https://gist.github.com/zeljic/d8b542788b225b1bcb5fce169ee28c55] for example.
+<h2>Configuration</h2>
 On first start, the server will create a server configuration file <b>server_config.ini</b> next to the binary file.<br>
 You can customize values in this config file. In order for them to be applied, restart the server.<br>
 <br>
-The server processes reporters and clients on different ports (see <b>server_config.ini</b>).
+The server processes reporters and clients on different ports (see your generated <b>server_config.ini</b>).
 
 # Client
 

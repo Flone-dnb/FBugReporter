@@ -5,6 +5,7 @@ use druid::{Lens, LensExt, TextAlignment, WidgetExt};
 
 // Custom.
 use crate::services::{
+    config_service::ConfigService,
     net_packets::*,
     net_service::{ConnectResult, NETWORK_PROTOCOL_VERSION},
 };
@@ -32,10 +33,12 @@ pub struct ConnectLayout {
 
 impl ConnectLayout {
     pub fn new() -> Self {
+        let config_file = ConfigService::new();
+
         Self {
-            server: String::new(),
-            port: String::new(),
-            username: String::new(),
+            server: config_file.server,
+            port: config_file.port,
+            username: config_file.username,
             password: String::new(),
             connect_error: String::new(),
         }
@@ -204,11 +207,11 @@ impl ConnectLayout {
                 data.connect_layout.connect_error = app_error.to_string();
             }
             ConnectResult::ConnectFailed(reason) => {
-                let mut message = String::new();
+                let mut _message = String::new();
 
                 match reason {
                     ClientLoginFailReason::WrongProtocol { server_protocol } => {
-                        message = format!(
+                        _message = format!(
                             "Failed to connect to the server \
                             due to incompatible application version.\n\
                             Your application uses network protocol version {}, \
@@ -221,7 +224,7 @@ impl ConnectLayout {
                             failed_attempts_made,
                             max_failed_attempts,
                         } => {
-                            message = format!(
+                            _message = format!(
                                 "Incorrect login/password.\n\
                                 Allowed failed login attempts: {0} out of {1}.\n\
                                 After {1} failed login attempts new failed login attempt \
@@ -230,7 +233,7 @@ impl ConnectLayout {
                             );
                         }
                         ClientLoginFailResult::Banned { ban_time_in_min } => {
-                            message = format!(
+                            _message = format!(
                                 "You were banned due to multiple failed login attempts.\n\
                                 Ban time: {} minute(-s).\n\
                                 During this time the server will reject any \
@@ -241,9 +244,9 @@ impl ConnectLayout {
                     },
                 }
 
-                println!("{}", message);
-                data.logger_service.lock().unwrap().log(&message);
-                data.connect_layout.connect_error = message;
+                println!("{}", _message);
+                data.logger_service.lock().unwrap().log(&_message);
+                data.connect_layout.connect_error = _message;
             }
             ConnectResult::Connected => {
                 data.current_layout = Layout::Main;

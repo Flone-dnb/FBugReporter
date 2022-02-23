@@ -17,6 +17,7 @@ type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
 
 // Custom.
+use super::config_service::ConfigService;
 use super::net_packets::*;
 use crate::misc::app_error::AppError;
 
@@ -89,7 +90,7 @@ impl NetService {
 
         let packet = OutClientPacket::ClientLogin {
             client_net_protocol: NETWORK_PROTOCOL_VERSION,
-            username,
+            username: username.clone(),
             password,
         };
 
@@ -126,8 +127,12 @@ impl NetService {
             }
         }
 
-        // OK.
-        // TODO: if OK then save server, port, username and password.
+        // Connected.
+        let mut config = ConfigService::new();
+        config.server = server;
+        config.port = port.to_string();
+        config.username = username;
+        config.write_config_to_file();
 
         // return control here, don't drop connection,
         // wait for further commands from the user

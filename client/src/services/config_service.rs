@@ -1,5 +1,7 @@
 // Std.
 #[cfg(target_os = "windows")]
+use std::fs::create_dir;
+#[cfg(target_os = "windows")]
 use std::path::Path;
 
 // External.

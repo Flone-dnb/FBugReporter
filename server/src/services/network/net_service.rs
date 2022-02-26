@@ -5,56 +5,19 @@ use std::thread;
 
 // Custom.
 use crate::error::AppError;
-use crate::services::config_service::ServerConfig;
-use crate::services::db_manager::DatabaseManager;
-use crate::services::logger_service::Logger;
-use crate::services::network::user_service::UserService;
-
-// External.
-use chrono::{DateTime, Local};
-
-/// If a user failed to login more than this value times,
-/// he will be banned. This value can be 0 to ban
-/// users on first failed login attempt.
-pub const MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN: u32 = 3;
-/// The amount of time a banned user will have to wait
-/// until he can try to login again.
-pub const BAN_TIME_DURATION_IN_MIN: i64 = 5;
-/// After every N connections (not logins) the server will
-/// refresh failed and banned ip lists to remove old
-/// entries that are no longer valid (if enough time has passed already).
-const CONNECTIONS_TO_REFRESH_FAILED_AND_BANNED_LISTS: u64 = 30;
-
-/// This struct represents an IP address of a
-/// client who failed to login.
-/// New failed attempts will cause the client's IP
-/// to be banned.
-#[derive(Debug)]
-pub struct FailedIP {
-    pub ip: IpAddr,
-    pub failed_attempts_made: u32,
-    pub last_attempt_time: DateTime<Local>,
-}
-
-/// This struct represents an IP address of a
-/// client who failed to login multiple times.
-#[derive(Debug)]
-pub struct BannedIP {
-    pub ip: IpAddr,
-    pub ban_start_time: DateTime<Local>,
-    pub current_ban_duration_in_min: i64,
-}
+use crate::services::{
+    config_service::ServerConfig,
+    db_manager::DatabaseManager,
+    logger_service::Logger,
+    network::{ban_manager::BanManager, user_service::UserService},
+};
 
 pub struct NetService {
     pub logger: Arc<Mutex<Logger>>,
     pub server_config: ServerConfig,
     connected_socket_count: Arc<Mutex<usize>>,
     database: Arc<Mutex<DatabaseManager>>,
-    failed_ip_list: Arc<Mutex<Vec<FailedIP>>>,
-    banned_ip_list: Arc<Mutex<Vec<BannedIP>>>,
-    /// Will be set to 0 every `CONNECTIONS_TO_REFRESH_FAILED_AND_BANNED_LISTS`
-    /// connections.
-    accepted_client_connections_to_refresh_lists: Arc<Mutex<u64>>,
+    ban_manager: Arc<Mutex<BanManager>>,
 }
 
 impl NetService {
@@ -70,14 +33,14 @@ impl NetService {
             return Err(err.add_entry(file!(), line!()));
         }
 
+        let logger = Arc::new(Mutex::new(logger));
+
         Ok(Self {
             server_config: config,
-            logger: Arc::new(Mutex::new(logger)),
+            logger: logger.clone(),
             connected_socket_count: Arc::new(Mutex::new(0)),
             database: Arc::new(Mutex::new(db.unwrap())),
-            failed_ip_list: Arc::new(Mutex::new(Vec::new())),
-            banned_ip_list: Arc::new(Mutex::new(Vec::new())),
-            accepted_client_connections_to_refresh_lists: Arc::new(Mutex::new(0)),
+            ban_manager: Arc::new(Mutex::new(BanManager::new(logger))),
         })
     }
     /// Adds a new user to the database.
@@ -140,18 +103,14 @@ impl NetService {
         let logger_copy = self.logger.clone();
         let connected_clone = self.connected_socket_count.clone();
         let database_clone = self.database.clone();
-        let failed_ips_clone = self.failed_ip_list.clone();
-        let banned_ips_clone = self.banned_ip_list.clone();
-        let accepted_connections_clone = self.accepted_client_connections_to_refresh_lists.clone();
+        let ban_manager_clone = self.ban_manager.clone();
         thread::spawn(move || {
             NetService::process_client_connections(
                 listener_socker_clients,
                 logger_copy,
                 connected_clone,
                 database_clone,
-                failed_ips_clone,
-                banned_ips_clone,
-                accepted_connections_clone,
+                ban_manager_clone,
             );
         });
 
@@ -233,9 +192,7 @@ impl NetService {
         logger: Arc<Mutex<Logger>>,
         connected_count: Arc<Mutex<usize>>,
         database_manager: Arc<Mutex<DatabaseManager>>,
-        failed_ip_list: Arc<Mutex<Vec<FailedIP>>>,
-        banned_ip_list: Arc<Mutex<Vec<BannedIP>>>,
-        accepted_client_connections_count: Arc<Mutex<u64>>,
+        ban_manager: Arc<Mutex<BanManager>>,
     ) {
         loop {
             // Wait for connection.
@@ -268,80 +225,32 @@ impl NetService {
                 ));
             }
 
-            // Refresh failed and banned ip lists if needed.
             {
-                let mut count_guard = accepted_client_connections_count.lock().unwrap();
-                *count_guard += 1;
-                if *count_guard == CONNECTIONS_TO_REFRESH_FAILED_AND_BANNED_LISTS {
-                    *count_guard = 0;
-                    NetService::refresh_failed_and_banned_lists(
-                        &failed_ip_list,
-                        &banned_ip_list,
-                        &logger,
-                    );
+                let mut ban_manager_guard = ban_manager.lock().unwrap();
+
+                ban_manager_guard.refresh_failed_and_banned_lists();
+
+                // Check if this IP is banned.
+                if ban_manager_guard.is_ip_banned(addr.ip()) {
+                    continue;
                 }
             }
 
-            // Check if this IP is banned.
-            let mut banned_list_guard = banned_ip_list.lock().unwrap();
-            let is_banned = banned_list_guard.iter().find(|x| x.ip == addr.ip());
-
-            if is_banned.is_some() {
-                // This IP is banned, see if ban time is over.
-                let banned_ip = is_banned.unwrap();
-                let time_diff = Local::now() - banned_ip.ban_start_time;
-
-                if time_diff.num_minutes() < banned_ip.current_ban_duration_in_min {
-                    logger.lock().unwrap().print_and_log(&format!(
-                        "Banned IP address ({}) attempted to connect. \
-                            Connection was rejected.",
-                        banned_ip.ip.to_string()
-                    ));
-                    continue; // still banned
-                } else {
-                    // Remove from banned ips.
-                    let index_to_remove = banned_list_guard
-                        .iter()
-                        .position(|x| x.ip == addr.ip())
-                        .unwrap();
-                    banned_list_guard.remove(index_to_remove);
-                }
-            } else {
-                // Check if user failed to login before.
-                let mut failed_list_guard = failed_ip_list.lock().unwrap();
-                let failed_before = failed_list_guard.iter().find(|x| x.ip == addr.ip());
-
-                if failed_before.is_some() {
-                    // See if we can remove this ip from failed ips
-                    // if the last failed attempt was too long ago.
-                    let failed_before = failed_before.unwrap();
-                    let time_diff = Local::now() - failed_before.last_attempt_time;
-
-                    if time_diff.num_minutes() >= BAN_TIME_DURATION_IN_MIN {
-                        let index_to_remove =
-                            failed_list_guard.iter().position(|x| x.ip == addr.ip());
-                        failed_list_guard.remove(index_to_remove.unwrap());
-                    }
-                }
-            }
-
-            let logger_copy = logger.clone();
-            let banned_list_clone = banned_ip_list.clone();
-            let failed_list_clone = failed_ip_list.clone();
+            let logger_clone = logger.clone();
             let connected_count_clone = connected_count.clone();
             let database_clone = database_manager.clone();
+            let ban_manager_clone = ban_manager.clone();
 
             let handle = thread::Builder::new()
                 .name(format!("client socket {}:{}", addr.ip(), addr.port()))
                 .spawn(move || {
                     let mut user_service = UserService::new_client(
-                        logger_copy,
+                        logger_clone,
                         socket,
                         addr,
                         connected_count_clone,
                         database_clone,
-                        Some(failed_list_clone),
-                        Some(banned_list_clone),
+                        Some(ban_manager_clone),
                     );
                     user_service.process_client();
                 });
@@ -354,50 +263,5 @@ impl NetService {
                 ));
             }
         }
-    }
-    fn refresh_failed_and_banned_lists(
-        failed_ip_list: &Arc<Mutex<Vec<FailedIP>>>,
-        banned_ip_list: &Arc<Mutex<Vec<BannedIP>>>,
-        logger: &Arc<Mutex<Logger>>,
-    ) {
-        // Refresh failed ips list.
-        let mut _failed_list_len_before = 0;
-        {
-            let mut failed_list_guard = failed_ip_list.lock().unwrap();
-
-            _failed_list_len_before = failed_list_guard.len();
-
-            failed_list_guard.retain(|ip| {
-                let time_diff = Local::now() - ip.last_attempt_time;
-                time_diff.num_minutes() < BAN_TIME_DURATION_IN_MIN
-            });
-        }
-
-        // Refresh banned ips list.
-        let mut _banned_list_len_before = 0;
-        {
-            let mut banned_list_guard = banned_ip_list.lock().unwrap();
-
-            _banned_list_len_before = banned_list_guard.len();
-
-            banned_list_guard.retain(|ip| {
-                let time_diff = Local::now() - ip.ban_start_time;
-                time_diff.num_minutes() < BAN_TIME_DURATION_IN_MIN
-            });
-        }
-
-        logger.lock().unwrap().print_and_log(&format!(
-            "Refreshing failed and banned ip lists to remove old entries:\n\
-            before:\n\
-            - failed ip list size: {}\n\
-            - banned ip list size: {}\n\
-            after:\n\
-            - failed ip list size: {}\n\
-            - banned ip list size: {}.",
-            _failed_list_len_before,
-            _banned_list_len_before,
-            failed_ip_list.lock().unwrap().len(),
-            banned_ip_list.lock().unwrap().len()
-        ));
     }
 }

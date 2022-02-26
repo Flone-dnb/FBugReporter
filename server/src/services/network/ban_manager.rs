@@ -6,18 +6,7 @@ use std::sync::{Arc, Mutex};
 use chrono::{DateTime, Local};
 
 // Custom.
-use crate::services::logger_service::Logger;
-
-/// If a user failed to login more than this value times,
-/// he will be banned.
-/// # Warning
-/// This value should not be zero.
-pub const MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN: u32 = 3;
-/// The amount of time a banned user will have to wait
-/// until he can try to login again.
-/// # Warning
-/// This value should not be zero or negative.
-pub const BAN_TIME_DURATION_IN_MIN: i64 = 5;
+use crate::services::{config_service::ServerConfig, logger_service::Logger};
 
 pub enum AttemptResult {
     Fail { attempts_made: u32 },
@@ -43,27 +32,30 @@ pub struct BannedIP {
     pub ban_start_time: DateTime<Local>,
 }
 pub struct BanManager {
+    pub config: Arc<ServerConfig>,
     failed_ip_list: Mutex<Vec<FailedIP>>,
     banned_ip_list: Mutex<Vec<BannedIP>>,
     logger: Arc<Mutex<Logger>>,
 }
 
 impl BanManager {
-    pub fn new(logger: Arc<Mutex<Logger>>) -> Self {
-        if MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN == 0 {
-            panic!("MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN could not be zero.");
+    pub fn new(logger: Arc<Mutex<Logger>>, config: Arc<ServerConfig>) -> Self {
+        if config.max_allowed_login_attempts == 0 {
+            panic!("max_allowed_login_attempts should not be zero or negative.");
         }
-        if BAN_TIME_DURATION_IN_MIN < 0 {
-            panic!("BAN_TIME_DURATION_IN_MIN could not be zero or negative.");
+        if config.ban_time_duration_in_min <= 0 {
+            panic!("ban_time_duration_in_min should not be zero or negative.");
         }
+
         Self {
             failed_ip_list: Mutex::new(Vec::new()),
             banned_ip_list: Mutex::new(Vec::new()),
+            config,
             logger,
         }
     }
     /// Adds a failed login attempt to the IP.
-    /// If this IP failed more than `MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN`
+    /// If this IP failed more than `max_allowed_login_attempts`
     /// it will be banned and removed from the failed ips list.
     ///
     /// Returns `AttemptResult` that shows the current IP state (failed login / banned).
@@ -80,7 +72,7 @@ impl BanManager {
         // Add current failed attempt.
         failed_attempts_made += 1;
 
-        if failed_attempts_made > MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN {
+        if failed_attempts_made > self.config.max_allowed_login_attempts {
             // Add to banned ips.
             if found_pos.is_some() {
                 // Remove from failed ip list.
@@ -95,7 +87,7 @@ impl BanManager {
 
             self.logger.lock().unwrap().print_and_log(&format!(
                 "{} was banned for {} minute(-s) due to {} failed login attempts.",
-                username, BAN_TIME_DURATION_IN_MIN, failed_attempts_made
+                username, self.config.ban_time_duration_in_min, failed_attempts_made
             ));
 
             AttemptResult::Ban
@@ -113,7 +105,7 @@ impl BanManager {
 
             self.logger.lock().unwrap().print_and_log(&format!(
                 "{} failed to login: {}/{} allowed failed login attempts.",
-                username, failed_attempts_made, MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN
+                username, failed_attempts_made, self.config.max_allowed_login_attempts
             ));
 
             AttemptResult::Fail {
@@ -123,9 +115,9 @@ impl BanManager {
     }
     /// Removes old entries, this means:
     /// - failed IP will be removed only if `last_attempt_time` was made
-    /// `BAN_TIME_DURATION_IN_MIN` ago or longer,
+    /// `ban_time_duration_in_min` ago or longer,
     /// - banned IP will be removed only if `ban_start_time` was
-    /// `BAN_TIME_DURATION_IN_MIN` ago or longer.
+    /// `ban_time_duration_in_min` ago or longer.
     pub fn refresh_failed_and_banned_lists(&mut self) {
         let mut failed_list_guard = self.failed_ip_list.lock().unwrap();
         let mut banned_list_guard = self.banned_ip_list.lock().unwrap();
@@ -135,7 +127,7 @@ impl BanManager {
 
         failed_list_guard.retain(|ip| {
             let time_diff = Local::now() - ip.last_attempt_time;
-            time_diff.num_minutes() < BAN_TIME_DURATION_IN_MIN
+            time_diff.num_minutes() < self.config.ban_time_duration_in_min
         });
 
         // Refresh banned ips list.
@@ -143,7 +135,7 @@ impl BanManager {
 
         banned_list_guard.retain(|ip| {
             let time_diff = Local::now() - ip.ban_start_time;
-            time_diff.num_minutes() < BAN_TIME_DURATION_IN_MIN
+            time_diff.num_minutes() < self.config.ban_time_duration_in_min
         });
 
         // Log if anything changed.
@@ -177,7 +169,7 @@ impl BanManager {
             let banned_ip_index = is_banned.unwrap();
             let time_diff = Local::now() - banned_list_guard[banned_ip_index].ban_start_time;
 
-            if time_diff.num_minutes() < BAN_TIME_DURATION_IN_MIN {
+            if time_diff.num_minutes() < self.config.ban_time_duration_in_min {
                 self.logger.lock().unwrap().print_and_log(&format!(
                     "Banned IP address ({}) attempted to connect. \
                             Connection was rejected.",
@@ -200,7 +192,7 @@ impl BanManager {
                 let failed_index = failed_before.unwrap();
                 let time_diff = Local::now() - failed_list_guard[failed_index].last_attempt_time;
 
-                if time_diff.num_minutes() >= BAN_TIME_DURATION_IN_MIN {
+                if time_diff.num_minutes() >= self.config.ban_time_duration_in_min {
                     failed_list_guard.remove(failed_index);
                 }
             }

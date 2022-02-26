@@ -14,7 +14,7 @@ use crate::services::{
 
 pub struct NetService {
     pub logger: Arc<Mutex<Logger>>,
-    pub server_config: ServerConfig,
+    pub server_config: Arc<ServerConfig>,
     connected_socket_count: Arc<Mutex<usize>>,
     database: Arc<Mutex<DatabaseManager>>,
     ban_manager: Arc<Mutex<BanManager>>,
@@ -26,7 +26,7 @@ impl NetService {
     /// Returns `AppError` if something went wrong
     /// when initializing/connecting to the database.
     pub fn new(logger: Logger) -> Result<Self, AppError> {
-        let config = ServerConfig::new();
+        let config = Arc::new(ServerConfig::new());
 
         let db = DatabaseManager::new();
         if let Err(err) = db {
@@ -36,11 +36,11 @@ impl NetService {
         let logger = Arc::new(Mutex::new(logger));
 
         Ok(Self {
-            server_config: config,
+            server_config: config.clone(),
             logger: logger.clone(),
             connected_socket_count: Arc::new(Mutex::new(0)),
             database: Arc::new(Mutex::new(db.unwrap())),
-            ban_manager: Arc::new(Mutex::new(BanManager::new(logger))),
+            ban_manager: Arc::new(Mutex::new(BanManager::new(logger, config))),
         })
     }
     /// Adds a new user to the database.

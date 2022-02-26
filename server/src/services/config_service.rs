@@ -12,15 +12,26 @@ use super::logger_service::LOG_FILE_NAME;
 use crate::error::AppError;
 
 const RANDOM_PORT_RANGE: Range<u16> = 7000..65535;
+const DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS: u32 = 3;
+const DEFAULT_BAN_TIME_DURATION_IN_MIN: i64 = 5;
 const CONFIG_FILE_NAME: &str = "server_config.ini";
-const CONFIG_SECTION_NAME: &str = "server";
+// --------------- server section start ---------------
+const CONFIG_SERVER_SECTION_NAME: &str = "server";
 const CONFIG_PORT_REPORTER_PARAM: &str = "port_for_reporters";
 const CONFIG_PORT_CLIENT_PARAM: &str = "port_for_clients";
+// --------------- server section end ---------------
+// --------------- login section start ---------------
+const CONFIG_LOGIN_SECTION_NAME: &str = "login";
+const CONFIG_MAX_ALLOWED_LOGIN_ATTEMPTS_PARAM: &str = "max_allowed_login_attempts_until_ban";
+const CONFIG_BAN_TIME_DURATION_IN_MIN: &str = "ban_time_duration_in_min";
+// --------------- login section end ---------------
 
 #[derive(Debug)]
 pub struct ServerConfig {
     pub port_for_reporters: u16,
     pub port_for_clients: u16,
+    pub max_allowed_login_attempts: u32,
+    pub ban_time_duration_in_min: i64,
     pub config_file_path: String,
     pub log_file_path: String,
 }
@@ -68,6 +79,8 @@ impl ServerConfig {
         Self {
             port_for_reporters: ServerConfig::generate_random_port(),
             port_for_clients: ServerConfig::generate_random_port(),
+            max_allowed_login_attempts: DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS,
+            ban_time_duration_in_min: DEFAULT_BAN_TIME_DURATION_IN_MIN,
             config_file_path: ServerConfig::get_config_file_path(),
             log_file_path: ServerConfig::get_log_file_path(),
         }
@@ -77,16 +90,30 @@ impl ServerConfig {
 
         // Port for reporters.
         config.set(
-            CONFIG_SECTION_NAME,
+            CONFIG_SERVER_SECTION_NAME,
             CONFIG_PORT_REPORTER_PARAM,
             Some(self.port_for_reporters.to_string()),
         );
 
         // Port for clients.
         config.set(
-            CONFIG_SECTION_NAME,
+            CONFIG_SERVER_SECTION_NAME,
             CONFIG_PORT_CLIENT_PARAM,
             Some(self.port_for_clients.to_string()),
+        );
+
+        // Max allowed login attempts until ban.
+        config.set(
+            CONFIG_LOGIN_SECTION_NAME,
+            CONFIG_MAX_ALLOWED_LOGIN_ATTEMPTS_PARAM,
+            Some(self.max_allowed_login_attempts.to_string()),
+        );
+
+        // Ban time duration.
+        config.set(
+            CONFIG_LOGIN_SECTION_NAME,
+            CONFIG_BAN_TIME_DURATION_IN_MIN,
+            Some(self.ban_time_duration_in_min.to_string()),
         );
 
         // Write to disk.
@@ -104,7 +131,7 @@ impl ServerConfig {
         let mut some_values_were_empty = false;
 
         // Read port for reporters.
-        let port = config.get(CONFIG_SECTION_NAME, CONFIG_PORT_REPORTER_PARAM);
+        let port = config.get(CONFIG_SERVER_SECTION_NAME, CONFIG_PORT_REPORTER_PARAM);
         if port.is_none() {
             self.port_for_reporters = ServerConfig::generate_random_port();
             some_values_were_empty = true;
@@ -124,7 +151,7 @@ impl ServerConfig {
         }
 
         // Read port for clients.
-        let port = config.get(CONFIG_SECTION_NAME, CONFIG_PORT_CLIENT_PARAM);
+        let port = config.get(CONFIG_SERVER_SECTION_NAME, CONFIG_PORT_CLIENT_PARAM);
         if port.is_none() {
             self.port_for_clients = ServerConfig::generate_random_port();
             some_values_were_empty = true;
@@ -140,6 +167,50 @@ impl ServerConfig {
                 some_values_were_empty = true;
             } else {
                 self.port_for_clients = port.unwrap();
+            }
+        }
+
+        // Read max allowed login attempts until ban.
+        let max_login_attempts = config.get(
+            CONFIG_LOGIN_SECTION_NAME,
+            CONFIG_MAX_ALLOWED_LOGIN_ATTEMPTS_PARAM,
+        );
+        if max_login_attempts.is_none() {
+            self.max_allowed_login_attempts = DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS;
+            some_values_were_empty = true;
+        } else {
+            let max_login_attempts = max_login_attempts.unwrap().parse::<u32>();
+            if let Err(e) = max_login_attempts {
+                println!(
+                    "WARNING: could not parse \"{}\" value, using default value instead (error: {}).",
+                    CONFIG_MAX_ALLOWED_LOGIN_ATTEMPTS_PARAM,
+                    e.to_string()
+                );
+                self.max_allowed_login_attempts = DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS;
+                some_values_were_empty = true;
+            } else {
+                self.max_allowed_login_attempts = max_login_attempts.unwrap();
+            }
+        }
+
+        // Read max allowed login attempts until ban.
+        let ban_time_duration =
+            config.get(CONFIG_LOGIN_SECTION_NAME, CONFIG_BAN_TIME_DURATION_IN_MIN);
+        if ban_time_duration.is_none() {
+            self.ban_time_duration_in_min = DEFAULT_BAN_TIME_DURATION_IN_MIN;
+            some_values_were_empty = true;
+        } else {
+            let ban_time_duration = ban_time_duration.unwrap().parse::<i64>();
+            if let Err(e) = ban_time_duration {
+                println!(
+                    "WARNING: could not parse \"{}\" value, using default value instead (error: {}).",
+                    CONFIG_BAN_TIME_DURATION_IN_MIN,
+                    e.to_string()
+                );
+                self.ban_time_duration_in_min = DEFAULT_BAN_TIME_DURATION_IN_MIN;
+                some_values_were_empty = true;
+            } else {
+                self.ban_time_duration_in_min = ban_time_duration.unwrap();
             }
         }
 

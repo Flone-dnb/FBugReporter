@@ -432,7 +432,14 @@ impl UserService {
                     fail_reason: Some(ClientLoginFailReason::WrongCredentials {
                         result: ClientLoginFailResult::FailedAttempt {
                             failed_attempts_made: attempts_made,
-                            max_failed_attempts: MAX_ALLOWED_FAILED_LOGIN_ATTEMPTS_UNTILL_BAN,
+                            max_failed_attempts: self
+                                .ban_manager
+                                .as_ref()
+                                .unwrap()
+                                .lock()
+                                .unwrap()
+                                .config
+                                .max_allowed_login_attempts,
                         },
                     }),
                 };
@@ -447,7 +454,14 @@ impl UserService {
                     is_ok: false,
                     fail_reason: Some(ClientLoginFailReason::WrongCredentials {
                         result: ClientLoginFailResult::Banned {
-                            ban_time_in_min: BAN_TIME_DURATION_IN_MIN,
+                            ban_time_in_min: self
+                                .ban_manager
+                                .as_ref()
+                                .unwrap()
+                                .lock()
+                                .unwrap()
+                                .config
+                                .ban_time_duration_in_min,
                         },
                     }),
                 };

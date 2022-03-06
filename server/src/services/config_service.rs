@@ -1,5 +1,5 @@
 // Std.
-use std::ops::Range;
+use std::{ops::Range, str::FromStr};
 
 // External.
 use configparser::ini::Ini;
@@ -131,93 +131,89 @@ impl ServerConfig {
         let mut some_values_were_empty = false;
 
         // Read port for reporters.
-        let port = config.get(CONFIG_SERVER_SECTION_NAME, CONFIG_PORT_REPORTER_PARAM);
-        if port.is_none() {
-            self.port_for_reporters = ServerConfig::generate_random_port();
+        if ServerConfig::read_value(
+            config,
+            CONFIG_SERVER_SECTION_NAME,
+            CONFIG_PORT_REPORTER_PARAM,
+            &mut self.port_for_reporters,
+            ServerConfig::generate_random_port(),
+        ) {
             some_values_were_empty = true;
-        } else {
-            let port = port.unwrap().parse::<u16>();
-            if let Err(e) = port {
-                println!(
-                    "WARNING: could not parse \"{}\" value, using random port instead (error: {}).",
-                    CONFIG_PORT_REPORTER_PARAM,
-                    e.to_string()
-                );
-                self.port_for_reporters = ServerConfig::generate_random_port();
-                some_values_were_empty = true;
-            } else {
-                self.port_for_reporters = port.unwrap();
-            }
         }
 
         // Read port for clients.
-        let port = config.get(CONFIG_SERVER_SECTION_NAME, CONFIG_PORT_CLIENT_PARAM);
-        if port.is_none() {
-            self.port_for_clients = ServerConfig::generate_random_port();
+        if ServerConfig::read_value(
+            config,
+            CONFIG_SERVER_SECTION_NAME,
+            CONFIG_PORT_CLIENT_PARAM,
+            &mut self.port_for_clients,
+            ServerConfig::generate_random_port(),
+        ) {
             some_values_were_empty = true;
-        } else {
-            let port = port.unwrap().parse::<u16>();
-            if let Err(e) = port {
-                println!(
-                    "WARNING: could not parse \"{}\" value, using random port instead (error: {}).",
-                    CONFIG_PORT_CLIENT_PARAM,
-                    e.to_string()
-                );
-                self.port_for_clients = ServerConfig::generate_random_port();
-                some_values_were_empty = true;
-            } else {
-                self.port_for_clients = port.unwrap();
-            }
         }
 
         // Read max allowed login attempts until ban.
-        let max_login_attempts = config.get(
+        if ServerConfig::read_value(
+            config,
             CONFIG_LOGIN_SECTION_NAME,
             CONFIG_MAX_ALLOWED_LOGIN_ATTEMPTS_PARAM,
-        );
-        if max_login_attempts.is_none() {
-            self.max_allowed_login_attempts = DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS;
+            &mut self.max_allowed_login_attempts,
+            DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS,
+        ) {
             some_values_were_empty = true;
-        } else {
-            let max_login_attempts = max_login_attempts.unwrap().parse::<u32>();
-            if let Err(e) = max_login_attempts {
-                println!(
-                    "WARNING: could not parse \"{}\" value, using default value instead (error: {}).",
-                    CONFIG_MAX_ALLOWED_LOGIN_ATTEMPTS_PARAM,
-                    e.to_string()
-                );
-                self.max_allowed_login_attempts = DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS;
-                some_values_were_empty = true;
-            } else {
-                self.max_allowed_login_attempts = max_login_attempts.unwrap();
-            }
         }
 
-        // Read max allowed login attempts until ban.
-        let ban_time_duration =
-            config.get(CONFIG_LOGIN_SECTION_NAME, CONFIG_BAN_TIME_DURATION_IN_MIN);
-        if ban_time_duration.is_none() {
-            self.ban_time_duration_in_min = DEFAULT_BAN_TIME_DURATION_IN_MIN;
+        // Read ban time duration.
+        if ServerConfig::read_value(
+            config,
+            CONFIG_LOGIN_SECTION_NAME,
+            CONFIG_BAN_TIME_DURATION_IN_MIN,
+            &mut self.ban_time_duration_in_min,
+            DEFAULT_BAN_TIME_DURATION_IN_MIN,
+        ) {
             some_values_were_empty = true;
-        } else {
-            let ban_time_duration = ban_time_duration.unwrap().parse::<i64>();
-            if let Err(e) = ban_time_duration {
-                println!(
-                    "WARNING: could not parse \"{}\" value, using default value instead (error: {}).",
-                    CONFIG_BAN_TIME_DURATION_IN_MIN,
-                    e.to_string()
-                );
-                self.ban_time_duration_in_min = DEFAULT_BAN_TIME_DURATION_IN_MIN;
-                some_values_were_empty = true;
-            } else {
-                self.ban_time_duration_in_min = ban_time_duration.unwrap();
-            }
         }
 
         // New settings go here.
         // Please, don't forget to use 'some_values_were_empty'.
 
         some_values_were_empty
+    }
+    /// Reads a value from .ini file into `param` parameter.
+    ///
+    /// Returns `true` if the specified key does not exist
+    /// or if parse failed, thus using `default_value` to assign `param`.
+    /// Returns `false` if successfully read a value.
+    fn read_value<T>(
+        config: &Ini,
+        section: &str,
+        key: &str,
+        param: &mut T,
+        default_value: T,
+    ) -> bool
+    where
+        T: FromStr,
+        <T as FromStr>::Err: std::fmt::Display + std::fmt::Debug,
+    {
+        let value = config.get(section, key);
+        if value.is_none() {
+            *param = default_value;
+            true
+        } else {
+            let value = value.unwrap().parse::<T>();
+            if let Err(e) = value {
+                println!(
+                    "WARNING: could not parse \"{}\" value, using default value instead (error: {}).",
+                    key,
+                    e.to_string()
+                );
+                *param = default_value;
+                true
+            } else {
+                *param = value.unwrap();
+                false
+            }
+        }
     }
     fn get_config_file_path() -> String {
         let mut config_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
@@ -238,7 +234,6 @@ impl ServerConfig {
 
         config_path + CONFIG_FILE_NAME
     }
-
     fn get_log_file_path() -> String {
         let mut log_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
 

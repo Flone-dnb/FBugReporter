@@ -21,7 +21,7 @@ use super::net_packets::*;
 use crate::error::AppError;
 use crate::misc::*;
 use crate::services::db_manager::DatabaseManager;
-use crate::services::logger_service::Logger;
+use crate::services::logger_service::*;
 
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
@@ -60,12 +60,15 @@ impl UserService {
         {
             let mut guard = connected_users_count.lock().unwrap();
             *guard += 1;
-            logger.lock().unwrap().print_and_log(&format!(
-                "Accepted connection with {}:{}\n--- [connected: {}] ---",
-                addr.ip(),
-                addr.port(),
-                guard
-            ));
+            logger.lock().unwrap().print_and_log(
+                LogCategory::Info,
+                &format!(
+                    "Accepted connection with {}:{}\n--- [connected: {}] ---",
+                    addr.ip(),
+                    addr.port(),
+                    guard
+                ),
+            );
         }
 
         UserService {
@@ -88,12 +91,15 @@ impl UserService {
         {
             let mut guard = connected_users_count.lock().unwrap();
             *guard += 1;
-            logger.lock().unwrap().print_and_log(&format!(
-                "Accepted connection with {}:{}\n--- [connected: {}] ---",
-                addr.ip(),
-                addr.port(),
-                guard
-            ));
+            logger.lock().unwrap().print_and_log(
+                LogCategory::Info,
+                &format!(
+                    "Accepted connection with {}:{}\n--- [connected: {}] ---",
+                    addr.ip(),
+                    addr.port(),
+                    guard
+                ),
+            );
         }
 
         UserService {
@@ -245,10 +251,13 @@ impl UserService {
                     )));
                 }
 
-                self.logger.lock().unwrap().print_and_log(&format!(
-                    "Received a report from socket {}",
-                    self.socket.peer_addr().unwrap()
-                ));
+                self.logger.lock().unwrap().print_and_log(
+                    LogCategory::Info,
+                    &format!(
+                        "Received a report from socket {}",
+                        self.socket.peer_addr().unwrap()
+                    ),
+                );
 
                 {
                     if let Err(err) = self.database.lock().unwrap().save_report(game_report) {
@@ -267,10 +276,13 @@ impl UserService {
                     }
                 }
 
-                self.logger.lock().unwrap().print_and_log(&format!(
-                    "Saved a report from socket {}",
-                    self.socket.peer_addr().unwrap()
-                ));
+                self.logger.lock().unwrap().print_and_log(
+                    LogCategory::Info,
+                    &format!(
+                        "Saved a report from socket {}",
+                        self.socket.peer_addr().unwrap()
+                    ),
+                );
 
                 // Answer "OK".
                 if let Err(err) = UserService::send_packet(
@@ -386,7 +398,7 @@ impl UserService {
                     self.logger
                         .lock()
                         .unwrap()
-                        .print_and_log(&format!("{} logged in.", &username));
+                        .print_and_log(LogCategory::Info, &format!("{} logged in.", &username));
                 }
 
                 // TODO: if 'need_change_password' is '1', ask user of new password
@@ -976,6 +988,9 @@ impl Drop for UserService {
         *guard -= 1;
         message += &format!("--- [connected: {}] ---", guard);
 
-        self.logger.lock().unwrap().print_and_log(&message);
+        self.logger
+            .lock()
+            .unwrap()
+            .print_and_log(LogCategory::Info, &message);
     }
 }

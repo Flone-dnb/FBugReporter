@@ -8,7 +8,7 @@ use chrono::{DateTime, Local};
 use configparser::ini::Ini;
 
 // Custom.
-use crate::services::{config_service::ServerConfig, logger_service::Logger};
+use crate::services::{config_service::ServerConfig, logger_service::*};
 
 const BAN_FILE_NAME: &str = "banned_ips.ini";
 const BAN_SECTION_NAME: &str = "ban";
@@ -62,10 +62,13 @@ impl BanManager {
         let read_ip_count = this.load_banned_ips();
 
         if read_ip_count > 0 {
-            this.logger.lock().unwrap().print_and_log(&format!(
-                "read {} banned IP(-s) from {}",
-                read_ip_count, BAN_FILE_NAME
-            ));
+            this.logger.lock().unwrap().print_and_log(
+                LogCategory::Info,
+                &format!(
+                    "read {} banned IP(-s) from {}",
+                    read_ip_count, BAN_FILE_NAME
+                ),
+            );
         }
 
         this.refresh_failed_and_banned_lists();
@@ -104,10 +107,13 @@ impl BanManager {
             });
 
             {
-                self.logger.lock().unwrap().print_and_log(&format!(
-                    "{} was banned for {} minute(-s) due to {} failed login attempts.",
-                    username, self.config.ban_time_duration_in_min, failed_attempts_made
-                ));
+                self.logger.lock().unwrap().print_and_log(
+                    LogCategory::Info,
+                    &format!(
+                        "{} was banned for {} minute(-s) due to {} failed login attempts.",
+                        username, self.config.ban_time_duration_in_min, failed_attempts_made
+                    ),
+                );
             }
 
             BanManager::store_banned_ip(banned_ips_guard.last().unwrap(), &self.logger);
@@ -125,10 +131,13 @@ impl BanManager {
                 });
             }
 
-            self.logger.lock().unwrap().print_and_log(&format!(
-                "{} failed to login: {}/{} allowed failed login attempts.",
-                username, failed_attempts_made, self.config.max_allowed_login_attempts
-            ));
+            self.logger.lock().unwrap().print_and_log(
+                LogCategory::Info,
+                &format!(
+                    "{} failed to login: {}/{} allowed failed login attempts.",
+                    username, failed_attempts_made, self.config.max_allowed_login_attempts
+                ),
+            );
 
             AttemptResult::Fail {
                 attempts_made: failed_attempts_made,
@@ -169,19 +178,22 @@ impl BanManager {
         if _failed_list_len_before != failed_list_guard.len()
             || _banned_list_len_before != banned_list_guard.len()
         {
-            self.logger.lock().unwrap().print_and_log(&format!(
-                "Refreshed failed and banned ip lists to remove old entries:\n\
+            self.logger.lock().unwrap().print_and_log(
+                LogCategory::Info,
+                &format!(
+                    "Refreshed failed and banned ip lists to remove old entries:\n\
                     before:\n\
                     - failed ip list size: {}\n\
                     - banned ip list size: {}\n\
                     after:\n\
                     - failed ip list size: {}\n\
                     - banned ip list size: {}.",
-                _failed_list_len_before,
-                _banned_list_len_before,
-                failed_list_guard.len(),
-                banned_list_guard.len()
-            ));
+                    _failed_list_len_before,
+                    _banned_list_len_before,
+                    failed_list_guard.len(),
+                    banned_list_guard.len()
+                ),
+            );
         }
     }
     /// Checks if the specified IP is in the ban list.
@@ -197,11 +209,14 @@ impl BanManager {
             let time_diff = Local::now() - banned_list_guard[banned_ip_index].ban_start_time;
 
             if time_diff.num_minutes() < self.config.ban_time_duration_in_min {
-                self.logger.lock().unwrap().print_and_log(&format!(
-                    "Banned IP address ({}) attempted to connect. \
+                self.logger.lock().unwrap().print_and_log(
+                    LogCategory::Info,
+                    &format!(
+                        "Banned IP address ({}) attempted to connect. \
                             Connection was rejected.",
-                    ip.to_string()
-                ));
+                        ip.to_string()
+                    ),
+                );
                 return true; // still banned
             } else {
                 // Remove from banned ips.
@@ -267,11 +282,14 @@ impl BanManager {
             // Try parse IP.
             let ip = IpAddr::from_str(key);
             if let Err(e) = ip {
-                self.logger.lock().unwrap().print_and_log(&format!(
-                    "WARNING: failed to parse banned ip '{}', error: {}",
-                    key,
-                    e.to_string()
-                ));
+                self.logger.lock().unwrap().print_and_log(
+                    LogCategory::Warning,
+                    &format!(
+                        "failed to parse banned ip '{}', error: {}",
+                        key,
+                        e.to_string()
+                    ),
+                );
                 continue;
             }
             let ip = ip.unwrap();
@@ -279,11 +297,14 @@ impl BanManager {
             // Try parse datetime.
             let datetime = DateTime::<Local>::from_str(value.as_ref().unwrap());
             if let Err(e) = datetime {
-                self.logger.lock().unwrap().print_and_log(&format!(
-                    "WARNING: failed to parse datetime '{}', error: {}",
-                    value.as_ref().unwrap(),
-                    e.to_string()
-                ));
+                self.logger.lock().unwrap().print_and_log(
+                    LogCategory::Warning,
+                    &format!(
+                        "failed to parse datetime '{}', error: {}",
+                        value.as_ref().unwrap(),
+                        e.to_string()
+                    ),
+                );
                 continue;
             }
             let datetime = datetime.unwrap();
@@ -309,11 +330,14 @@ impl BanManager {
             Some(ip.ban_start_time.to_string()),
         );
         if let Err(e) = config.write(BAN_FILE_NAME) {
-            logger.lock().unwrap().print_and_log(&format!(
-                "failed to write banned ip {} to file, error: {}",
-                &ip.ip.to_string(),
-                e.to_string()
-            ));
+            logger.lock().unwrap().print_and_log(
+                LogCategory::Error,
+                &format!(
+                    "failed to write banned ip {} to file, error: {}",
+                    &ip.ip.to_string(),
+                    e.to_string()
+                ),
+            );
         }
     }
     /// Removes the banned IP from the .ini file.
@@ -321,30 +345,39 @@ impl BanManager {
         let mut config = Ini::new();
         let map = config.load(BAN_FILE_NAME);
         if map.is_err() {
-            logger.lock().unwrap().print_and_log(&format!(
-                "trying to remove banned ip {} from the {} file but this file does not exist.",
-                &ip.ip.to_string(),
-                BAN_FILE_NAME
-            ));
+            logger.lock().unwrap().print_and_log(
+                LogCategory::Warning,
+                &format!(
+                    "trying to remove banned ip {} from the {} file but this file does not exist.",
+                    &ip.ip.to_string(),
+                    BAN_FILE_NAME
+                ),
+            );
             return;
         }
 
         if config.remove_key(BAN_SECTION_NAME, &ip.ip.to_string()) == None {
-            logger.lock().unwrap().print_and_log(&format!(
-                "trying to remove banned ip {} from the {} file but this entry does not exist.",
-                &ip.ip.to_string(),
-                BAN_FILE_NAME
-            ));
+            logger.lock().unwrap().print_and_log(
+                LogCategory::Warning,
+                &format!(
+                    "trying to remove banned ip {} from the {} file but this entry does not exist.",
+                    &ip.ip.to_string(),
+                    BAN_FILE_NAME
+                ),
+            );
             return;
         }
 
         if let Err(e) = config.write(BAN_FILE_NAME) {
-            logger.lock().unwrap().print_and_log(&format!(
-                "failed to update file {} after removing the banned ip {}, error: {}.",
-                BAN_FILE_NAME,
-                &ip.ip.to_string(),
-                e.to_string()
-            ));
+            logger.lock().unwrap().print_and_log(
+                LogCategory::Error,
+                &format!(
+                    "failed to update file {} after removing the banned ip {}, error: {}.",
+                    BAN_FILE_NAME,
+                    &ip.ip.to_string(),
+                    e.to_string()
+                ),
+            );
         }
     }
 }

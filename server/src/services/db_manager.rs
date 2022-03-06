@@ -245,10 +245,6 @@ impl DatabaseManager {
         let row = rows.next().unwrap();
 
         if row.is_none() {
-            println!(
-                "INFO: No table \"{}\" was found in database, creating a new table.",
-                REPORT_TABLE_NAME
-            );
             // Create this table.
             let result = connection.execute(
                 &format!(
@@ -296,10 +292,6 @@ impl DatabaseManager {
         let row = rows.next().unwrap();
 
         if row.is_none() {
-            println!(
-                "INFO: No table \"{}\" was found in database, creating a new table.\n",
-                USER_TABLE_NAME
-            );
             // Create this table.
             let result = connection.execute(
                 // password = hash(salt + hash(password))

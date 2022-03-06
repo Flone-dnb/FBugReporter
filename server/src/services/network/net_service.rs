@@ -8,7 +8,7 @@ use crate::error::AppError;
 use crate::services::{
     config_service::ServerConfig,
     db_manager::DatabaseManager,
-    logger_service::Logger,
+    logger_service::*,
     network::{ban_manager::BanManager, user_service::UserService},
 };
 
@@ -57,19 +57,25 @@ impl NetService {
     }
     pub fn start(&mut self) {
         {
-            self.logger.lock().unwrap().print_and_log("Starting...");
+            self.logger
+                .lock()
+                .unwrap()
+                .print_and_log(LogCategory::Info, "Starting...");
         }
 
         // Create socket for reporters.
         let listener_socker_reporters =
             TcpListener::bind(format!("0.0.0.0:{}", self.server_config.port_for_reporters));
         if let Err(ref e) = listener_socker_reporters {
-            self.logger.lock().unwrap().print_and_log(&format!(
-                "An error occurred at [{}, {}]: {:?}\n\n",
-                file!(),
-                line!(),
-                e
-            ));
+            self.logger.lock().unwrap().print_and_log(
+                LogCategory::Error,
+                &format!(
+                    "An error occurred at [{}, {}]: {:?}\n\n",
+                    file!(),
+                    line!(),
+                    e
+                ),
+            );
         }
         let listener_socker_reporters = listener_socker_reporters.unwrap();
 
@@ -77,12 +83,15 @@ impl NetService {
         let listener_socker_clients =
             TcpListener::bind(format!("0.0.0.0:{}", self.server_config.port_for_clients));
         if let Err(ref e) = listener_socker_clients {
-            self.logger.lock().unwrap().print_and_log(&format!(
-                "An error occurred at [{}, {}]: {:?}\n\n",
-                file!(),
-                line!(),
-                e
-            ));
+            self.logger.lock().unwrap().print_and_log(
+                LogCategory::Error,
+                &format!(
+                    "An error occurred at [{}, {}]: {:?}\n\n",
+                    file!(),
+                    line!(),
+                    e
+                ),
+            );
         }
         let listener_socker_clients = listener_socker_clients.unwrap();
 
@@ -115,14 +124,20 @@ impl NetService {
         });
 
         let logger_guard = self.logger.lock().unwrap();
-        logger_guard.print_and_log(&format!(
-            "Ready to accept client connections on port {}",
-            self.server_config.port_for_clients
-        ));
-        logger_guard.print_and_log(&format!(
-            "Ready to accept reporter connections on port {}",
-            self.server_config.port_for_reporters
-        ));
+        logger_guard.print_and_log(
+            LogCategory::Info,
+            &format!(
+                "Ready to accept client connections on port {}",
+                self.server_config.port_for_clients
+            ),
+        );
+        logger_guard.print_and_log(
+            LogCategory::Info,
+            &format!(
+                "Ready to accept reporter connections on port {}",
+                self.server_config.port_for_reporters
+            ),
+        );
     }
     fn process_reporter_connections(
         listener_socket: TcpListener,
@@ -134,31 +149,40 @@ impl NetService {
             // Wait for connection.
             let accept_result = listener_socket.accept();
             if let Err(ref e) = accept_result {
-                logger.lock().unwrap().print_and_log(&format!(
-                    "An error occurred at [{}, {}]: {:?}\n\n",
-                    file!(),
-                    line!(),
-                    e
-                ));
+                logger.lock().unwrap().print_and_log(
+                    LogCategory::Error,
+                    &format!(
+                        "An error occurred at [{}, {}]: {:?}\n\n",
+                        file!(),
+                        line!(),
+                        e
+                    ),
+                );
             }
 
             let (socket, addr) = accept_result.unwrap();
 
             if let Err(e) = socket.set_nodelay(true) {
-                logger.lock().unwrap().print_and_log(&format!(
-                    "An error occurred at [{}, {}]: {:?}\n\n",
-                    file!(),
-                    line!(),
-                    e
-                ));
+                logger.lock().unwrap().print_and_log(
+                    LogCategory::Error,
+                    &format!(
+                        "An error occurred at [{}, {}]: {:?}\n\n",
+                        file!(),
+                        line!(),
+                        e
+                    ),
+                );
             }
             if let Err(e) = socket.set_nonblocking(true) {
-                logger.lock().unwrap().print_and_log(&format!(
-                    "An error occurred at [{}, {}]: {:?}\n\n",
-                    file!(),
-                    line!(),
-                    e
-                ));
+                logger.lock().unwrap().print_and_log(
+                    LogCategory::Error,
+                    &format!(
+                        "An error occurred at [{}, {}]: {:?}\n\n",
+                        file!(),
+                        line!(),
+                        e
+                    ),
+                );
             }
 
             let logger_copy = logger.clone();
@@ -178,12 +202,15 @@ impl NetService {
                     user_service.process_reporter();
                 });
             if let Err(ref e) = handle {
-                logger.lock().unwrap().print_and_log(&format!(
-                    "An error occurred at [{}, {}]: {:?}\n\n",
-                    file!(),
-                    line!(),
-                    e
-                ));
+                logger.lock().unwrap().print_and_log(
+                    LogCategory::Error,
+                    &format!(
+                        "An error occurred at [{}, {}]: {:?}\n\n",
+                        file!(),
+                        line!(),
+                        e
+                    ),
+                );
             }
         }
     }
@@ -198,31 +225,40 @@ impl NetService {
             // Wait for connection.
             let accept_result = listener_socket.accept();
             if let Err(ref e) = accept_result {
-                logger.lock().unwrap().print_and_log(&format!(
-                    "An error occurred at [{}, {}]: {:?}\n\n",
-                    file!(),
-                    line!(),
-                    e
-                ));
+                logger.lock().unwrap().print_and_log(
+                    LogCategory::Error,
+                    &format!(
+                        "An error occurred at [{}, {}]: {:?}\n\n",
+                        file!(),
+                        line!(),
+                        e
+                    ),
+                );
             }
 
             let (socket, addr) = accept_result.unwrap();
 
             if let Err(e) = socket.set_nodelay(true) {
-                logger.lock().unwrap().print_and_log(&format!(
-                    "An error occurred at [{}, {}]: {:?}\n\n",
-                    file!(),
-                    line!(),
-                    e
-                ));
+                logger.lock().unwrap().print_and_log(
+                    LogCategory::Error,
+                    &format!(
+                        "An error occurred at [{}, {}]: {:?}\n\n",
+                        file!(),
+                        line!(),
+                        e
+                    ),
+                );
             }
             if let Err(e) = socket.set_nonblocking(true) {
-                logger.lock().unwrap().print_and_log(&format!(
-                    "An error occurred at [{}, {}]: {:?}\n\n",
-                    file!(),
-                    line!(),
-                    e
-                ));
+                logger.lock().unwrap().print_and_log(
+                    LogCategory::Error,
+                    &format!(
+                        "An error occurred at [{}, {}]: {:?}\n\n",
+                        file!(),
+                        line!(),
+                        e
+                    ),
+                );
             }
 
             {
@@ -255,12 +291,15 @@ impl NetService {
                     user_service.process_client();
                 });
             if let Err(ref e) = handle {
-                logger.lock().unwrap().print_and_log(&format!(
-                    "An error occurred at [{}, {}]: {:?}\n\n",
-                    file!(),
-                    line!(),
-                    e
-                ));
+                logger.lock().unwrap().print_and_log(
+                    LogCategory::Error,
+                    &format!(
+                        "An error occurred at [{}, {}]: {:?}\n\n",
+                        file!(),
+                        line!(),
+                        e
+                    ),
+                );
             }
         }
     }

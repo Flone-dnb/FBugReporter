@@ -76,9 +76,11 @@ impl ServerConfig {
         server_config
     }
     fn default() -> Self {
+        let port_for_reporters = ServerConfig::generate_random_port(0);
+        let port_for_clients = ServerConfig::generate_random_port(port_for_reporters);
         Self {
-            port_for_reporters: ServerConfig::generate_random_port(),
-            port_for_clients: ServerConfig::generate_random_port(),
+            port_for_reporters,
+            port_for_clients,
             max_allowed_login_attempts: DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS,
             ban_time_duration_in_min: DEFAULT_BAN_TIME_DURATION_IN_MIN,
             config_file_path: ServerConfig::get_config_file_path(),
@@ -136,7 +138,7 @@ impl ServerConfig {
             CONFIG_SERVER_SECTION_NAME,
             CONFIG_PORT_REPORTER_PARAM,
             &mut self.port_for_reporters,
-            ServerConfig::generate_random_port(),
+            ServerConfig::generate_random_port(0),
         ) {
             some_values_were_empty = true;
         }
@@ -147,7 +149,7 @@ impl ServerConfig {
             CONFIG_SERVER_SECTION_NAME,
             CONFIG_PORT_CLIENT_PARAM,
             &mut self.port_for_clients,
-            ServerConfig::generate_random_port(),
+            ServerConfig::generate_random_port(self.port_for_reporters),
         ) {
             some_values_were_empty = true;
         }
@@ -253,8 +255,14 @@ impl ServerConfig {
 
         log_path + LOG_FILE_NAME
     }
-    fn generate_random_port() -> u16 {
+    fn generate_random_port(exclude_port: u16) -> u16 {
         let mut rng = rand::thread_rng();
-        rng.gen_range(RANDOM_PORT_RANGE)
+
+        loop {
+            let port = rng.gen_range(RANDOM_PORT_RANGE);
+            if port != exclude_port {
+                return port;
+            }
+        }
     }
 }

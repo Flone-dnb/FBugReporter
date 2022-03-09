@@ -46,9 +46,19 @@ impl DatabaseManager {
     }
     /// Adds a new user to the database.
     ///
-    /// On success returns user's password.
+    /// If a user with the given username already exists, returns empty string,
+    /// otherwise returns new user's password.
     /// On failure returns error description via `AppError`.
     pub fn add_user(&self, username: &str) -> Result<String, AppError> {
+        let result = self.is_user_exists(username);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let exists = result.unwrap();
+        if exists {
+            return Ok(String::new());
+        }
+
         let datetime = Local::now();
 
         // Generate password and salt.
@@ -120,27 +130,12 @@ impl DatabaseManager {
     /// `Ok(false)` if the user was not found.
     /// On failure returns error description via `AppError`.
     pub fn remove_user(&self, username: &str) -> Result<bool, AppError> {
-        // See if this user exists.
-        let mut stmt = self
-            .connection
-            .prepare(&format!(
-                "SELECT id FROM {} WHERE username='{}'",
-                USER_TABLE_NAME, username
-            ))
-            .unwrap();
-        let result = stmt.query([]);
+        let result = self.is_user_exists(username);
         if let Err(e) = result {
             return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
-
-        let mut rows = result.unwrap();
-
-        let row = rows.next();
-        if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
-        }
-        let row = row.unwrap();
-        if row.is_none() {
+        let exists = result.unwrap();
+        if exists == false {
             return Ok(false);
         }
 
@@ -272,6 +267,36 @@ impl DatabaseManager {
         }
 
         Ok(())
+    }
+    /// Check if a given user exists in the database.
+    ///
+    /// Returns `Ok(true)` if the user exists, `Ok(false)` if not.
+    /// On failure returns `AppError`.
+    fn is_user_exists(&self, username: &str) -> Result<bool, AppError> {
+        let mut stmt = self
+            .connection
+            .prepare(&format!(
+                "SELECT id FROM {} WHERE username='{}'",
+                USER_TABLE_NAME, username
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+
+        let row = rows.next();
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let row = row.unwrap();
+        if row.is_none() {
+            return Ok(false);
+        }
+
+        Ok(true)
     }
     fn create_report_table_if_not_found(connection: &mut Connection) -> Result<(), AppError> {
         // Check if table exists.

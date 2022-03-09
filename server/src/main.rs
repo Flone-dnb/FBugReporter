@@ -70,11 +70,18 @@ fn main() {
                 if let Err(app_error) = result {
                     panic!("{} at [{}, {}]", app_error.to_string(), file!(), line!());
                 } else {
-                    println!(
-                        "New user \"{}\" was registered, user's password is \"{}\".",
-                        username_str,
-                        result.unwrap()
-                    );
+                    let password = result.unwrap();
+                    if password.is_empty() {
+                        println!(
+                            "A user with the username \"{}\" already exists in the database.",
+                            username_str,
+                        );
+                    } else {
+                        println!(
+                            "New user \"{}\" was registered, user's password is \"{}\".",
+                            username_str, password
+                        );
+                    }
                 }
             }
         } else if input.contains("remove-user ") {

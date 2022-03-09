@@ -49,6 +49,7 @@ fn main() {
             println!("\ncommands:");
             println!("start - starts the server with the current configuration");
             println!("add-user <username> - adds a new user");
+            println!("remove-user <username> - removes a user");
             println!("config - show the current server configuration");
             println!("exit - exit the application");
         } else if input == "start" {
@@ -73,6 +74,64 @@ fn main() {
                         "New user \"{}\" was registered, user's password is \"{}\".",
                         username_str,
                         result.unwrap()
+                    );
+                }
+            }
+        } else if input.contains("remove-user ") {
+            let username_str: String = input
+                .chars()
+                .take(0)
+                .chain(input.chars().skip("remove-user ".chars().count()))
+                .collect();
+
+            if username_str.is_empty() {
+                println!("username is empty");
+            } else {
+                let remove_user_confirm_string = format!("remove user {}", &username_str);
+                println!(
+                    "Please, confirm the action, type: \"{}\"",
+                    remove_user_confirm_string
+                );
+
+                io::stdout().flush().ok().expect("could not flush stdout");
+                io::stdin()
+                    .read_line(&mut input)
+                    .expect("unable to read user input");
+
+                input.pop(); // pop '\n'
+                if cfg!(windows) {
+                    input.pop(); // pop '\r'
+                }
+
+                input = String::from(
+                    input
+                        .strip_prefix(&format!("remove-user {}", &username_str))
+                        .unwrap(),
+                );
+
+                if input == remove_user_confirm_string {
+                    let result = net_service.remove_user(&username_str);
+                    if let Err(app_error) = result {
+                        panic!("{} at [{}, {}]", app_error.to_string(), file!(), line!());
+                    } else {
+                        let result = result.unwrap();
+
+                        if result {
+                            println!(
+                                "The user \"{}\" was removed from the database.",
+                                username_str
+                            );
+                        } else {
+                            println!(
+                                "A user with the username \"{}\" was not found in the database.",
+                                username_str
+                            );
+                        }
+                    }
+                } else {
+                    println!(
+                        "expected: {}\nreceived: {}",
+                        remove_user_confirm_string, input
                     );
                 }
             }

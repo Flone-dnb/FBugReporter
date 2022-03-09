@@ -55,6 +55,19 @@ impl NetService {
             return Ok(result.unwrap());
         }
     }
+    /// Removes the user from the database.
+    ///
+    /// Returns `Ok(true)` if the user was found and removed,
+    /// `Ok(false)` if the user was not found.
+    /// On failure returns error description via `AppError`.
+    pub fn remove_user(&mut self, username: &str) -> Result<bool, AppError> {
+        let result = self.database.lock().unwrap().remove_user(username);
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        Ok(result.unwrap())
+    }
     pub fn start(&mut self) {
         {
             self.logger

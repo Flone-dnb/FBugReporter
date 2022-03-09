@@ -114,6 +114,51 @@ impl DatabaseManager {
 
         Ok(plaintext_password)
     }
+    /// Removes the user from the database.
+    ///
+    /// Returns `Ok(true)` if the user was found and removed,
+    /// `Ok(false)` if the user was not found.
+    /// On failure returns error description via `AppError`.
+    pub fn remove_user(&self, username: &str) -> Result<bool, AppError> {
+        // See if this user exists.
+        let mut stmt = self
+            .connection
+            .prepare(&format!(
+                "SELECT id FROM {} WHERE username='{}'",
+                USER_TABLE_NAME, username
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+
+        let row = rows.next();
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let row = row.unwrap();
+        if row.is_none() {
+            return Ok(false);
+        }
+
+        // Remove user.
+        if let Err(e) = self.connection.execute(
+            // password = hash(salt + hash(password))
+            &format!(
+                "DELETE FROM {}
+                WHERE username = '{}'",
+                USER_TABLE_NAME, username
+            ),
+            params![],
+        ) {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        Ok(true)
+    }
     /// Get password and salt of a user.
     ///
     /// If the user is not found returned `Ok` values will be empty.

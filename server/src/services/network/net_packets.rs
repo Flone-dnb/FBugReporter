@@ -39,6 +39,7 @@ pub enum ClientLoginFailReason {
     // should be exactly same as client's enum
     WrongProtocol { server_protocol: u16 },
     WrongCredentials { result: ClientLoginFailResult },
+    NeedFirstPassword, // user just registered, we are waiting for a new password to set
 }
 
 #[derive(Serialize, Deserialize)]
@@ -48,6 +49,12 @@ pub enum InClientPacket {
         client_net_protocol: u16,
         username: String,
         password: Vec<u8>,
+    },
+    ClientSetFirstPassword {
+        client_net_protocol: u16,
+        username: String,
+        old_password: Vec<u8>,
+        new_password: Vec<u8>,
     },
 }
 

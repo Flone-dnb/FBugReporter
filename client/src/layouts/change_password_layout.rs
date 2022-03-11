@@ -5,7 +5,6 @@ use druid::{Lens, LensExt, TextAlignment, WidgetExt};
 
 // Custom.
 use crate::services::{
-    config_service::ConfigService,
     net_packets::*,
     net_service::{ConnectResult, NETWORK_PROTOCOL_VERSION},
 };
@@ -14,32 +13,28 @@ use crate::{ApplicationState, Layout};
 // Layout customization.
 const WIDTH_PADDING: f64 = 0.25;
 const LEFT_SIDE_SIZE: f64 = 0.5;
-const RIGHT_SIDE_SIZE: f64 = 1.0;
+const RIGHT_SIDE_SIZE: f64 = 0.8;
 const TOP_PADDING: f64 = 0.5;
 const BOTTOM_PADDING: f64 = 0.75;
-const ROW_SPACING: f64 = 0.25;
+const ROW_SPACING: f64 = 0.3;
 const BUTTONS_WIDTH_PADDING: f64 = 1.0;
 const BUTTON_HEIGHT: f64 = 0.3;
 const TEXT_SIZE: f64 = 20.0;
 
 #[derive(Clone, Data, Lens)]
-pub struct ConnectLayout {
-    pub server: String,
-    pub port: String,
-    pub username: String,
-    pub password: String,
+pub struct ChangePasswordLayout {
+    pub old_password: String,
+    pub new_password: String,
+    pub new_password_repeat: String,
     connect_error: String,
 }
 
-impl ConnectLayout {
+impl ChangePasswordLayout {
     pub fn new() -> Self {
-        let config_file = ConfigService::new();
-
         Self {
-            server: config_file.server,
-            port: config_file.port,
-            username: config_file.username,
-            password: String::new(),
+            old_password: String::new(),
+            new_password: String::new(),
+            new_password_repeat: String::new(),
             connect_error: String::new(),
         }
     }
@@ -48,6 +43,8 @@ impl ConnectLayout {
             .main_axis_alignment(MainAxisAlignment::Center)
             .must_fill_main_axis(true)
             .with_flex_child(SizedBox::empty().expand(), TOP_PADDING)
+            .with_child(Label::new("Set New Password").with_text_size(TEXT_SIZE))
+            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
             .with_flex_child(
                 Flex::row()
                     .main_axis_alignment(MainAxisAlignment::Center)
@@ -56,22 +53,23 @@ impl ConnectLayout {
                     .with_flex_child(
                         Flex::column()
                             .with_flex_child(
-                                Label::new("Server:").with_text_size(TEXT_SIZE).expand(),
+                                Label::new("Old Password:")
+                                    .with_text_size(TEXT_SIZE)
+                                    .expand(),
                                 1.0,
                             )
                             .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
                             .with_flex_child(
-                                Label::new("Port:").with_text_size(TEXT_SIZE).expand(),
+                                Label::new("New Password:")
+                                    .with_text_size(TEXT_SIZE)
+                                    .expand(),
                                 1.0,
                             )
                             .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
                             .with_flex_child(
-                                Label::new("Username:").with_text_size(TEXT_SIZE).expand(),
-                                1.0,
-                            )
-                            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
-                            .with_flex_child(
-                                Label::new("Password:").with_text_size(TEXT_SIZE).expand(),
+                                Label::new("Repeat New Password:")
+                                    .with_text_size(TEXT_SIZE)
+                                    .expand(),
                                 1.0,
                             ),
                         LEFT_SIDE_SIZE,
@@ -82,10 +80,10 @@ impl ConnectLayout {
                             .with_flex_child(
                                 TextBox::new()
                                     .with_text_size(TEXT_SIZE)
-                                    .with_placeholder("Server's address or a domain name...")
+                                    .with_placeholder("Your old password...")
                                     .lens(
-                                        ApplicationState::connect_layout
-                                            .then(ConnectLayout::server),
+                                        ApplicationState::change_password_layout
+                                            .then(ChangePasswordLayout::old_password),
                                     )
                                     .expand(),
                                 1.0,
@@ -94,9 +92,10 @@ impl ConnectLayout {
                             .with_flex_child(
                                 TextBox::new()
                                     .with_text_size(TEXT_SIZE)
-                                    .with_placeholder("Server's port...")
+                                    .with_placeholder("Your new password...")
                                     .lens(
-                                        ApplicationState::connect_layout.then(ConnectLayout::port),
+                                        ApplicationState::change_password_layout
+                                            .then(ChangePasswordLayout::new_password),
                                     )
                                     .expand(),
                                 1.0,
@@ -105,22 +104,10 @@ impl ConnectLayout {
                             .with_flex_child(
                                 TextBox::new()
                                     .with_text_size(TEXT_SIZE)
-                                    .with_placeholder("Your username...")
+                                    .with_placeholder("Repeat your new password...")
                                     .lens(
-                                        ApplicationState::connect_layout
-                                            .then(ConnectLayout::username),
-                                    )
-                                    .expand(),
-                                1.0,
-                            )
-                            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
-                            .with_flex_child(
-                                TextBox::new()
-                                    .with_text_size(TEXT_SIZE)
-                                    .with_placeholder("Your password...")
-                                    .lens(
-                                        ApplicationState::connect_layout
-                                            .then(ConnectLayout::password),
+                                        ApplicationState::change_password_layout
+                                            .then(ChangePasswordLayout::new_password_repeat),
                                     )
                                     .expand(),
                                 1.0,
@@ -133,7 +120,7 @@ impl ConnectLayout {
             .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
             .with_child(
                 Label::new(|data: &ApplicationState, _env: &Env| {
-                    data.connect_layout.connect_error.clone()
+                    data.change_password_layout.connect_error.clone()
                 })
                 .with_text_size(TEXT_SIZE)
                 .with_text_alignment(TextAlignment::Center)
@@ -146,23 +133,8 @@ impl ConnectLayout {
                     .must_fill_main_axis(true)
                     .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING)
                     .with_flex_child(
-                        Button::from_label(Label::new("Connect").with_text_size(TEXT_SIZE))
-                            .on_click(ConnectLayout::on_connect_clicked)
-                            .expand(),
-                        1.0,
-                    )
-                    .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING),
-                BUTTON_HEIGHT,
-            )
-            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
-            .with_flex_child(
-                Flex::row()
-                    .main_axis_alignment(MainAxisAlignment::Center)
-                    .must_fill_main_axis(true)
-                    .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING)
-                    .with_flex_child(
-                        Button::from_label(Label::new("About").with_text_size(TEXT_SIZE))
-                            .on_click(ConnectLayout::on_settings_clicked)
+                        Button::from_label(Label::new("Change Password").with_text_size(TEXT_SIZE))
+                            .on_click(ChangePasswordLayout::on_change_password_clicked)
                             .expand(),
                         1.0,
                     )
@@ -171,33 +143,23 @@ impl ConnectLayout {
             )
             .with_flex_child(SizedBox::empty().expand(), BOTTOM_PADDING)
     }
-    fn on_connect_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
-        // Check if all essential fields are filled.
-        if data.connect_layout.server.is_empty()
-            || data.connect_layout.port.is_empty()
-            || data.connect_layout.password.is_empty()
+    fn on_change_password_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
+        if data.change_password_layout.new_password
+            != data.change_password_layout.new_password_repeat
         {
-            data.connect_layout.connect_error = String::from("All fields must be filled.");
+            data.change_password_layout.connect_error = String::from("New passwords do not match.");
             return;
         }
-
-        // Try to parse the port string.
-        let port = data.connect_layout.port.parse::<u16>();
-        if port.is_err() {
-            data.connect_layout.port = String::new();
-            data.connect_layout.connect_error = String::from("Could not parse port value.");
-            return;
-        }
-        let port = port.unwrap();
 
         // Try to connect.
         let result = data.net_service.lock().unwrap().connect(
             data.connect_layout.server.clone(),
-            port,
+            data.connect_layout.port.parse::<u16>().unwrap(),
             data.connect_layout.username.clone(),
-            data.connect_layout.password.clone(),
-            None,
+            data.change_password_layout.old_password.clone(),
+            Some(data.change_password_layout.new_password.clone()),
         );
+
         match result {
             ConnectResult::InternalError(app_error) => {
                 println!("{}", app_error);
@@ -205,7 +167,7 @@ impl ConnectLayout {
                     .lock()
                     .unwrap()
                     .log(&app_error.to_string());
-                data.connect_layout.connect_error = app_error.to_string();
+                data.change_password_layout.connect_error = app_error.to_string();
             }
             ConnectResult::ConnectFailed(reason) => {
                 let mut _message = String::new();
@@ -251,14 +213,11 @@ impl ConnectLayout {
 
                 println!("{}", _message);
                 data.logger_service.lock().unwrap().log(&_message);
-                data.connect_layout.connect_error = _message;
+                data.change_password_layout.connect_error = _message;
             }
             ConnectResult::Connected => {
                 data.current_layout = Layout::Main;
             }
         }
-    }
-    fn on_settings_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
-        data.current_layout = Layout::Settings;
     }
 }

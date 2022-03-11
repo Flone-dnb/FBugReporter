@@ -13,9 +13,10 @@ use druid::{
 use rdev::display_size;
 
 // Custom.
-use layouts::connect_layout::ConnectLayout;
-use layouts::main_layout::MainLayout;
-use layouts::settings_layout::SettingsLayout;
+use layouts::{
+    change_password_layout::ChangePasswordLayout, connect_layout::ConnectLayout,
+    main_layout::MainLayout, settings_layout::SettingsLayout,
+};
 use misc::custom_data_button_controller::CUSTOM_DATA_BUTTON_CLICKED;
 use services::logger_service::LoggerService;
 use services::net_service::NetService;
@@ -32,7 +33,9 @@ pub enum Layout {
     Connect,
     Settings,
     Main,
+    ChangePassword,
 }
+
 #[derive(Clone, Data, Lens)] // Clone is required by `AppDelegate`.
 pub struct ApplicationState {
     current_layout: Layout,
@@ -41,6 +44,7 @@ pub struct ApplicationState {
     connect_layout: ConnectLayout,
     main_layout: MainLayout,
     settings_layout: SettingsLayout,
+    change_password_layout: ChangePasswordLayout,
 
     // services
     #[data(ignore)]
@@ -75,6 +79,7 @@ pub fn main() {
         connect_layout: ConnectLayout::new(),
         main_layout: MainLayout::new(),
         settings_layout: SettingsLayout::new(),
+        change_password_layout: ChangePasswordLayout::new(),
         net_service: Arc::new(Mutex::new(NetService::new())),
         logger_service: Arc::new(Mutex::new(LoggerService::new())),
         theme: ApplicationTheme::new(),
@@ -136,9 +141,11 @@ fn build_root_widget() -> impl Widget<ApplicationState> {
             Layout::Connect => Box::new(ConnectLayout::build_ui()),
             Layout::Settings => Box::new(SettingsLayout::build_ui()),
             Layout::Main => Box::new(MainLayout::build_ui()),
+            Layout::ChangePassword => Box::new(ChangePasswordLayout::build_ui()),
         },
     )
 }
+
 struct MyDelegate;
 
 impl AppDelegate<ApplicationState> for MyDelegate {
@@ -147,7 +154,7 @@ impl AppDelegate<ApplicationState> for MyDelegate {
         _ctx: &mut DelegateCtx,
         _target: Target,
         cmd: &Command,
-        data: &mut ApplicationState,
+        _data: &mut ApplicationState,
         _env: &Env,
     ) -> Handled {
         if let Some(button_data) = cmd.get(CUSTOM_DATA_BUTTON_CLICKED) {

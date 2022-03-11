@@ -315,103 +315,187 @@ impl UserService {
             InClientPacket::ClientLogin {
                 client_net_protocol,
                 username,
-                mut password,
+                password,
             } => {
-                // Check protocol version.
-                if client_net_protocol != NETWORK_PROTOCOL_VERSION {
-                    let answer = OutClientPacket::ClientLoginAnswer {
-                        is_ok: false,
-                        fail_reason: Some(ClientLoginFailReason::WrongProtocol {
-                            server_protocol: NETWORK_PROTOCOL_VERSION,
-                        }),
-                    };
-                    if let Err(app_error) =
-                        UserService::send_packet(&mut self.socket, &self.secret_key, answer)
-                    {
-                        return Err(app_error.add_entry(file!(), line!()));
-                    }
+                return self.handle_client_login(client_net_protocol, username, password, None);
+            }
+            InClientPacket::ClientSetFirstPassword {
+                client_net_protocol,
+                username,
+                old_password,
+                new_password,
+            } => {
+                return self.handle_client_login(
+                    client_net_protocol,
+                    username,
+                    old_password,
+                    Some(new_password),
+                );
+            }
+        }
+    }
+    /// Processes the client login packet.
+    ///
+    /// Returns `Option<String>` as `Ok`:
+    /// - if `Some(String)` then there was a "soft" error
+    /// (typically means that there was an error in client
+    /// data (wrong credentials, protocol version, etc...)
+    /// and we don't need to consider this as a bug,
+    /// - if `None` then the operation finished successfully.
+    ///
+    /// Returns `AppError` as `Err` if there was an internal error
+    /// (bug).
+    fn handle_client_login(
+        &mut self,
+        client_net_protocol: u16,
+        username: String,
+        mut password: Vec<u8>,
+        new_password: Option<Vec<u8>>,
+    ) -> Result<Option<String>, AppError> {
+        // Check protocol version.
+        if client_net_protocol != NETWORK_PROTOCOL_VERSION {
+            let answer = OutClientPacket::ClientLoginAnswer {
+                is_ok: false,
+                fail_reason: Some(ClientLoginFailReason::WrongProtocol {
+                    server_protocol: NETWORK_PROTOCOL_VERSION,
+                }),
+            };
+            if let Err(app_error) =
+                UserService::send_packet(&mut self.socket, &self.secret_key, answer)
+            {
+                return Err(app_error.add_entry(file!(), line!()));
+            }
 
+            return Ok(Some(format!(
+                "wrong protocol version ({} != {}) (username: {})",
+                client_net_protocol, NETWORK_PROTOCOL_VERSION, username
+            )));
+        }
+
+        let database_guard = self.database.lock().unwrap();
+        let result = database_guard.get_user_password_and_salt(&username);
+        drop(database_guard);
+
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        let (db_password, salt) = result.unwrap();
+        if db_password.is_empty() {
+            // No user was found for this username.
+            let result = self.answer_client_wrong_credentials(&username);
+            if let Err(app_error) = result {
+                return Err(app_error.add_entry(file!(), line!()));
+            }
+
+            return Ok(Some(result.unwrap()));
+        }
+
+        let mut password_to_check = Vec::from(salt.as_bytes());
+        password_to_check.append(&mut password);
+
+        // Password hash.
+        let mut hasher = Sha512::new();
+        hasher.update(password_to_check.as_slice());
+        let password_hash: Vec<u8> = hasher.finalize().to_vec();
+
+        if password_hash != db_password {
+            // Wrong password.
+            let result = self.answer_client_wrong_credentials(&username);
+            if let Err(app_error) = result {
+                return Err(app_error.add_entry(file!(), line!()));
+            }
+
+            return Ok(Some(result.unwrap()));
+        }
+
+        {
+            // Update last login time/date/ip.
+            if let Err(app_error) = self.database.lock().unwrap().update_user_last_login(
+                &username,
+                &self.socket.peer_addr().unwrap().ip().to_string(),
+            ) {
+                return Err(app_error.add_entry(file!(), line!()));
+            }
+        }
+
+        {
+            // Remove user from failed ips.
+            self.ban_manager
+                .as_ref()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .remove_ip_from_failed_ips_list(self.socket.peer_addr().unwrap().ip());
+        }
+
+        let mut _need_change_password = false;
+        {
+            let result = self
+                .database
+                .lock()
+                .unwrap()
+                .is_user_needs_to_change_password(&username);
+            if let Err(e) = result {
+                return Err(e.add_entry(file!(), line!()));
+            }
+            _need_change_password = result.unwrap();
+        }
+
+        if _need_change_password && new_password.is_none() {
+            self.logger.lock().unwrap().print_and_log(
+                LogCategory::Info,
+                &format!(
+                    "{} logged in but needs to set the first password, disconnecting...",
+                    &username
+                ),
+            );
+
+            let answer = OutClientPacket::ClientLoginAnswer {
+                is_ok: false,
+                fail_reason: Some(ClientLoginFailReason::NeedFirstPassword),
+            };
+            if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, answer) {
+                return Err(err.add_entry(file!(), line!()));
+            }
+        } else {
+            if new_password.is_some() {
+                let result = self
+                    .database
+                    .lock()
+                    .unwrap()
+                    .update_user_password(&username, new_password.unwrap());
+                if let Err(e) = result {
+                    return Err(e.add_entry(file!(), line!()));
+                }
+                let result = result.unwrap();
+                if result {
                     return Ok(Some(format!(
-                        "wrong protocol version ({} != {}) (username: {})",
-                        client_net_protocol, NETWORK_PROTOCOL_VERSION, username
+                        "received new password from user {}, but \
+                            there is no need to change the user's password",
+                        username
                     )));
                 }
 
-                let database_guard = self.database.lock().unwrap();
-                let result = database_guard.get_user_password_and_salt(&username);
-                drop(database_guard);
+                self.logger.lock().unwrap().print_and_log(
+                    LogCategory::Info,
+                    &format!("{} set first password.", &username),
+                );
+            }
 
-                if let Err(app_error) = result {
-                    return Err(app_error.add_entry(file!(), line!()));
-                }
+            {
+                self.logger
+                    .lock()
+                    .unwrap()
+                    .print_and_log(LogCategory::Info, &format!("{} logged in.", &username));
+            }
 
-                let (db_password, salt) = result.unwrap();
-                if db_password.is_empty() {
-                    // No user was found for this username.
-                    let result = self.answer_client_wrong_credentials(&username);
-                    if let Err(app_error) = result {
-                        return Err(app_error.add_entry(file!(), line!()));
-                    }
-
-                    return Ok(Some(result.unwrap()));
-                }
-
-                let mut password_to_check = Vec::from(salt.as_bytes());
-                password_to_check.append(&mut password);
-
-                // Password hash.
-                let mut hasher = Sha512::new();
-                hasher.update(password_to_check.as_slice());
-                let password_hash: Vec<u8> = hasher.finalize().to_vec();
-
-                if password_hash != db_password {
-                    // Wrong password.
-                    let result = self.answer_client_wrong_credentials(&username);
-                    if let Err(app_error) = result {
-                        return Err(app_error.add_entry(file!(), line!()));
-                    }
-
-                    return Ok(Some(result.unwrap()));
-                }
-
-                {
-                    // Update last login time/date/ip.
-                    if let Err(app_error) = self.database.lock().unwrap().update_user_last_login(
-                        &username,
-                        &self.socket.peer_addr().unwrap().ip().to_string(),
-                    ) {
-                        return Err(app_error.add_entry(file!(), line!()));
-                    }
-                }
-
-                {
-                    // Remove user from failed ips.
-                    self.ban_manager
-                        .as_ref()
-                        .unwrap()
-                        .lock()
-                        .unwrap()
-                        .remove_ip_from_failed_ips_list(self.socket.peer_addr().unwrap().ip());
-                }
-
-                {
-                    self.logger
-                        .lock()
-                        .unwrap()
-                        .print_and_log(LogCategory::Info, &format!("{} logged in.", &username));
-                }
-
-                // TODO: if 'need_change_password' is '1', ask user of new password
-                // and update 'need_change_password' to '0'.
-                let answer = OutClientPacket::ClientLoginAnswer {
-                    is_ok: true,
-                    fail_reason: None,
-                };
-                if let Err(err) =
-                    UserService::send_packet(&mut self.socket, &self.secret_key, answer)
-                {
-                    return Err(err.add_entry(file!(), line!()));
-                }
+            let answer = OutClientPacket::ClientLoginAnswer {
+                is_ok: true,
+                fail_reason: None,
+            };
+            if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, answer) {
+                return Err(err.add_entry(file!(), line!()));
             }
         }
 

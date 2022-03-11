@@ -52,12 +52,16 @@ impl NetService {
             secret_key: Vec::new(),
         }
     }
+    /// Tries to connect to the server.
+    ///
+    /// Specify a `new_password` if you want to send the first password (changed password).
     pub fn connect(
         &mut self,
         server: String,
         port: u16,
         username: String,
         password: String,
+        new_password: Option<String>,
     ) -> ConnectResult {
         // Connect socket.
         let tcp_socket = TcpStream::connect(format!("{}:{}", server, port));
@@ -88,11 +92,27 @@ impl NetService {
         hasher.update(password.as_bytes());
         let password = hasher.finalize().to_vec();
 
-        let packet = OutClientPacket::ClientLogin {
+        // Prepare packet to send.
+        let mut packet = OutClientPacket::ClientLogin {
             client_net_protocol: NETWORK_PROTOCOL_VERSION,
             username: username.clone(),
-            password,
+            password: password.clone(),
         };
+
+        if new_password.is_some() {
+            // Generate new password hash.
+            hasher = Sha512::new();
+            hasher.update(new_password.unwrap().as_bytes());
+            let new_password = hasher.finalize().to_vec();
+
+            // Update packet to send.
+            packet = OutClientPacket::ClientSetFirstPassword {
+                client_net_protocol: NETWORK_PROTOCOL_VERSION,
+                username: username.clone(),
+                old_password: password,
+                new_password,
+            }
+        }
 
         if let Err(app_error) = self.send_packet(packet) {
             return ConnectResult::InternalError(app_error.add_entry(file!(), line!()));
@@ -117,13 +137,6 @@ impl NetService {
                 if !is_ok {
                     return ConnectResult::ConnectFailed(fail_reason.unwrap());
                 }
-            }
-            _ => {
-                return ConnectResult::InternalError(AppError::new(
-                    "unexpected packet received",
-                    file!(),
-                    line!(),
-                ));
             }
         }
 

@@ -268,6 +268,119 @@ impl DatabaseManager {
 
         Ok(())
     }
+    /// Check if a given user needs to change the password.
+    ///
+    /// Returns `Ok(true)` if need to change the password, `Ok(false)` if not.
+    /// On failure returns `AppError`.
+    pub fn is_user_needs_to_change_password(&self, username: &str) -> Result<bool, AppError> {
+        let mut stmt = self
+            .connection
+            .prepare(&format!(
+                "SELECT need_change_password FROM {} WHERE username='{}'",
+                USER_TABLE_NAME, username
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+
+        let row = rows.next();
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let row = row.unwrap();
+        if row.is_none() {
+            return Err(AppError::new(
+                &format!("database returned None for username {}", username),
+                file!(),
+                line!(),
+            ));
+        }
+        let row = row.unwrap();
+        let need_change_password = row.get(0);
+        if let Err(e) = need_change_password {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let need_change_password: i32 = need_change_password.unwrap();
+
+        if need_change_password == 1 {
+            return Ok(true);
+        } else if need_change_password == 0 {
+            return Ok(false);
+        } else {
+            return Err(AppError::new(
+                &format!(
+                    "database returned 'need_change_password' equal to '{}' for user {}",
+                    need_change_password, username
+                ),
+                file!(),
+                line!(),
+            ));
+        }
+    }
+    /// Sets new password for user.
+    ///
+    /// Returns `Ok(true)` if user don't need to change password (error), `Ok(false)`
+    /// if changed successfully.
+    ///
+    /// On failure returns `AppError`.
+    pub fn update_user_password(
+        &self,
+        username: &str,
+        mut new_password: Vec<u8>,
+    ) -> Result<bool, AppError> {
+        // Check if user needs to change his password.
+        let result = self.is_user_needs_to_change_password(username);
+        if let Err(e) = result {
+            return Err(e.add_entry(file!(), line!()));
+        }
+        let need_change_password = result.unwrap();
+        if need_change_password == false {
+            return Ok(true);
+        }
+
+        let result = self.get_user_password_and_salt(username);
+        if let Err(e) = result {
+            return Err(e.add_entry(file!(), line!()));
+        }
+        let (_current_password, salt) = result.unwrap();
+
+        // Salt + 'password hash' hash.
+        let mut value: Vec<u8> = Vec::from(salt.as_bytes());
+        value.append(&mut new_password);
+        let mut hasher = Sha512::new();
+        hasher.update(value.as_slice());
+        let password = hasher.finalize().to_vec();
+
+        // Update password in database.
+        let result = self.connection.execute(
+            &format!(
+                "UPDATE {} SET password = ?1 WHERE username = '{}'",
+                USER_TABLE_NAME, username
+            ),
+            [password],
+        );
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        // Update need_to_change_password.
+        let result = self.connection.execute(
+            &format!(
+                "UPDATE {} SET need_change_password = 0 WHERE username = '{}'",
+                USER_TABLE_NAME, username
+            ),
+            [],
+        );
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        Ok(false)
+    }
     /// Check if a given user exists in the database.
     ///
     /// Returns `Ok(true)` if the user exists, `Ok(false)` if not.

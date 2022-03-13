@@ -216,6 +216,12 @@ impl ChangePasswordLayout {
                 data.change_password_layout.connect_error = _message;
             }
             ConnectResult::Connected => {
+                data.change_password_layout.new_password_repeat = String::new();
+                data.change_password_layout.new_password = String::new();
+                data.change_password_layout.old_password = String::new();
+
+                data.connect_layout.password = String::new();
+
                 data.current_layout = Layout::Main;
             }
         }

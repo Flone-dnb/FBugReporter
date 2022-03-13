@@ -254,6 +254,8 @@ impl ConnectLayout {
                 data.connect_layout.connect_error = _message;
             }
             ConnectResult::Connected => {
+                data.connect_layout.password = String::new();
+
                 data.current_layout = Layout::Main;
             }
         }

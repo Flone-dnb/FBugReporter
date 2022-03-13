@@ -355,25 +355,13 @@ impl DatabaseManager {
         hasher.update(value.as_slice());
         let password = hasher.finalize().to_vec();
 
-        // Update password in database.
+        // Update password and 'need_to_change_password' in database.
         let result = self.connection.execute(
             &format!(
-                "UPDATE {} SET password = ?1 WHERE username = '{}'",
+                "UPDATE {} SET password = ?1, need_change_password = 0 WHERE username = '{}'",
                 USER_TABLE_NAME, username
             ),
             [password],
-        );
-        if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
-        }
-
-        // Update need_to_change_password.
-        let result = self.connection.execute(
-            &format!(
-                "UPDATE {} SET need_change_password = 0 WHERE username = '{}'",
-                USER_TABLE_NAME, username
-            ),
-            [],
         );
         if let Err(e) = result {
             return Err(AppError::new(&e.to_string(), file!(), line!()));

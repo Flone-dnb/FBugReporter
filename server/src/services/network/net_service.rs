@@ -7,7 +7,7 @@ use std::thread;
 use crate::error::AppError;
 use crate::services::{
     config_service::ServerConfig,
-    db_manager::DatabaseManager,
+    db_manager::{AddUserResult, DatabaseManager},
     logger_service::*,
     network::{ban_manager::BanManager, user_service::UserService},
 };
@@ -44,15 +44,12 @@ impl NetService {
         })
     }
     /// Adds a new user to the database.
-    ///
-    /// On success returns user's password.
-    /// On failure returns error description via `AppError`.
-    pub fn add_user(&mut self, username: &str) -> Result<String, AppError> {
+    pub fn add_user(&mut self, username: &str) -> AddUserResult {
         let result = self.database.lock().unwrap().add_user(username);
-        if let Err(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
+        if let AddUserResult::Error(e) = result {
+            return AddUserResult::Error(e.add_entry(file!(), line!()));
         } else {
-            return Ok(result.unwrap());
+            return result;
         }
     }
     /// Removes the user from the database.

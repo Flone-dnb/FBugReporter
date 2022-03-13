@@ -4,6 +4,7 @@ use std::io;
 use std::io::*;
 
 // Custom.
+use services::db_manager::{AddUserResult, USERNAME_CHARSET};
 use services::logger_service::Logger;
 use services::network::net_service::NetService;
 
@@ -67,20 +68,28 @@ fn main() {
                 println!("username is empty");
             } else {
                 let result = net_service.add_user(&username_str);
-                if let Err(app_error) = result {
-                    panic!("{} at [{}, {}]", app_error.to_string(), file!(), line!());
-                } else {
-                    let password = result.unwrap();
-                    if password.is_empty() {
+                match result {
+                    AddUserResult::Ok { user_password } => {
+                        println!(
+                            "New user \"{}\" was registered, user's password is \"{}\".",
+                            username_str, user_password
+                        );
+                    }
+                    AddUserResult::NameIsUsed => {
                         println!(
                             "A user with the username \"{}\" already exists in the database.",
                             username_str,
                         );
-                    } else {
+                    }
+                    AddUserResult::NameContainsForbiddenCharacters => {
                         println!(
-                            "New user \"{}\" was registered, user's password is \"{}\".",
-                            username_str, password
+                            "The username \"{}\" contains forbidden characters, \
+                            allowed characters: \"{}\".",
+                            username_str, USERNAME_CHARSET
                         );
+                    }
+                    AddUserResult::Error(e) => {
+                        panic!("{} at [{}, {}]", e.to_string(), file!(), line!());
                     }
                 }
             }

@@ -19,6 +19,17 @@ const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                         abcdefghijklmnopqrstuvwxyz\
                         0123456789)(*&^%$#@!~";
 
+pub const USERNAME_CHARSET: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                        abcdefghijklmnopqrstuvwxyz\
+                        0123456789.";
+
+pub enum AddUserResult {
+    Ok { user_password: String },
+    NameIsUsed,
+    NameContainsForbiddenCharacters,
+    Error(AppError),
+}
+
 pub struct DatabaseManager {
     connection: Connection,
 }
@@ -45,18 +56,23 @@ impl DatabaseManager {
         Ok(Self { connection })
     }
     /// Adds a new user to the database.
-    ///
-    /// If a user with the given username already exists, returns empty string,
-    /// otherwise returns new user's password.
-    /// On failure returns error description via `AppError`.
-    pub fn add_user(&self, username: &str) -> Result<String, AppError> {
+    pub fn add_user(&self, username: &str) -> AddUserResult {
+        // Check if username contains forbidden characters.
+        let is_ok = username
+            .chars()
+            .all(|c| USERNAME_CHARSET.chars().any(|allowed| c == allowed));
+        if !is_ok {
+            return AddUserResult::NameContainsForbiddenCharacters;
+        }
+
+        // Check if username is used.
         let result = self.is_user_exists(username);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return AddUserResult::Error(AppError::new(&e.to_string(), file!(), line!()));
         }
         let exists = result.unwrap();
         if exists {
-            return Ok(String::new());
+            return AddUserResult::NameIsUsed;
         }
 
         let datetime = Local::now();
@@ -119,10 +135,12 @@ impl DatabaseManager {
                 datetime.time().format("%H:%M:%S").to_string()
             ],
         ) {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return AddUserResult::Error(AppError::new(&e.to_string(), file!(), line!()));
         }
 
-        Ok(plaintext_password)
+        AddUserResult::Ok {
+            user_password: plaintext_password,
+        }
     }
     /// Removes the user from the database.
     ///

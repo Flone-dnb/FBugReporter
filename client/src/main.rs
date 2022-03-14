@@ -15,7 +15,7 @@ use rdev::display_size;
 // Custom.
 use layouts::{
     change_password_layout::ChangePasswordLayout, connect_layout::ConnectLayout,
-    main_layout::MainLayout, settings_layout::SettingsLayout,
+    main_layout::MainLayout, otp_layout::OtpLayout, settings_layout::SettingsLayout,
 };
 use misc::custom_data_button_controller::CUSTOM_DATA_BUTTON_CLICKED;
 use services::logger_service::LoggerService;
@@ -34,6 +34,7 @@ pub enum Layout {
     Settings,
     Main,
     ChangePassword,
+    Otp,
 }
 
 #[derive(Clone, Data, Lens)] // Clone is required by `AppDelegate`.
@@ -45,6 +46,7 @@ pub struct ApplicationState {
     main_layout: MainLayout,
     settings_layout: SettingsLayout,
     change_password_layout: ChangePasswordLayout,
+    otp_layout: OtpLayout,
 
     // services
     #[data(ignore)]
@@ -80,6 +82,7 @@ pub fn main() {
         main_layout: MainLayout::new(),
         settings_layout: SettingsLayout::new(),
         change_password_layout: ChangePasswordLayout::new(),
+        otp_layout: OtpLayout::new(),
         net_service: Arc::new(Mutex::new(NetService::new())),
         logger_service: Arc::new(Mutex::new(LoggerService::new())),
         theme: ApplicationTheme::new(),
@@ -142,6 +145,7 @@ fn build_root_widget() -> impl Widget<ApplicationState> {
             Layout::Settings => Box::new(SettingsLayout::build_ui()),
             Layout::Main => Box::new(MainLayout::build_ui()),
             Layout::ChangePassword => Box::new(ChangePasswordLayout::build_ui()),
+            Layout::Otp => Box::new(OtpLayout::build_ui()),
         },
     )
 }

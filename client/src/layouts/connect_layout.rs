@@ -1,6 +1,10 @@
 // External.
 use druid::widget::{prelude::*, SizedBox};
 use druid::widget::{Button, Flex, Label, LineBreaking, MainAxisAlignment, TextBox};
+use druid::{
+    piet::{ImageBuf, ImageFormat, InterpolationMode},
+    widget::{FillStrat, Image},
+};
 use druid::{Lens, LensExt, TextAlignment, WidgetExt};
 
 // Custom.
@@ -22,13 +26,26 @@ const BUTTONS_WIDTH_PADDING: f64 = 1.0;
 const BUTTON_HEIGHT: f64 = 0.3;
 const TEXT_SIZE: f64 = 20.0;
 
+use std::time::SystemTime;
+use totp_rs::{Algorithm, TOTP};
+fn get_otp_with_totp() -> String {
+    let totp = TOTP::new(Algorithm::SHA1, 6, 1, 30, "supersecret");
+    let time = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let token = totp.generate(time);
+    println!("token: {}", token);
+    totp.get_qr("FBugReporter", "username").unwrap()
+}
+
 #[derive(Clone, Data, Lens)]
 pub struct ConnectLayout {
     pub server: String,
     pub port: String,
     pub username: String,
     pub password: String,
-    connect_error: String,
+    pub connect_error: String,
 }
 
 impl ConnectLayout {
@@ -44,9 +61,25 @@ impl ConnectLayout {
         }
     }
     pub fn build_ui() -> impl Widget<ApplicationState> {
+        let image = photon_rs::base64_to_image(&get_otp_with_totp());
+        let pixels = image.get_raw_pixels();
+        let image_data = ImageBuf::from_raw(
+            pixels,
+            ImageFormat::RgbaSeparate,
+            image.get_width() as usize,
+            image.get_width() as usize,
+        );
+
+        let image_widget = Image::new(image_data)
+            // set the fill strategy
+            .fill_mode(FillStrat::Fill)
+            // set the interpolation mode
+            .interpolation_mode(InterpolationMode::Bilinear);
+
         Flex::column()
             .main_axis_alignment(MainAxisAlignment::Center)
             .must_fill_main_axis(true)
+            .with_flex_child(image_widget.expand(), 1.0)
             .with_flex_child(SizedBox::empty().expand(), TOP_PADDING)
             .with_flex_child(
                 Flex::row()
@@ -171,7 +204,7 @@ impl ConnectLayout {
             )
             .with_flex_child(SizedBox::empty().expand(), BOTTOM_PADDING)
     }
-    fn on_connect_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
+    pub fn on_connect_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
         // Check if all essential fields are filled.
         if data.connect_layout.server.is_empty()
             || data.connect_layout.port.is_empty()

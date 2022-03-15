@@ -3,19 +3,16 @@ use std::time::SystemTime;
 
 // External.
 use druid::widget::{prelude::*, SizedBox};
-use druid::widget::{Button, Flex, Label, LineBreaking, MainAxisAlignment, TextBox};
+use druid::widget::{Button, Flex, Label, MainAxisAlignment, TextBox};
 use druid::{
     piet::{ImageBuf, ImageFormat, InterpolationMode},
     widget::{FillStrat, Image},
 };
-use druid::{Lens, LensExt, TextAlignment, WidgetExt};
+use druid::{Lens, LensExt, WidgetExt};
 use totp_rs::{Algorithm, TOTP};
 
 // Custom.
-use crate::services::{
-    net_packets::*,
-    net_service::{ConnectResult, NETWORK_PROTOCOL_VERSION},
-};
+use crate::services::net_service::ConnectResult;
 use crate::{ApplicationState, Layout};
 
 // Layout customization.
@@ -133,55 +130,20 @@ impl OtpLayout {
                 data.connect_layout.connect_error = app_error.to_string();
             }
             ConnectResult::ConnectFailed(reason) => {
-                let mut _message = String::new();
-
-                match reason {
-                    ClientLoginFailReason::WrongProtocol { server_protocol } => {
-                        _message = format!(
-                            "Failed to connect to the server \
-                            due to incompatible application version.\n\
-                            Your application uses network protocol version {}, \
-                            while the server supports version {}.",
-                            NETWORK_PROTOCOL_VERSION, server_protocol
-                        );
-                    }
-                    ClientLoginFailReason::WrongCredentials { result } => match result {
-                        ClientLoginFailResult::FailedAttempt {
-                            failed_attempts_made,
-                            max_failed_attempts,
-                        } => {
-                            _message = format!(
-                                "Incorrect login/password.\n\
-                                Allowed failed login attempts: {0} out of {1}.\n\
-                                After {1} failed login attempts new failed login attempt \
-                                 will result in a ban.",
-                                failed_attempts_made, max_failed_attempts
-                            );
-                        }
-                        ClientLoginFailResult::Banned { ban_time_in_min } => {
-                            _message = format!(
-                                "You were banned due to multiple failed login attempts.\n\
-                                Ban time: {} minute(-s).\n\
-                                During this time the server will reject any \
-                                login attempts without explanation.",
-                                ban_time_in_min
-                            );
-                        }
-                    },
-                    ClientLoginFailReason::NeedFirstPassword => {
-                        _message = String::from("Need to set the first password.");
-                        data.current_layout = Layout::ChangePassword;
-                    }
-                }
-
-                println!("{}", _message);
-                data.logger_service.lock().unwrap().log(&_message);
-                data.connect_layout.connect_error = _message;
+                println!("{}", reason);
+                data.logger_service.lock().unwrap().log(&reason);
+                data.connect_layout.connect_error = reason;
             }
             ConnectResult::Connected => {
                 data.connect_layout.password = String::new();
 
                 data.current_layout = Layout::Main;
+            }
+            ConnectResult::NeedFirstPassword => {
+                let message = "error: received \"NeedFirstPassword\" in OTP mode.";
+                println!("{}", message);
+                data.logger_service.lock().unwrap().log(&message);
+                data.otp_layout.connect_error = String::from(message);
             }
         }
     }

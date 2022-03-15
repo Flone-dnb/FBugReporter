@@ -30,7 +30,8 @@ pub const NETWORK_PROTOCOL_VERSION: u16 = 0;
 
 pub enum ConnectResult {
     Connected,
-    ConnectFailed(ClientLoginFailReason),
+    ConnectFailed(String),
+    NeedFirstPassword,
     InternalError(AppError),
 }
 
@@ -135,7 +136,45 @@ impl NetService {
         match packet {
             InClientPacket::ClientLoginAnswer { is_ok, fail_reason } => {
                 if !is_ok {
-                    return ConnectResult::ConnectFailed(fail_reason.unwrap());
+                    let mut _message = String::new();
+                    match fail_reason.unwrap() {
+                        ClientLoginFailReason::WrongProtocol { server_protocol } => {
+                            _message = format!(
+                                "Failed to connect to the server \
+                            due to incompatible application version.\n\
+                            Your application uses network protocol version {}, \
+                            while the server supports version {}.",
+                                NETWORK_PROTOCOL_VERSION, server_protocol
+                            );
+                        }
+                        ClientLoginFailReason::WrongCredentials { result } => match result {
+                            ClientLoginFailResult::FailedAttempt {
+                                failed_attempts_made,
+                                max_failed_attempts,
+                            } => {
+                                _message = format!(
+                                    "Incorrect login/password.\n\
+                                Allowed failed login attempts: {0} out of {1}.\n\
+                                After {1} failed login attempts new failed login attempt \
+                                 will result in a ban.",
+                                    failed_attempts_made, max_failed_attempts
+                                );
+                            }
+                            ClientLoginFailResult::Banned { ban_time_in_min } => {
+                                _message = format!(
+                                    "You were banned due to multiple failed login attempts.\n\
+                                Ban time: {} minute(-s).\n\
+                                During this time the server will reject any \
+                                login attempts without explanation.",
+                                    ban_time_in_min
+                                );
+                            }
+                        },
+                        ClientLoginFailReason::NeedFirstPassword => {
+                            return ConnectResult::NeedFirstPassword;
+                        }
+                    }
+                    return ConnectResult::ConnectFailed(_message);
                 }
             }
         }

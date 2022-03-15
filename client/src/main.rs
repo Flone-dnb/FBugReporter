@@ -140,12 +140,12 @@ fn apply_theme(env: &mut Env, data: &ApplicationState) {
 fn build_root_widget() -> impl Widget<ApplicationState> {
     ViewSwitcher::new(
         |data: &ApplicationState, _env| data.current_layout,
-        |selector, _data, _env| match *selector {
+        |selector, data, _env| match *selector {
             Layout::Connect => Box::new(ConnectLayout::build_ui()),
             Layout::Settings => Box::new(SettingsLayout::build_ui()),
             Layout::Main => Box::new(MainLayout::build_ui()),
             Layout::ChangePassword => Box::new(ChangePasswordLayout::build_ui()),
-            Layout::Otp => Box::new(OtpLayout::build_ui()),
+            Layout::Otp => Box::new(OtpLayout::build_ui(&data.otp_layout)),
         },
     )
 }

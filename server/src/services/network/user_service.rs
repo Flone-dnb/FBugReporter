@@ -3,7 +3,7 @@ use std::io::prelude::*;
 use std::net::*;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 // External.
 use aes::Aes256;
@@ -14,6 +14,7 @@ use num_bigint::{BigUint, RandomBits};
 use rand::{Rng, RngCore};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
+use totp_rs::{Algorithm, TOTP};
 
 use super::ban_manager::*;
 // Custom.
@@ -316,8 +317,15 @@ impl UserService {
                 client_net_protocol,
                 username,
                 password,
+                otp,
             } => {
-                return self.handle_client_login(client_net_protocol, username, password, None);
+                return self.handle_client_login(
+                    client_net_protocol,
+                    username,
+                    password,
+                    otp,
+                    None,
+                );
             }
             InClientPacket::ClientSetFirstPassword {
                 client_net_protocol,
@@ -329,6 +337,7 @@ impl UserService {
                     client_net_protocol,
                     username,
                     old_password,
+                    String::new(),
                     Some(new_password),
                 );
             }
@@ -350,6 +359,7 @@ impl UserService {
         client_net_protocol: u16,
         username: String,
         mut password: Vec<u8>,
+        otp: String,
         new_password: Option<Vec<u8>>,
     ) -> Result<Option<String>, AppError> {
         // Check protocol version.
@@ -372,6 +382,7 @@ impl UserService {
             )));
         }
 
+        // Get user's password and salt.
         let database_guard = self.database.lock().unwrap();
         let result = database_guard.get_user_password_and_salt(&username);
         drop(database_guard);
@@ -380,6 +391,7 @@ impl UserService {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
+        // Check if user exists.
         let (db_password, salt) = result.unwrap();
         if db_password.is_empty() {
             // No user was found for this username.
@@ -391,6 +403,7 @@ impl UserService {
             return Ok(Some(result.unwrap()));
         }
 
+        // Compare passwords.
         let mut password_to_check = Vec::from(salt.as_bytes());
         password_to_check.append(&mut password);
 
@@ -407,6 +420,169 @@ impl UserService {
             }
 
             return Ok(Some(result.unwrap()));
+        }
+
+        // See if user needs to set first password.
+        let mut _need_change_password = false;
+        {
+            let result = self
+                .database
+                .lock()
+                .unwrap()
+                .is_user_needs_to_change_password(&username);
+            if let Err(e) = result {
+                return Err(e.add_entry(file!(), line!()));
+            }
+            _need_change_password = result.unwrap();
+        }
+
+        if _need_change_password && new_password.is_none() {
+            // Need to set first password.
+            self.logger.lock().unwrap().print_and_log(
+                LogCategory::Info,
+                &format!(
+                    "{} logged in but needs to set the first password, disconnecting...",
+                    &username
+                ),
+            );
+
+            let answer = OutClientPacket::ClientLoginAnswer {
+                is_ok: false,
+                fail_reason: Some(ClientLoginFailReason::NeedFirstPassword),
+            };
+            if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, answer) {
+                return Err(err.add_entry(file!(), line!()));
+            }
+
+            return Ok(None);
+        }
+
+        if new_password.is_some() {
+            // Set first password.
+            let result = self
+                .database
+                .lock()
+                .unwrap()
+                .update_user_password(&username, new_password.unwrap());
+            if let Err(e) = result {
+                return Err(e.add_entry(file!(), line!()));
+            }
+            let result = result.unwrap();
+            if result {
+                return Ok(Some(format!(
+                    "received new password from user {}, but \
+                            there is no need to change the user's password",
+                    username
+                )));
+            }
+
+            self.logger.lock().unwrap().print_and_log(
+                LogCategory::Info,
+                &format!("{} set first password.", &username),
+            );
+        }
+
+        // Check if user needs to setup OTP (receive OTP QR code).
+        {
+            let db_guard = self.database.lock().unwrap();
+            let result = db_guard.is_user_needs_setup_otp(&username);
+            if let Err(e) = result {
+                return Err(e.add_entry(file!(), line!()));
+            }
+            let _need_setup_otp = result.unwrap();
+
+            // Get OTP secret.
+            let result = db_guard.get_otp_secret_key_for_user(&username);
+            if let Err(e) = result {
+                return Err(e.add_entry(file!(), line!()));
+            }
+            let otp_secret = result.unwrap();
+
+            drop(db_guard);
+
+            if _need_setup_otp && otp.is_empty() {
+                // Generate QR code.
+                let totp = TOTP::new(Algorithm::SHA1, 6, 1, 30, otp_secret);
+                let qr_code = totp.get_qr("FBugReporter", &username);
+                if let Err(e) = qr_code {
+                    return Err(AppError::new(&e.to_string(), file!(), line!()));
+                }
+                let qr_code = qr_code.unwrap();
+
+                self.logger.lock().unwrap().print_and_log(
+                    LogCategory::Info,
+                    &format!(
+                        "{} logged in but needs to setup OTP, disconnecting...",
+                        &username
+                    ),
+                );
+
+                // Send QR code.
+                let answer = OutClientPacket::ClientLoginAnswer {
+                    is_ok: false,
+                    fail_reason: Some(ClientLoginFailReason::SetupOTP { qr_code }),
+                };
+                if let Err(err) =
+                    UserService::send_packet(&mut self.socket, &self.secret_key, answer)
+                {
+                    return Err(err.add_entry(file!(), line!()));
+                }
+
+                return Ok(None);
+            } else {
+                if otp.is_empty() {
+                    // Need OTP.
+                    let answer = OutClientPacket::ClientLoginAnswer {
+                        is_ok: false,
+                        fail_reason: Some(ClientLoginFailReason::NeedOTP),
+                    };
+                    if let Err(err) =
+                        UserService::send_packet(&mut self.socket, &self.secret_key, answer)
+                    {
+                        return Err(err.add_entry(file!(), line!()));
+                    }
+
+                    return Ok(Some(format!(
+                        "notified the user {} that he needs a OTP to login (usual login process, not an error)",
+                        username
+                    )));
+                }
+
+                // Generate current OTP.
+                let totp = TOTP::new(Algorithm::SHA1, 6, 1, 30, otp_secret);
+                let time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
+                if let Err(e) = time {
+                    return Err(AppError::new(&e.to_string(), file!(), line!()));
+                }
+                let time = time.unwrap().as_secs();
+                let token = totp.generate(time);
+
+                if token != otp {
+                    self.logger.lock().unwrap().print_and_log(
+                        LogCategory::Info,
+                        &format!("{} tried to login using wrong OTP code.", &username),
+                    );
+                    let result = self.answer_client_wrong_credentials(&username);
+                    if let Err(app_error) = result {
+                        return Err(app_error.add_entry(file!(), line!()));
+                    }
+
+                    return Ok(Some(result.unwrap()));
+                } else if _need_setup_otp {
+                    let result = self
+                        .database
+                        .lock()
+                        .unwrap()
+                        .set_user_finished_otp_setup(&username);
+                    if let Err(app_error) = result {
+                        return Err(app_error.add_entry(file!(), line!()));
+                    }
+                    self.logger.lock().unwrap().print_and_log(
+                        LogCategory::Info,
+                        &format!("{} finished OTP setup.", &username),
+                    );
+                }
+            }
         }
 
         {
@@ -429,74 +605,21 @@ impl UserService {
                 .remove_ip_from_failed_ips_list(self.socket.peer_addr().unwrap().ip());
         }
 
-        let mut _need_change_password = false;
         {
-            let result = self
-                .database
+            // Mark user as logged in.
+            self.logger
                 .lock()
                 .unwrap()
-                .is_user_needs_to_change_password(&username);
-            if let Err(e) = result {
-                return Err(e.add_entry(file!(), line!()));
-            }
-            _need_change_password = result.unwrap();
+                .print_and_log(LogCategory::Info, &format!("{} logged in.", &username));
         }
 
-        if _need_change_password && new_password.is_none() {
-            self.logger.lock().unwrap().print_and_log(
-                LogCategory::Info,
-                &format!(
-                    "{} logged in but needs to set the first password, disconnecting...",
-                    &username
-                ),
-            );
-
-            let answer = OutClientPacket::ClientLoginAnswer {
-                is_ok: false,
-                fail_reason: Some(ClientLoginFailReason::NeedFirstPassword),
-            };
-            if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, answer) {
-                return Err(err.add_entry(file!(), line!()));
-            }
-        } else {
-            if new_password.is_some() {
-                let result = self
-                    .database
-                    .lock()
-                    .unwrap()
-                    .update_user_password(&username, new_password.unwrap());
-                if let Err(e) = result {
-                    return Err(e.add_entry(file!(), line!()));
-                }
-                let result = result.unwrap();
-                if result {
-                    return Ok(Some(format!(
-                        "received new password from user {}, but \
-                            there is no need to change the user's password",
-                        username
-                    )));
-                }
-
-                self.logger.lock().unwrap().print_and_log(
-                    LogCategory::Info,
-                    &format!("{} set first password.", &username),
-                );
-            }
-
-            {
-                self.logger
-                    .lock()
-                    .unwrap()
-                    .print_and_log(LogCategory::Info, &format!("{} logged in.", &username));
-            }
-
-            let answer = OutClientPacket::ClientLoginAnswer {
-                is_ok: true,
-                fail_reason: None,
-            };
-            if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, answer) {
-                return Err(err.add_entry(file!(), line!()));
-            }
+        // Answer "connected".
+        let answer = OutClientPacket::ClientLoginAnswer {
+            is_ok: true,
+            fail_reason: None,
+        };
+        if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, answer) {
+            return Err(err.add_entry(file!(), line!()));
         }
 
         Ok(None)

@@ -40,6 +40,8 @@ pub enum ClientLoginFailReason {
     WrongProtocol { server_protocol: u16 },
     WrongCredentials { result: ClientLoginFailResult },
     NeedFirstPassword, // user just registered, we are waiting for a new password to set
+    NeedOTP,
+    SetupOTP { qr_code: String },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -49,6 +51,7 @@ pub enum InClientPacket {
         client_net_protocol: u16,
         username: String,
         password: Vec<u8>,
+        otp: String,
     },
     ClientSetFirstPassword {
         client_net_protocol: u16,

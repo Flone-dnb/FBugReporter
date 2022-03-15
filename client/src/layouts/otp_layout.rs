@@ -1,15 +1,11 @@
-// Std.
-use std::time::SystemTime;
-
 // External.
-use druid::widget::{prelude::*, SizedBox};
+use druid::widget::{prelude::*, LineBreaking, SizedBox};
 use druid::widget::{Button, Flex, Label, MainAxisAlignment, TextBox};
 use druid::{
     piet::{ImageBuf, ImageFormat, InterpolationMode},
     widget::{FillStrat, Image},
 };
-use druid::{Lens, LensExt, WidgetExt};
-use totp_rs::{Algorithm, TOTP};
+use druid::{Lens, LensExt, TextAlignment, WidgetExt};
 
 // Custom.
 use crate::services::net_service::ConnectResult;
@@ -17,27 +13,16 @@ use crate::{ApplicationState, Layout};
 
 // Layout customization.
 const WIDTH_PADDING: f64 = 0.25;
-const LEFT_SIDE_SIZE: f64 = 0.5;
-const RIGHT_SIDE_SIZE: f64 = 1.0;
-const TOP_PADDING: f64 = 0.5;
-const BOTTOM_PADDING: f64 = 0.75;
-const ROW_SPACING: f64 = 0.25;
+const TOP_PADDING: f64 = 0.1;
+const BOTTOM_PADDING: f64 = 0.1;
 const BUTTONS_WIDTH_PADDING: f64 = 1.0;
-const BUTTON_HEIGHT: f64 = 0.3;
+const BUTTON_HEIGHT: f64 = 0.2;
 const TEXT_SIZE: f64 = 20.0;
-
-fn get_otp_with_totp() -> String {
-    let totp = TOTP::new(Algorithm::SHA1, 6, 1, 30, "supersecret");
-    let time = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    let token = totp.generate(time);
-    totp.get_qr("FBugReporter", "username").unwrap()
-}
+const ROW_SPACING: f64 = 0.2;
 
 #[derive(Clone, Data, Lens)]
 pub struct OtpLayout {
+    pub qr_code: Option<String>,
     otp: String,
     connect_error: String,
 }
@@ -46,50 +31,111 @@ impl OtpLayout {
     pub fn new() -> Self {
         Self {
             otp: String::new(),
+            qr_code: None,
             connect_error: String::new(),
         }
     }
-    pub fn build_ui() -> impl Widget<ApplicationState> {
-        let image = photon_rs::base64_to_image(&get_otp_with_totp());
-        let pixels = image.get_raw_pixels();
-        let image_data = ImageBuf::from_raw(
-            pixels,
-            ImageFormat::RgbaSeparate,
-            image.get_width() as usize,
-            image.get_width() as usize,
-        );
+    pub fn build_ui(&self) -> impl Widget<ApplicationState> {
+        let mut qr_code_item = Flex::column();
+        if self.qr_code.is_some() {
+            let image = photon_rs::base64_to_image(self.qr_code.as_ref().unwrap());
+            let pixels = image.get_raw_pixels();
+            let image_data = ImageBuf::from_raw(
+                pixels,
+                ImageFormat::RgbaSeparate,
+                image.get_width() as usize,
+                image.get_width() as usize,
+            );
 
-        let image_widget = Image::new(image_data)
-            // set the fill strategy
-            .fill_mode(FillStrat::Fill)
-            // set the interpolation mode
-            .interpolation_mode(InterpolationMode::Bilinear);
+            let image_widget = Image::new(image_data)
+                .fill_mode(FillStrat::Fill)
+                .interpolation_mode(InterpolationMode::Bilinear)
+                .fix_size(
+                    (image.get_width() / 4) as f64,
+                    (image.get_width() / 4) as f64,
+                );
+
+            qr_code_item = qr_code_item
+                .with_flex_child(
+                    Flex::row()
+                        .with_flex_child(SizedBox::empty().expand(), WIDTH_PADDING)
+                        .with_flex_child(
+                            Label::new(
+                                "You an app to scan this QR code (for example: \
+                                        Google Authenticator) and \
+                                        enter current OTP below.",
+                            )
+                            .with_text_size(TEXT_SIZE)
+                            .with_text_alignment(TextAlignment::Center)
+                            .with_line_break_mode(LineBreaking::WordWrap)
+                            .expand(),
+                            1.0,
+                        )
+                        .with_flex_child(SizedBox::empty().expand(), WIDTH_PADDING),
+                    1.0,
+                )
+                .with_default_spacer()
+                .with_child(image_widget);
+        }
 
         Flex::column()
             .main_axis_alignment(MainAxisAlignment::Center)
             .must_fill_main_axis(true)
             .with_flex_child(SizedBox::empty().expand(), TOP_PADDING)
-            .with_flex_child(image_widget.expand(), 1.0)
+            .with_flex_child(qr_code_item, 1.0)
             .with_default_spacer()
             .with_flex_child(
-                Label::new("Enter your OTP here:")
-                    .with_text_size(TEXT_SIZE)
-                    .expand(),
-                1.0,
+                Flex::row()
+                    .main_axis_alignment(MainAxisAlignment::Center)
+                    .must_fill_main_axis(true)
+                    .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING)
+                    .with_flex_child(
+                        Label::new("Enter your OTP here:")
+                            .with_text_size(TEXT_SIZE)
+                            .expand(),
+                        1.0,
+                    )
+                    .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING),
+                BUTTON_HEIGHT,
             )
             .with_flex_child(
-                TextBox::new()
-                    .with_text_size(TEXT_SIZE)
-                    .with_placeholder("Current OTP...")
-                    .lens(ApplicationState::otp_layout.then(OtpLayout::otp))
-                    .expand(),
-                1.0,
+                Flex::row()
+                    .main_axis_alignment(MainAxisAlignment::Center)
+                    .must_fill_main_axis(true)
+                    .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING)
+                    .with_flex_child(
+                        TextBox::new()
+                            .with_text_size(TEXT_SIZE)
+                            .with_placeholder("Current OTP...")
+                            .lens(ApplicationState::otp_layout.then(OtpLayout::otp))
+                            .expand(),
+                        1.0,
+                    )
+                    .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING),
+                BUTTON_HEIGHT,
+            )
+            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
+            .with_child(
+                Label::new(|data: &ApplicationState, _env: &Env| {
+                    data.otp_layout.connect_error.clone()
+                })
+                .with_text_size(TEXT_SIZE)
+                .with_text_alignment(TextAlignment::Center)
+                .with_line_break_mode(LineBreaking::WordWrap),
             )
             .with_flex_child(
-                Button::from_label(Label::new("Connect").with_text_size(TEXT_SIZE))
-                    .on_click(OtpLayout::on_connect_clicked)
-                    .expand(),
-                1.0,
+                Flex::row()
+                    .main_axis_alignment(MainAxisAlignment::Center)
+                    .must_fill_main_axis(true)
+                    .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING)
+                    .with_flex_child(
+                        Button::from_label(Label::new("Login").with_text_size(TEXT_SIZE))
+                            .on_click(OtpLayout::on_connect_clicked)
+                            .expand(),
+                        1.0,
+                    )
+                    .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING),
+                BUTTON_HEIGHT,
             )
             .with_flex_child(SizedBox::empty().expand(), BOTTOM_PADDING)
     }
@@ -118,6 +164,7 @@ impl OtpLayout {
             port,
             data.connect_layout.username.clone(),
             data.connect_layout.password.clone(),
+            data.otp_layout.otp.clone(),
             None,
         );
         match result {
@@ -127,20 +174,31 @@ impl OtpLayout {
                     .lock()
                     .unwrap()
                     .log(&app_error.to_string());
-                data.connect_layout.connect_error = app_error.to_string();
+                data.otp_layout.connect_error = app_error.to_string();
             }
             ConnectResult::ConnectFailed(reason) => {
                 println!("{}", reason);
                 data.logger_service.lock().unwrap().log(&reason);
-                data.connect_layout.connect_error = reason;
+                data.otp_layout.connect_error = reason;
             }
             ConnectResult::Connected => {
                 data.connect_layout.password = String::new();
-
                 data.current_layout = Layout::Main;
             }
             ConnectResult::NeedFirstPassword => {
                 let message = "error: received \"NeedFirstPassword\" in OTP mode.";
+                println!("{}", message);
+                data.logger_service.lock().unwrap().log(&message);
+                data.otp_layout.connect_error = String::from(message);
+            }
+            ConnectResult::SetupOTP(_) => {
+                let message = "error: received \"SetupOTP\" in OTP mode.";
+                println!("{}", message);
+                data.logger_service.lock().unwrap().log(&message);
+                data.otp_layout.connect_error = String::from(message);
+            }
+            ConnectResult::NeedOTP => {
+                let message = "error: received \"NeedOTP\" in OTP mode.";
                 println!("{}", message);
                 data.logger_service.lock().unwrap().log(&message);
                 data.otp_layout.connect_error = String::from(message);

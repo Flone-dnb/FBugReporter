@@ -12,9 +12,10 @@ const REPORT_TABLE_NAME: &str = "report";
 const USER_TABLE_NAME: &str = "user";
 
 const SALT_LENGTH: u64 = 32;
+const OTP_SECRET_LENGTH: u64 = 256;
 const PASSWORD_LENGTH: u64 = 32;
 
-// Used for generating random salt, password and etc.
+// Used for generating random salt, password, otp and etc.
 const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                         abcdefghijklmnopqrstuvwxyz\
                         0123456789)(*&^%$#@!~";
@@ -104,6 +105,14 @@ impl DatabaseManager {
         hasher.update(value.as_slice());
         let password = hasher.finalize().to_vec();
 
+        // OTP secret.
+        let otp_secret: String = (0..OTP_SECRET_LENGTH)
+            .map(|_| {
+                let idx = rng.gen_range(0..CHARSET.len());
+                CHARSET[idx] as char
+            })
+            .collect();
+
         if let Err(e) = self.connection.execute(
             // password = hash(salt + hash(password))
             &format!(
@@ -113,6 +122,8 @@ impl DatabaseManager {
                 salt, 
                 password,
                 need_change_password,
+                need_setup_otp,
+                otp_secret_key,
                 last_login_date,
                 last_login_time,
                 last_login_ip,
@@ -120,14 +131,16 @@ impl DatabaseManager {
                 time_registered
             ) 
             VALUES 
-            (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 USER_TABLE_NAME
             ),
             params![
                 username,
                 salt,
                 password,
-                1,
+                1, // change password
+                1, // have not received OTP QR code
+                otp_secret,
                 datetime.date().naive_local().to_string(),
                 datetime.time().format("%H:%M:%S").to_string(),
                 "",
@@ -339,6 +352,96 @@ impl DatabaseManager {
             ));
         }
     }
+    /// Check if a given user needs to setup OTP (receive OTP QR code).
+    ///
+    /// Returns `Ok(true)` if need OTP QR code, `Ok(false)` if not.
+    /// On failure returns `AppError`.
+    pub fn is_user_needs_setup_otp(&self, username: &str) -> Result<bool, AppError> {
+        let mut stmt = self
+            .connection
+            .prepare(&format!(
+                "SELECT need_setup_otp FROM {} WHERE username='{}'",
+                USER_TABLE_NAME, username
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+
+        let row = rows.next();
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let row = row.unwrap();
+        if row.is_none() {
+            return Err(AppError::new(
+                &format!("database returned None for username {}", username),
+                file!(),
+                line!(),
+            ));
+        }
+        let row = row.unwrap();
+        let need_setup_otp = row.get(0);
+        if let Err(e) = need_setup_otp {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let need_setup_otp: i32 = need_setup_otp.unwrap();
+
+        if need_setup_otp == 1 {
+            return Ok(true);
+        } else if need_setup_otp == 0 {
+            return Ok(false);
+        } else {
+            return Err(AppError::new(
+                &format!(
+                    "database returned 'need_setup_otp' equal to '{}' for user {}",
+                    need_setup_otp, username
+                ),
+                file!(),
+                line!(),
+            ));
+        }
+    }
+    /// Returns OTP secret key.
+    pub fn get_otp_secret_key_for_user(&self, username: &str) -> Result<String, AppError> {
+        let mut stmt = self
+            .connection
+            .prepare(&format!(
+                "SELECT otp_secret_key FROM {} WHERE username='{}'",
+                USER_TABLE_NAME, username
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+
+        let row = rows.next();
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let row = row.unwrap();
+        if row.is_none() {
+            return Err(AppError::new(
+                &format!("database returned None for username {}", username),
+                file!(),
+                line!(),
+            ));
+        }
+        let row = row.unwrap();
+        let otp_secret = row.get::<usize, String>(0);
+        if let Err(e) = otp_secret {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let otp_secret = otp_secret.unwrap();
+
+        return Ok(otp_secret);
+    }
     /// Sets new password for user.
     ///
     /// Returns `Ok(true)` if user don't need to change password (error), `Ok(false)`
@@ -386,6 +489,40 @@ impl DatabaseManager {
         }
 
         Ok(false)
+    }
+    /// Marks that user have setup OTP and no longer needs OTP QR code.
+    pub fn set_user_finished_otp_setup(&self, username: &str) -> Result<(), AppError> {
+        // Check if user needs to setup OTP.
+        let result = self.is_user_needs_setup_otp(username);
+        if let Err(e) = result {
+            return Err(e.add_entry(file!(), line!()));
+        }
+        let need_change_password = result.unwrap();
+        if need_change_password == false {
+            return Err(AppError::new(
+                &format!(
+                    "user \"{}\" already setup OTP \
+                    but we requested to finish OTP setup",
+                    username
+                ),
+                file!(),
+                line!(),
+            ));
+        }
+
+        // Update 'need_setup_otp' in database.
+        let result = self.connection.execute(
+            &format!(
+                "UPDATE {} SET need_setup_otp = 0 WHERE username = '{}'",
+                USER_TABLE_NAME, username
+            ),
+            [],
+        );
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        Ok(())
     }
     /// Check if a given user exists in the database.
     ///
@@ -493,6 +630,8 @@ impl DatabaseManager {
                     salt                 TEXT NOT NULL,
                     password             TEXT NOT NULL,
                     need_change_password INTEGER NOT NULL,
+                    need_setup_otp       INTEGER NOT NULL,
+                    otp_secret_key       TEXT NOT NULL,
                     last_login_date      TEXT NOT NULL,
                     last_login_time      TEXT NOT NULL,
                     last_login_ip        TEXT NOT NULL,

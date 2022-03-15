@@ -154,6 +154,7 @@ impl ChangePasswordLayout {
             data.connect_layout.port.parse::<u16>().unwrap(),
             data.connect_layout.username.clone(),
             data.change_password_layout.old_password.clone(),
+            String::new(),
             Some(data.change_password_layout.new_password.clone()),
         );
 
@@ -176,6 +177,13 @@ impl ChangePasswordLayout {
                 println!("{}", message);
                 data.logger_service.lock().unwrap().log(&message);
                 data.change_password_layout.connect_error = String::from(message);
+            }
+            ConnectResult::SetupOTP(qr_code) => {
+                data.otp_layout.qr_code = Some(qr_code);
+                data.current_layout = Layout::Otp;
+            }
+            ConnectResult::NeedOTP => {
+                data.current_layout = Layout::Otp;
             }
             ConnectResult::Connected => {
                 data.change_password_layout.new_password_repeat = String::new();

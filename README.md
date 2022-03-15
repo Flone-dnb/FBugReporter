@@ -15,6 +15,11 @@ The server processes reporters and clients on different ports (see your generate
 
 # Client
 
+<h2>OTP</h2>
+When you will login for the first time, the server will request you to scan a QR code with OTP.<br>
+You have to use an app to scan a QR code for OTPs, for example, Google Authenticator and FreeOTP were cofirmed to work correctly with FBugReporter.
+
+<h2>Theme Customization</h2>
 On first start, the client will create a theme file <b>theme.ini</b> next to the binary file.<br>
 You can customize values in this theme file. In order for them to be applied, restart the client.
 

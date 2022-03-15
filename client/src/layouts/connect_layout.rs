@@ -1,10 +1,6 @@
 // External.
 use druid::widget::{prelude::*, SizedBox};
 use druid::widget::{Button, Flex, Label, LineBreaking, MainAxisAlignment, TextBox};
-use druid::{
-    piet::{ImageBuf, ImageFormat, InterpolationMode},
-    widget::{FillStrat, Image},
-};
 use druid::{Lens, LensExt, TextAlignment, WidgetExt};
 
 // Custom.
@@ -196,6 +192,7 @@ impl ConnectLayout {
             port,
             data.connect_layout.username.clone(),
             data.connect_layout.password.clone(),
+            String::new(),
             None,
         );
         match result {
@@ -214,6 +211,13 @@ impl ConnectLayout {
             }
             ConnectResult::NeedFirstPassword => {
                 data.current_layout = Layout::ChangePassword;
+            }
+            ConnectResult::SetupOTP(qr_code) => {
+                data.otp_layout.qr_code = Some(qr_code);
+                data.current_layout = Layout::Otp;
+            }
+            ConnectResult::NeedOTP => {
+                data.current_layout = Layout::Otp;
             }
             ConnectResult::Connected => {
                 data.connect_layout.password = String::new();

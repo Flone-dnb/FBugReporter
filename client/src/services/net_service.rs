@@ -32,6 +32,8 @@ pub enum ConnectResult {
     Connected,
     ConnectFailed(String),
     NeedFirstPassword,
+    SetupOTP(String),
+    NeedOTP,
     InternalError(AppError),
 }
 
@@ -55,6 +57,11 @@ impl NetService {
     }
     /// Tries to connect to the server.
     ///
+    /// OTP string might be empty if the user still have not received the OTP QR code.
+    /// Once everything is correct, the server will see empty OTP string and if OTP
+    /// is enabled for this user (default) the server will respond with OTP QR code
+    /// that we can show to the user and connect again with a valid OTP.
+    ///
     /// Specify a `new_password` if you want to send the first password (changed password).
     pub fn connect(
         &mut self,
@@ -62,6 +69,7 @@ impl NetService {
         port: u16,
         username: String,
         password: String,
+        otp: String,
         new_password: Option<String>,
     ) -> ConnectResult {
         // Connect socket.
@@ -98,6 +106,7 @@ impl NetService {
             client_net_protocol: NETWORK_PROTOCOL_VERSION,
             username: username.clone(),
             password: password.clone(),
+            otp,
         };
 
         if new_password.is_some() {
@@ -153,7 +162,7 @@ impl NetService {
                                 max_failed_attempts,
                             } => {
                                 _message = format!(
-                                    "Incorrect login/password.\n\
+                                    "Incorrect login/password/OTP.\n\
                                 Allowed failed login attempts: {0} out of {1}.\n\
                                 After {1} failed login attempts new failed login attempt \
                                  will result in a ban.",
@@ -170,6 +179,10 @@ impl NetService {
                                 );
                             }
                         },
+                        ClientLoginFailReason::SetupOTP { qr_code } => {
+                            return ConnectResult::SetupOTP(qr_code);
+                        }
+                        ClientLoginFailReason::NeedOTP => return ConnectResult::NeedOTP,
                         ClientLoginFailReason::NeedFirstPassword => {
                             return ConnectResult::NeedFirstPassword;
                         }

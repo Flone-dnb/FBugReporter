@@ -8,8 +8,31 @@ use sha2::{Digest, Sha512};
 use crate::{error::AppError, misc::GameReport};
 
 const DATABASE_NAME: &str = "database.db3";
+
 const REPORT_TABLE_NAME: &str = "report";
 const USER_TABLE_NAME: &str = "user";
+const VERSION_TABLE_NAME: &str = "version";
+
+const REPORT_TABLE_HASH: &[u8] = &[
+    61, 115, 240, 65, 82, 203, 101, 187, 246, 7, 57, 65, 37, 33, 146, 7, 116, 211, 101, 99, 145,
+    128, 108, 127, 232, 41, 47, 6, 53, 22, 244, 58, 186, 221, 227, 37, 199, 217, 134, 49, 226, 79,
+    164, 250, 215, 136, 114, 72, 71, 180, 83, 50, 211, 251, 214, 2, 127, 131, 105, 113, 23, 43, 25,
+    226,
+];
+const USER_TABLE_HASH: &[u8] = &[
+    179, 186, 80, 246, 153, 112, 181, 236, 128, 174, 246, 56, 18, 207, 187, 205, 195, 233, 114,
+    232, 101, 232, 167, 62, 117, 146, 20, 245, 92, 174, 204, 9, 51, 25, 167, 63, 70, 24, 23, 20,
+    16, 224, 225, 200, 12, 51, 191, 225, 22, 39, 142, 125, 162, 199, 74, 76, 200, 218, 189, 66,
+    243, 47, 180, 120,
+];
+const VERSION_TABLE_HASH: &[u8] = &[
+    94, 44, 135, 144, 199, 240, 160, 192, 134, 20, 58, 5, 166, 161, 247, 8, 243, 133, 150, 243,
+    170, 153, 111, 171, 177, 44, 21, 21, 216, 125, 205, 17, 4, 246, 33, 52, 25, 191, 115, 13, 109,
+    97, 3, 238, 17, 191, 125, 170, 23, 161, 189, 182, 35, 114, 128, 169, 94, 60, 56, 147, 84, 54,
+    43, 145,
+];
+
+const SUPPORTED_DATABASE_VERSION: u64 = 0;
 
 const SALT_LENGTH: u64 = 32;
 const OTP_SECRET_LENGTH: u64 = 256;
@@ -44,6 +67,12 @@ impl DatabaseManager {
 
         let mut connection = result.unwrap();
 
+        // Check 'version' table.
+        if let Err(app_error) = DatabaseManager::create_version_table_if_not_found(&mut connection)
+        {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
         // Check 'report' table.
         if let Err(app_error) = DatabaseManager::create_report_table_if_not_found(&mut connection) {
             return Err(app_error.add_entry(file!(), line!()));
@@ -51,6 +80,10 @@ impl DatabaseManager {
 
         // Check 'user' table.
         if let Err(app_error) = DatabaseManager::create_user_table_if_not_found(&mut connection) {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        if let Err(app_error) = DatabaseManager::handle_old_database_version(&mut connection) {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
@@ -572,9 +605,12 @@ impl DatabaseManager {
 
         if row.is_none() {
             // Create this table.
-            let result = connection.execute(
-                &format!(
-                    "CREATE TABLE {}(
+            // TODO: IF CHANGING TABLE STRUCTURE,
+            // TODO: remember to increment SUPPORTED_DATABASE_VERSION
+            // TODO: and handle old database version in
+            // TODO: handle_old_database_version() function.
+            let table_structure = format!(
+                "CREATE TABLE {}(
                     id              INTEGER PRIMARY KEY AUTOINCREMENT,
                     report_name     TEXT NOT NULL,
                     report_text     TEXT NOT NULL,
@@ -586,18 +622,96 @@ impl DatabaseManager {
                     date_created_at TEXT NOT NULL,
                     time_created_at TEXT NOT NULL     
                 )",
-                    REPORT_TABLE_NAME
-                ),
-                [],
+                REPORT_TABLE_NAME
             );
+
+            // Calculate table structure hash.
+            let mut hasher = Sha512::new();
+            hasher.update(&table_structure);
+            let table_hash = hasher.finalize().to_vec();
+
+            if table_hash != REPORT_TABLE_HASH {
+                panic!("report table was changed and now is incompatible with old versions, \
+                        to fix this panic, follow these steps:\n\
+                        1. increment 'SUPPORTED_DATABASE_VERSION' constant\n\
+                        2. handle old database version in 'handle_old_database_version()' function\n\
+                        3. recalculate new table hash (sha512) and put it into 'REPORT_TABLE_HASH' constant.");
+            }
+
+            // Create table.
+            let result = connection.execute(&table_structure, []);
             if let Err(e) = result {
                 return Err(AppError::new(&e.to_string(), file!(), line!()));
             }
         }
 
-        drop(row);
-        drop(rows);
-        drop(stmt);
+        Ok(())
+    }
+    fn create_version_table_if_not_found(connection: &mut Connection) -> Result<(), AppError> {
+        // Check if table exists.
+        let mut stmt = connection
+            .prepare(&format!(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='{}'",
+                VERSION_TABLE_NAME
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+        let row = rows.next().unwrap();
+
+        if row.is_none() {
+            // Create this table.
+            // TODO: IF CHANGING TABLE STRUCTURE,
+            // TODO: remember to increment SUPPORTED_DATABASE_VERSION
+            // TODO: and handle old database version in
+            // TODO: handle_old_database_version() function.
+            let table_structure = format!(
+                "CREATE TABLE {}(
+                    version INTEGER   
+                )",
+                VERSION_TABLE_NAME
+            );
+
+            // Calculate table structure hash.
+            let mut hasher = Sha512::new();
+            hasher.update(&table_structure);
+            let table_hash = hasher.finalize().to_vec();
+
+            if table_hash != VERSION_TABLE_HASH {
+                panic!("version table was changed and now is incompatible with old versions, \
+                        to fix this panic, follow these steps:\n\
+                        1. increment 'SUPPORTED_DATABASE_VERSION' constant\n\
+                        2. handle old database version in 'handle_old_database_version()' function\n\
+                        3. recalculate new table hash (sha512) and put it into 'VERSION_TABLE_HASH' constant.");
+            }
+
+            // Create table.
+            let result = connection.execute(&table_structure, []);
+            if let Err(e) = result {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+        }
+
+        // Insert database version.
+        if let Err(e) = connection.execute(
+            // password = hash(salt + hash(password))
+            &format!(
+                "INSERT INTO {} 
+            (
+                version
+            ) 
+            VALUES 
+            (?1)",
+                VERSION_TABLE_NAME
+            ),
+            params![SUPPORTED_DATABASE_VERSION],
+        ) {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
 
         Ok(())
     }
@@ -619,12 +733,12 @@ impl DatabaseManager {
 
         if row.is_none() {
             // Create this table.
-            let result = connection.execute(
-                // password = hash(salt + hash(password))
-                // need_change_password is '1' if the user
-                // just registered, thus we need to ask him of a new password.
-                &format!(
-                    "CREATE TABLE {}(
+            // TODO: IF CHANGING TABLE STRUCTURE,
+            // TODO: remember to increment SUPPORTED_DATABASE_VERSION
+            // TODO: and handle old database version in
+            // TODO: handle_old_database_version() function.
+            let table_structure = format!(
+                "CREATE TABLE {}(
                     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
                     username             TEXT NOT NULL UNIQUE,
                     salt                 TEXT NOT NULL,
@@ -638,8 +752,27 @@ impl DatabaseManager {
                     date_registered      TEXT NOT NULL,
                     time_registered      TEXT NOT NULL
                 )",
-                    USER_TABLE_NAME
-                ),
+                USER_TABLE_NAME
+            );
+
+            // Calculate table structure hash.
+            let mut hasher = Sha512::new();
+            hasher.update(&table_structure);
+            let table_hash = hasher.finalize().to_vec();
+
+            if table_hash != USER_TABLE_HASH {
+                panic!("user table was changed and now is incompatible with old versions, \
+                        to fix this panic, follow these steps:\n\
+                        1. increment 'SUPPORTED_DATABASE_VERSION' constant\n\
+                        2. handle old database version in 'handle_old_database_version()' function\n\
+                        3. recalculate new table hash (sha512) and put it into 'USER_TABLE_HASH' constant.");
+            }
+
+            let result = connection.execute(
+                // password = hash(salt + hash(password))
+                // need_change_password is '1' if the user
+                // just registered, thus we need to ask him of a new password.
+                &table_structure,
                 [],
             );
             if let Err(e) = result {
@@ -647,9 +780,45 @@ impl DatabaseManager {
             }
         }
 
-        drop(row);
-        drop(rows);
-        drop(stmt);
+        Ok(())
+    }
+    fn handle_old_database_version(connection: &mut Connection) -> Result<(), AppError> {
+        // Get database version.
+        let mut stmt = connection
+            .prepare(&format!("SELECT version FROM {}", VERSION_TABLE_NAME))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+
+        let row = rows.next();
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let row = row.unwrap();
+        if row.is_none() {
+            return Err(AppError::new("no version in database", file!(), line!()));
+        }
+        let row = row.unwrap();
+
+        // Get version.
+        let version: Result<u64> = row.get(0);
+        if let Err(e) = version {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let version = version.unwrap();
+
+        if version != SUPPORTED_DATABASE_VERSION {
+            // TODO: handle old version here.
+            // TODO: update old database to new format here.
+            // TODO: ...
+            // TODO: after everything is done, replace version value in the version table
+            // TODO: with a new one.
+            let notice_me = 42;
+        }
 
         Ok(())
     }

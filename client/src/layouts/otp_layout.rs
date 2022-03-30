@@ -61,7 +61,7 @@ impl OtpLayout {
                         .with_flex_child(SizedBox::empty().expand(), WIDTH_PADDING)
                         .with_flex_child(
                             Label::new(
-                                "You an app to scan this QR code (for example: \
+                                "Use an app to scan this QR code (for example: \
                                         Google Authenticator) and \
                                         enter current OTP below.",
                             )

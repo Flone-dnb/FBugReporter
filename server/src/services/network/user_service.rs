@@ -12,7 +12,7 @@ use block_modes::{BlockMode, Cbc};
 use cmac::{Cmac, Mac, NewMac};
 use num_bigint::{BigUint, RandomBits};
 use rand::{Rng, RngCore};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha512};
 use totp_rs::{Algorithm, TOTP};
 
@@ -32,7 +32,8 @@ const IV_LENGTH: usize = 16; // if changed, change protocol version
 const CMAC_TAG_LENGTH: usize = 16; // if changed, change protocol version
 const NETWORK_PROTOCOL_VERSION: u16 = 0;
 const MAX_PACKET_SIZE_IN_BYTES: u32 = 131_072; // 128 kB for now
-const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
+const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 25;
+const MAX_WAIT_TIME_IN_READ_WRITE_MS: u64 = 5000;
 
 enum IoResult {
     Ok(usize),
@@ -122,7 +123,8 @@ impl UserService {
         }
         self.secret_key = secret_key.unwrap();
 
-        let packet = self.receive_packet();
+        let mut is_fin = false; // don't check, react to FIN as error
+        let packet = self.receive_packet(true, &mut is_fin);
         if let Err(app_error) = packet {
             self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
             return;
@@ -161,7 +163,8 @@ impl UserService {
         }
         self.secret_key = secret_key.unwrap();
 
-        let packet = self.receive_packet();
+        let mut is_fin = false; // don't check, react to FIN as error
+        let packet = self.receive_packet(true, &mut is_fin);
         if let Err(app_error) = packet {
             self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
             return;
@@ -176,11 +179,20 @@ impl UserService {
         }
         let packet = packet.unwrap();
 
-        // TODO: in wouldblock (read/write functions) have loop limit as a variable
-        //       never set the limit when waiting for user messages!
-        //       pass loop limit to read/write functions
-        // TODO: add keep alive timer (for clients only)
+        // Handle packet.
         let result = self.handle_client_packet(packet);
+        if let Err(app_error) = result {
+            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
+            return;
+        }
+        let result = result.unwrap();
+        if result.is_some() {
+            self.exit_error = Some(Ok(result.unwrap()));
+            return;
+        }
+
+        // Connected.
+        let result = self.wait_for_client_requests();
         if let Err(app_error) = result {
             self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
             return;
@@ -305,7 +317,7 @@ impl UserService {
     /// Returns `Option<String>` as `Ok`:
     /// - if `Some(String)` then there was a "soft" error
     /// (typically means that there was an error in client
-    /// data (wrong credentials, protocol version, etc...)
+    /// data (wrong credentials, protocol version, etc...))
     /// and we don't need to consider this as a bug,
     /// - if `None` then the operation finished successfully.
     ///
@@ -694,6 +706,49 @@ impl UserService {
 
         return Ok(format!("wrong credentials (login username: {})", username));
     }
+    /// Waits for new requests from the client.
+    ///
+    /// Returns `Option<String>` as `Ok`:
+    /// - if `Some(String)` then there was a "soft" error
+    /// (typically means that there was an error in client
+    /// data (out of bounds page requested, non-existent report requested and etc.))
+    /// and we don't need to consider this as a bug,
+    /// - if `None` then the operation finished successfully.
+    ///
+    /// Returns `AppError` as `Err` if there was an internal error
+    /// (bug).
+    fn wait_for_client_requests(&mut self) -> Result<Option<String>, AppError> {
+        // TODO: add keep-alive for clients
+
+        let mut is_fin = false;
+        let result = self.receive_packet(false, &mut is_fin);
+        if is_fin {
+            return Ok(None);
+        }
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+        let packet = result.unwrap();
+
+        // Deserialize.
+        let packet = bincode::deserialize::<InClientPacket>(&packet);
+        if let Err(e) = packet {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let packet = packet.unwrap();
+
+        // Handle packet.
+        let result = self.handle_client_packet(packet);
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+        let result = result.unwrap();
+        if result.is_some() {
+            return Ok(result);
+        }
+
+        Ok(None)
+    }
     fn establish_secure_connection(socket: &mut TcpStream) -> Result<Vec<u8>, AppError> {
         // taken from https://www.rfc-editor.org/rfc/rfc5114#section-2.1
         let p = BigUint::parse_bytes(
@@ -733,7 +788,7 @@ impl UserService {
 
         // Send p and g values.
         loop {
-            match UserService::write_to_socket(socket, &mut pg_send_buf) {
+            match UserService::write_to_socket(socket, &mut pg_send_buf, true) {
                 IoResult::Fin => {
                     return Err(AppError::new("unexpected FIN received", file!(), line!()));
                 }
@@ -769,7 +824,7 @@ impl UserService {
         let mut a_open_len_buf = a_open_len_buf.unwrap();
         a_open_len_buf.append(&mut a_open_buf);
         loop {
-            match UserService::write_to_socket(socket, &mut a_open_len_buf) {
+            match UserService::write_to_socket(socket, &mut a_open_len_buf, true) {
                 IoResult::Fin => {
                     return Err(AppError::new("unexpected FIN received", file!(), line!()));
                 }
@@ -785,7 +840,7 @@ impl UserService {
         // Receive open key 'B' size.
         let mut b_open_len_buf = vec![0u8; std::mem::size_of::<u64>()];
         loop {
-            match UserService::read_from_socket(socket, &mut b_open_len_buf) {
+            match UserService::read_from_socket(socket, &mut b_open_len_buf, true) {
                 IoResult::Fin => {
                     return Err(AppError::new("unexpected FIN received", file!(), line!()));
                 }
@@ -807,7 +862,7 @@ impl UserService {
         let mut b_open_buf = vec![0u8; b_open_len as usize];
 
         loop {
-            match UserService::read_from_socket(socket, &mut b_open_buf) {
+            match UserService::read_from_socket(socket, &mut b_open_buf, true) {
                 IoResult::Fin => {
                     return Err(AppError::new("unexpected FIN received", file!(), line!()));
                 }
@@ -952,7 +1007,7 @@ impl UserService {
 
         // Send.
         loop {
-            match UserService::write_to_socket(socket, &mut send_buffer) {
+            match UserService::write_to_socket(socket, &mut send_buffer, true) {
                 IoResult::Fin => {
                     return Err(AppError::new("unexpected FIN received", file!(), line!()));
                 }
@@ -965,7 +1020,11 @@ impl UserService {
 
         Ok(())
     }
-    fn receive_packet(&mut self) -> Result<Vec<u8>, AppError> {
+    fn receive_packet(
+        &mut self,
+        enable_wait_limit: bool,
+        is_fin: &mut bool,
+    ) -> Result<Vec<u8>, AppError> {
         if self.secret_key.is_empty() {
             return Err(AppError::new(
                 "can't receive packet - secure connected is not established",
@@ -977,8 +1036,13 @@ impl UserService {
         // Read u32 (size of a packet)
         let mut packet_size_buf = [0u8; std::mem::size_of::<u32>() as usize];
         let mut _next_packet_size: u32 = 0;
-        match UserService::read_from_socket(&mut self.socket, &mut packet_size_buf) {
+        match UserService::read_from_socket(
+            &mut self.socket,
+            &mut packet_size_buf,
+            enable_wait_limit,
+        ) {
             IoResult::Fin => {
+                *is_fin = true;
                 return Err(AppError::new(
                     &format!(
                         "unexpected FIN received (socket: {})",
@@ -1032,8 +1096,13 @@ impl UserService {
 
         // Receive encrypted packet.
         let mut encrypted_packet = vec![0u8; _next_packet_size as usize];
-        match UserService::read_from_socket(&mut self.socket, &mut encrypted_packet) {
+        match UserService::read_from_socket(
+            &mut self.socket,
+            &mut encrypted_packet,
+            enable_wait_limit,
+        ) {
             IoResult::Fin => {
+                *is_fin = true;
                 return Err(AppError::new(
                     &format!(
                         "unexpected FIN received (socket: {})",
@@ -1090,12 +1159,41 @@ impl UserService {
 
         Ok(decrypted_packet)
     }
-    fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
+    /// Reads data from the specified socket.
+    ///
+    /// Arguments:
+    ///
+    /// * `socket`: socket to read the data from.
+    /// * `buf`: buffer to write read data.
+    /// * `enable_wait_limit`: if socket has no data to read and this
+    /// argument is `false` this function will block until socket receives
+    /// new data, otherwise if `true` is specified, this function
+    /// will wait for `MAX_WAIT_TIME_IN_READ_WRITE_MS` maximum and then
+    /// return error if the socket still has no data to read.
+    fn read_from_socket(
+        socket: &mut TcpStream,
+        buf: &mut [u8],
+        enable_wait_limit: bool,
+    ) -> IoResult {
         if buf.is_empty() {
             return IoResult::Err(AppError::new("passed 'buf' has 0 length", file!(), line!()));
         }
 
+        let mut total_wait_time_ms: u64 = 0;
+
         loop {
+            if enable_wait_limit && total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
+                return IoResult::Err(AppError::new(
+                    &format!(
+                        "reached maximum response wait time limit of {} ms for socket {}",
+                        MAX_WAIT_TIME_IN_READ_WRITE_MS,
+                        socket.peer_addr().unwrap(),
+                    ),
+                    file!(),
+                    line!(),
+                ));
+            }
+
             match socket.read(buf) {
                 Ok(0) => {
                     return IoResult::Fin;
@@ -1118,6 +1216,7 @@ impl UserService {
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     thread::sleep(Duration::from_millis(WOULD_BLOCK_RETRY_AFTER_MS));
+                    total_wait_time_ms += WOULD_BLOCK_RETRY_AFTER_MS;
                     continue;
                 }
                 Err(e) => {
@@ -1130,12 +1229,39 @@ impl UserService {
             };
         }
     }
-    fn write_to_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
+    /// Writes the specified buffer to the socket.
+    ///
+    /// Arguments:
+    ///
+    /// * `socket`: socket to write this data to.
+    /// * `buf`: buffer to write to the socket.
+    /// * `enable_wait_limit`: if `false` will wait for write operation to finish
+    /// infinitely, otherwise will wait for maximum `MAX_WAIT_TIME_IN_READ_WRITE_MS`
+    /// for operation to finish and return error in case of a timeout.
+    fn write_to_socket(
+        socket: &mut TcpStream,
+        buf: &mut [u8],
+        enable_wait_limit: bool,
+    ) -> IoResult {
         if buf.is_empty() {
             return IoResult::Err(AppError::new("passed 'buf' has 0 length", file!(), line!()));
         }
 
+        let mut total_wait_time_ms: u64 = 0;
+
         loop {
+            if enable_wait_limit && total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
+                return IoResult::Err(AppError::new(
+                    &format!(
+                        "reached maximum response wait time limit of {} ms for socket {}",
+                        MAX_WAIT_TIME_IN_READ_WRITE_MS,
+                        socket.peer_addr().unwrap(),
+                    ),
+                    file!(),
+                    line!(),
+                ));
+            }
+
             match socket.write(buf) {
                 Ok(0) => {
                     return IoResult::Fin;
@@ -1158,6 +1284,7 @@ impl UserService {
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     thread::sleep(Duration::from_millis(WOULD_BLOCK_RETRY_AFTER_MS));
+                    total_wait_time_ms += WOULD_BLOCK_RETRY_AFTER_MS;
                     continue;
                 }
                 Err(e) => {

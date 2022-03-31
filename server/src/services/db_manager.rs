@@ -5,6 +5,7 @@ use rusqlite::{params, Connection, Result};
 use sha2::{Digest, Sha512};
 
 // Custom.
+use super::network::net_packets::ReportSummary;
 use crate::{error::AppError, misc::GameReport};
 
 const DATABASE_NAME: &str = "database.db3";
@@ -88,6 +89,87 @@ impl DatabaseManager {
         }
 
         Ok(Self { connection })
+    }
+    pub fn get_reports(&self, mut page: u64, amount: u64) -> Result<Vec<ReportSummary>, AppError> {
+        if page == 0 {
+            page = 1;
+        }
+
+        let start_id: u64 = (page - 1) * amount;
+
+        let mut stmt = self
+            .connection
+            .prepare(&format!(
+                "SELECT id, report_name, game_name, date_created_at, time_created_at \
+                 FROM {} WHERE id > {} \
+                 ORDER BY id LIMIT {}",
+                REPORT_TABLE_NAME, start_id, amount
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+
+        let mut reports: Vec<ReportSummary> = Vec::new();
+
+        loop {
+            let row = rows.next();
+            if let Err(e) = row {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            let row = row.unwrap();
+            if row.is_none() {
+                return Ok(reports);
+            }
+
+            let row = row.unwrap();
+
+            // Get report id.
+            let id = row.get(0);
+            if let Err(e) = id {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            let id: u64 = id.unwrap();
+
+            // Get report title.
+            let title = row.get(1);
+            if let Err(e) = title {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            let title: String = title.unwrap();
+
+            // Get report game name.
+            let game = row.get(2);
+            if let Err(e) = game {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            let game: String = game.unwrap();
+
+            // Get report date.
+            let date = row.get(3);
+            if let Err(e) = date {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            let date: String = date.unwrap();
+
+            // Get report date.
+            let time = row.get(4);
+            if let Err(e) = time {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            let time: String = time.unwrap();
+
+            reports.push(ReportSummary {
+                id,
+                title,
+                game,
+                date,
+                time,
+            })
+        }
     }
     /// Adds a new user to the database.
     pub fn add_user(&self, username: &str) -> AddUserResult {

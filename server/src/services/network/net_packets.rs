@@ -47,26 +47,43 @@ pub enum ClientLoginFailReason {
 #[derive(Serialize, Deserialize)]
 pub enum InClientPacket {
     // should be exactly same as client's enum
-    ClientLogin {
+    Login {
         client_net_protocol: u16,
         username: String,
         password: Vec<u8>,
         otp: String,
     },
-    ClientSetFirstPassword {
+    SetFirstPassword {
         client_net_protocol: u16,
         username: String,
         old_password: Vec<u8>,
         new_password: Vec<u8>,
     },
+    QueryReportsSummary {
+        page: u64,
+        amount: u64,
+    },
+}
+
+// should be exactly the same as client's struct
+#[derive(Serialize, Deserialize)]
+pub struct ReportSummary {
+    pub id: u64,
+    pub title: String,
+    pub game: String,
+    pub date: String,
+    pub time: String,
 }
 
 #[derive(Serialize, Deserialize)]
 pub enum OutClientPacket {
     // should be exactly same as client's enum
-    ClientLoginAnswer {
+    LoginAnswer {
         is_ok: bool,
         fail_reason: Option<ClientLoginFailReason>,
+    },
+    ReportsSummary {
+        reports: Vec<ReportSummary>,
     },
 }
 

@@ -8,25 +8,35 @@ use crate::misc::custom_data_button_controller::*;
 use crate::ApplicationState;
 
 // Layout customization.
-const TITLE_WIDTH: f64 = 0.7;
-const DATE_WIDTH: f64 = 0.15;
-const TIME_WIDTH: f64 = 0.15;
+const TITLE_WIDTH: f64 = 0.4;
+const GAME_WIDTH: f64 = 0.2;
+const DATE_WIDTH: f64 = 0.2;
+const TIME_WIDTH: f64 = 0.2;
 const TEXT_SIZE: f64 = 18.0;
+const TITLE_MAX_CHARS_TO_DISPLAY: usize = 20;
 
 #[derive(Clone, Data, Lens)]
 pub struct ReportWidget {
     id: u64,
     title: String,
+    game: String,
     date: String,
     time: String,
     is_hovered: bool,
 }
 
 impl ReportWidget {
-    pub fn new(id: u64, title: String, date: String, time: String) -> Self {
+    pub fn new(id: u64, title: String, game: String, date: String, time: String) -> Self {
+        let mut cut_title = title.chars().take(TITLE_MAX_CHARS_TO_DISPLAY).collect();
+
+        if title.chars().count() > TITLE_MAX_CHARS_TO_DISPLAY {
+            cut_title += "...";
+        }
+
         Self {
             id,
-            title,
+            title: cut_title,
+            game,
             date,
             time,
             is_hovered: false,
@@ -42,6 +52,13 @@ impl ReportWidget {
                     .with_text_size(TEXT_SIZE)
                     .expand_width(),
                 TITLE_WIDTH,
+            )
+            .with_flex_child(
+                Label::new("Game")
+                    .with_text_alignment(TextAlignment::Start)
+                    .with_text_size(TEXT_SIZE)
+                    .expand_width(),
+                GAME_WIDTH,
             )
             .with_flex_child(
                 Label::new("Date")
@@ -73,6 +90,13 @@ impl ReportWidget {
                 }))
                 .expand_width(),
                 TITLE_WIDTH,
+            )
+            .with_flex_child(
+                Label::new(self.game.clone())
+                    .with_text_alignment(TextAlignment::Start)
+                    .with_text_size(TEXT_SIZE)
+                    .expand_width(),
+                GAME_WIDTH,
             )
             .with_flex_child(
                 Label::new(self.date.clone())

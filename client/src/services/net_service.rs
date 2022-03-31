@@ -46,6 +46,7 @@ enum IoResult {
 pub struct NetService {
     socket: Option<TcpStream>,
     secret_key: Vec<u8>,
+    is_connected: bool,
 }
 
 impl NetService {
@@ -53,6 +54,7 @@ impl NetService {
         Self {
             socket: None,
             secret_key: Vec::new(),
+            is_connected: false,
         }
     }
     /// Tries to connect to the server.
@@ -102,7 +104,7 @@ impl NetService {
         let password = hasher.finalize().to_vec();
 
         // Prepare packet to send.
-        let mut packet = OutClientPacket::ClientLogin {
+        let mut packet = OutClientPacket::Login {
             client_net_protocol: NETWORK_PROTOCOL_VERSION,
             username: username.clone(),
             password: password.clone(),
@@ -116,7 +118,7 @@ impl NetService {
             let new_password = hasher.finalize().to_vec();
 
             // Update packet to send.
-            packet = OutClientPacket::ClientSetFirstPassword {
+            packet = OutClientPacket::SetFirstPassword {
                 client_net_protocol: NETWORK_PROTOCOL_VERSION,
                 username: username.clone(),
                 old_password: password,
@@ -143,7 +145,7 @@ impl NetService {
         let packet = packet.unwrap();
 
         match packet {
-            InClientPacket::ClientLoginAnswer { is_ok, fail_reason } => {
+            InClientPacket::LoginAnswer { is_ok, fail_reason } => {
                 if !is_ok {
                     let mut _message = String::new();
                     match fail_reason.unwrap() {
@@ -190,6 +192,13 @@ impl NetService {
                     return ConnectResult::ConnectFailed(_message);
                 }
             }
+            _ => {
+                return ConnectResult::InternalError(AppError::new(
+                    "unexpected packet received",
+                    file!(),
+                    line!(),
+                ));
+            }
         }
 
         // Connected.
@@ -199,9 +208,54 @@ impl NetService {
         config.username = username;
         config.write_config_to_file();
 
-        // return control here, don't drop connection,
+        self.is_connected = true;
+
+        // return control here, don't drop the connection,
         // wait for further commands from the user
         ConnectResult::Connected
+    }
+    pub fn query_reports(
+        &mut self,
+        page: u64,
+        amount: u64,
+    ) -> Result<Vec<ReportSummary>, AppError> {
+        if !self.is_connected {
+            return Err(AppError::new("not connected", file!(), line!()));
+        }
+
+        // Prepare packet to send.
+        let packet = OutClientPacket::QueryReportsSummary { page, amount };
+
+        let result = self.send_packet(packet);
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        let result = self.receive_packet();
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+        let serialized_packet = result.unwrap();
+
+        // Deserialize.
+        let packet = bincode::deserialize::<InClientPacket>(&serialized_packet);
+        if let Err(e) = packet {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let packet = packet.unwrap();
+
+        match packet {
+            InClientPacket::ReportsSummary { reports } => {
+                return Ok(reports);
+            }
+            _ => {
+                return Err(AppError::new(
+                    "unexpected packet received",
+                    file!(),
+                    line!(),
+                ));
+            }
+        }
     }
     fn receive_packet(&mut self) -> Result<Vec<u8>, AppError> {
         if self.secret_key.is_empty() {

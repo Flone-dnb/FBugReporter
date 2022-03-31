@@ -48,6 +48,7 @@ pub struct UserService {
     exit_error: Option<Result<String, AppError>>,
     database: Arc<Mutex<DatabaseManager>>,
     ban_manager: Option<Arc<Mutex<BanManager>>>,
+    username: Option<String>,
 }
 
 impl UserService {
@@ -81,6 +82,7 @@ impl UserService {
             secret_key: Vec::new(),
             database,
             ban_manager,
+            username: None,
         }
     }
     pub fn new_reporter(
@@ -112,6 +114,7 @@ impl UserService {
             secret_key: Vec::new(),
             database,
             ban_manager: None,
+            username: None,
         }
     }
     /// After this function is finished the object should be destroyed.
@@ -325,33 +328,46 @@ impl UserService {
     /// (bug).
     fn handle_client_packet(&mut self, packet: InClientPacket) -> Result<Option<String>, AppError> {
         match packet {
-            InClientPacket::ClientLogin {
+            InClientPacket::Login {
                 client_net_protocol,
                 username,
                 password,
                 otp,
             } => {
-                return self.handle_client_login(
-                    client_net_protocol,
-                    username,
-                    password,
-                    otp,
-                    None,
-                );
+                let result =
+                    self.handle_client_login(client_net_protocol, username, password, otp, None);
+                if let Err(app_error) = result {
+                    return Err(app_error.add_entry(file!(), line!()));
+                }
+
+                Ok(result.unwrap())
             }
-            InClientPacket::ClientSetFirstPassword {
+            InClientPacket::SetFirstPassword {
                 client_net_protocol,
                 username,
                 old_password,
                 new_password,
             } => {
-                return self.handle_client_login(
+                let result = self.handle_client_login(
                     client_net_protocol,
                     username,
                     old_password,
                     String::new(),
                     Some(new_password),
                 );
+                if let Err(app_error) = result {
+                    return Err(app_error.add_entry(file!(), line!()));
+                }
+
+                Ok(result.unwrap())
+            }
+            InClientPacket::QueryReportsSummary { page, amount } => {
+                let result = self.handle_client_reports_request(page, amount);
+                if let Err(app_error) = result {
+                    return Err(app_error.add_entry(file!(), line!()));
+                }
+
+                Ok(None)
             }
         }
     }
@@ -376,7 +392,7 @@ impl UserService {
     ) -> Result<Option<String>, AppError> {
         // Check protocol version.
         if client_net_protocol != NETWORK_PROTOCOL_VERSION {
-            let answer = OutClientPacket::ClientLoginAnswer {
+            let answer = OutClientPacket::LoginAnswer {
                 is_ok: false,
                 fail_reason: Some(ClientLoginFailReason::WrongProtocol {
                     server_protocol: NETWORK_PROTOCOL_VERSION,
@@ -458,7 +474,7 @@ impl UserService {
                 ),
             );
 
-            let answer = OutClientPacket::ClientLoginAnswer {
+            let answer = OutClientPacket::LoginAnswer {
                 is_ok: false,
                 fail_reason: Some(ClientLoginFailReason::NeedFirstPassword),
             };
@@ -530,7 +546,7 @@ impl UserService {
                 );
 
                 // Send QR code.
-                let answer = OutClientPacket::ClientLoginAnswer {
+                let answer = OutClientPacket::LoginAnswer {
                     is_ok: false,
                     fail_reason: Some(ClientLoginFailReason::SetupOTP { qr_code }),
                 };
@@ -544,7 +560,7 @@ impl UserService {
             } else {
                 if otp.is_empty() {
                     // Need OTP.
-                    let answer = OutClientPacket::ClientLoginAnswer {
+                    let answer = OutClientPacket::LoginAnswer {
                         is_ok: false,
                         fail_reason: Some(ClientLoginFailReason::NeedOTP),
                     };
@@ -555,7 +571,7 @@ impl UserService {
                     }
 
                     return Ok(Some(format!(
-                        "notified the user {} that he needs a OTP to login (usual login process, not an error)",
+                        "the user {} needs a OTP to login (usual login process, not an error)",
                         username
                     )));
                 }
@@ -622,11 +638,13 @@ impl UserService {
             self.logger
                 .lock()
                 .unwrap()
-                .print_and_log(LogCategory::Info, &format!("{} logged in.", &username));
+                .print_and_log(LogCategory::Info, &format!("{} logged in", &username));
         }
 
+        self.username = Some(username);
+
         // Answer "connected".
-        let answer = OutClientPacket::ClientLoginAnswer {
+        let answer = OutClientPacket::LoginAnswer {
             is_ok: true,
             fail_reason: None,
         };
@@ -635,6 +653,27 @@ impl UserService {
         }
 
         Ok(None)
+    }
+    fn handle_client_reports_request(&mut self, page: u64, amount: u64) -> Result<(), AppError> {
+        // Get reports from database.
+        let guard = self.database.lock().unwrap();
+        let result = guard.get_reports(page, amount);
+        drop(guard);
+
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+        let reports = result.unwrap();
+
+        let packet = OutClientPacket::ReportsSummary { reports };
+
+        // Send reports.
+        let result = UserService::send_packet(&mut self.socket, &self.secret_key, packet);
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        Ok(())
     }
     /// Sends `ClientLoginAnswer` with `WrongCredentials` packet
     /// to the client.
@@ -658,7 +697,7 @@ impl UserService {
 
         match _result {
             AttemptResult::Fail { attempts_made } => {
-                let _answer = OutClientPacket::ClientLoginAnswer {
+                let _answer = OutClientPacket::LoginAnswer {
                     is_ok: false,
                     fail_reason: Some(ClientLoginFailReason::WrongCredentials {
                         result: ClientLoginFailResult::FailedAttempt {
@@ -681,7 +720,7 @@ impl UserService {
                 }
             }
             AttemptResult::Ban => {
-                let _answer = OutClientPacket::ClientLoginAnswer {
+                let _answer = OutClientPacket::LoginAnswer {
                     is_ok: false,
                     fail_reason: Some(ClientLoginFailReason::WrongCredentials {
                         result: ClientLoginFailResult::Banned {
@@ -721,33 +760,34 @@ impl UserService {
         // TODO: add keep-alive for clients
 
         let mut is_fin = false;
-        let result = self.receive_packet(false, &mut is_fin);
-        if is_fin {
-            return Ok(None);
-        }
-        if let Err(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
-        }
-        let packet = result.unwrap();
 
-        // Deserialize.
-        let packet = bincode::deserialize::<InClientPacket>(&packet);
-        if let Err(e) = packet {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
-        }
-        let packet = packet.unwrap();
+        loop {
+            let result = self.receive_packet(false, &mut is_fin);
+            if is_fin {
+                return Ok(None);
+            }
+            if let Err(app_error) = result {
+                return Err(app_error.add_entry(file!(), line!()));
+            }
+            let packet = result.unwrap();
 
-        // Handle packet.
-        let result = self.handle_client_packet(packet);
-        if let Err(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
-        }
-        let result = result.unwrap();
-        if result.is_some() {
-            return Ok(result);
-        }
+            // Deserialize.
+            let packet = bincode::deserialize::<InClientPacket>(&packet);
+            if let Err(e) = packet {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            let packet = packet.unwrap();
 
-        Ok(None)
+            // Handle packet.
+            let result = self.handle_client_packet(packet);
+            if let Err(app_error) = result {
+                return Err(app_error.add_entry(file!(), line!()));
+            }
+            let result = result.unwrap();
+            if result.is_some() {
+                return Ok(result);
+            }
+        }
     }
     fn establish_secure_connection(socket: &mut TcpStream) -> Result<Vec<u8>, AppError> {
         // taken from https://www.rfc-editor.org/rfc/rfc5114#section-2.1
@@ -1301,30 +1341,40 @@ impl UserService {
 
 impl Drop for UserService {
     fn drop(&mut self) {
-        let mut message = format!(
-            "Closing connection with {}",
-            self.socket.peer_addr().unwrap()
-        );
+        let mut _message = String::new();
+
+        if self.username.is_some() {
+            _message = format!("{} logged out", self.username.as_ref().unwrap());
+        } else {
+            _message = format!(
+                "Closing connection with {}",
+                self.socket.peer_addr().unwrap()
+            );
+        }
 
         if self.exit_error.is_some() {
             let error = self.exit_error.as_ref().unwrap();
 
             if let Err(app_error) = error {
-                message += &format!(" due to internal error (bug):\n{}", app_error);
+                _message += &format!(" due to internal error (bug):\n{}", app_error);
             } else {
-                message += &format!(", reason: {}", error.as_ref().unwrap());
+                _message += &format!(", reason: {}", error.as_ref().unwrap());
             }
         }
 
-        message += "\n";
+        if !_message.ends_with('.') {
+            _message += ".";
+        }
+
+        _message += "\n";
 
         let mut guard = self.connected_users_count.lock().unwrap();
         *guard -= 1;
-        message += &format!("--- [connected: {}] ---", guard);
+        _message += &format!("--- [connected: {}] ---", guard);
 
         self.logger
             .lock()
             .unwrap()
-            .print_and_log(LogCategory::Info, &message);
+            .print_and_log(LogCategory::Info, &_message);
     }
 }

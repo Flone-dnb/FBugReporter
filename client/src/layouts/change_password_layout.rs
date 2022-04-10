@@ -180,9 +180,24 @@ impl ChangePasswordLayout {
             }
             ConnectResult::SetupOTP(qr_code) => {
                 data.otp_layout.qr_code = Some(qr_code);
+
+                // set password for OTP layout.
+                data.connect_layout.password = data.change_password_layout.new_password.clone();
+
+                data.change_password_layout.new_password_repeat = String::new();
+                data.change_password_layout.new_password = String::new();
+                data.change_password_layout.old_password = String::new();
+
                 data.current_layout = Layout::Otp;
             }
             ConnectResult::NeedOTP => {
+                // set password for OTP layout.
+                data.connect_layout.password = data.change_password_layout.new_password.clone();
+
+                data.change_password_layout.new_password_repeat = String::new();
+                data.change_password_layout.new_password = String::new();
+                data.change_password_layout.old_password = String::new();
+
                 data.current_layout = Layout::Otp;
             }
             ConnectResult::Connected => {

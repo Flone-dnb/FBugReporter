@@ -218,7 +218,7 @@ impl NetService {
         &mut self,
         page: u64,
         amount: u64,
-    ) -> Result<Vec<ReportSummary>, AppError> {
+    ) -> Result<(Vec<ReportSummary>, u64), AppError> {
         if !self.is_connected {
             return Err(AppError::new("not connected", file!(), line!()));
         }
@@ -245,8 +245,11 @@ impl NetService {
         let packet = packet.unwrap();
 
         match packet {
-            InClientPacket::ReportsSummary { reports } => {
-                return Ok(reports);
+            InClientPacket::ReportsSummary {
+                reports,
+                total_reports,
+            } => {
+                return Ok((reports, total_reports));
             }
             _ => {
                 return Err(AppError::new(

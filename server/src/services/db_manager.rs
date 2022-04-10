@@ -90,6 +90,34 @@ impl DatabaseManager {
 
         Ok(Self { connection })
     }
+    pub fn get_report_count(&self) -> Result<u64, AppError> {
+        let mut stmt = self
+            .connection
+            .prepare(&format!("SELECT count(id) FROM {}", REPORT_TABLE_NAME))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+
+        let row = rows.next();
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let row = row.unwrap();
+        if row.is_none() {
+            return Err(AppError::new("database returned none", file!(), line!()));
+        } else {
+            let count = row.unwrap().get(0);
+            if let Err(e) = count {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            return Ok(count.unwrap());
+        }
+    }
     pub fn get_reports(&self, mut page: u64, amount: u64) -> Result<Vec<ReportSummary>, AppError> {
         if page == 0 {
             page = 1;

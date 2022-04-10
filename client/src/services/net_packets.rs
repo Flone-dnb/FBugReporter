@@ -62,5 +62,6 @@ pub enum InClientPacket {
     },
     ReportsSummary {
         reports: Vec<ReportSummary>,
+        total_reports: u64,
     },
 }

@@ -84,6 +84,7 @@ pub enum OutClientPacket {
     },
     ReportsSummary {
         reports: Vec<ReportSummary>,
+        total_reports: u64,
     },
 }
 

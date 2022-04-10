@@ -658,14 +658,26 @@ impl UserService {
         // Get reports from database.
         let guard = self.database.lock().unwrap();
         let result = guard.get_reports(page, amount);
+        let report_count = guard.get_report_count();
         drop(guard);
 
+        // Check reports.
         if let Err(app_error) = result {
             return Err(app_error.add_entry(file!(), line!()));
         }
         let reports = result.unwrap();
 
-        let packet = OutClientPacket::ReportsSummary { reports };
+        // Check report count.
+        if let Err(app_error) = report_count {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+        let report_count = report_count.unwrap();
+
+        // Prepare packet to send.
+        let packet = OutClientPacket::ReportsSummary {
+            reports,
+            total_reports: report_count,
+        };
 
         // Send reports.
         let result = UserService::send_packet(&mut self.socket, &self.secret_key, packet);

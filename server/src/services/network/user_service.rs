@@ -369,6 +369,14 @@ impl UserService {
 
                 Ok(None)
             }
+            InClientPacket::QueryReport { report_id } => {
+                let result = self.handle_client_report_request(report_id);
+                if let Err(app_error) = result {
+                    return Err(app_error.add_entry(file!(), line!()));
+                }
+
+                Ok(None)
+            }
         }
     }
     /// Processes the client login packet.
@@ -677,6 +685,55 @@ impl UserService {
         let packet = OutClientPacket::ReportsSummary {
             reports,
             total_reports: report_count,
+        };
+
+        // Send reports.
+        let result = UserService::send_packet(&mut self.socket, &self.secret_key, packet);
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        Ok(())
+    }
+    fn handle_client_report_request(&mut self, report_id: u64) -> Result<(), AppError> {
+        {
+            // Log this event.
+            let mut username = String::new();
+            if self.username.is_some() {
+                username = self.username.as_ref().unwrap().clone();
+            }
+            self.logger.lock().unwrap().print_and_log(
+                LogCategory::Info,
+                &format!(
+                    "user '{}' requested a report with id {}",
+                    username, report_id
+                ),
+            )
+        }
+
+        // Get reports from database.
+        let guard = self.database.lock().unwrap();
+        let result = guard.get_report(report_id);
+        drop(guard);
+
+        // Check report.
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+        let report = result.unwrap();
+
+        // Prepare packet to send.
+        let packet = OutClientPacket::Report {
+            id: report.id,
+            title: report.title,
+            game_name: report.game_name,
+            game_version: report.game_version,
+            text: report.text,
+            date: report.date,
+            time: report.time,
+            sender_name: report.sender_name,
+            sender_email: report.sender_email,
+            os_info: report.os_info,
         };
 
         // Send reports.

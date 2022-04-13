@@ -15,7 +15,8 @@ use rdev::display_size;
 // Custom.
 use layouts::{
     change_password_layout::ChangePasswordLayout, connect_layout::ConnectLayout,
-    main_layout::MainLayout, otp_layout::OtpLayout, settings_layout::SettingsLayout,
+    main_layout::MainLayout, otp_layout::OtpLayout, report_layout::ReportLayout,
+    settings_layout::SettingsLayout,
 };
 use misc::custom_data_button_controller::CUSTOM_DATA_BUTTON_CLICKED;
 use services::logger_service::LoggerService;
@@ -35,6 +36,7 @@ pub enum Layout {
     Main,
     ChangePassword,
     Otp,
+    Report,
 }
 
 #[derive(Clone, Data, Lens)] // Clone is required by `AppDelegate`.
@@ -47,6 +49,7 @@ pub struct ApplicationState {
     settings_layout: SettingsLayout,
     change_password_layout: ChangePasswordLayout,
     otp_layout: OtpLayout,
+    report_layout: ReportLayout,
 
     // services
     #[data(ignore)]
@@ -83,6 +86,7 @@ pub fn main() {
         settings_layout: SettingsLayout::new(),
         change_password_layout: ChangePasswordLayout::new(),
         otp_layout: OtpLayout::new(),
+        report_layout: ReportLayout::new(),
         net_service: Arc::new(Mutex::new(NetService::new())),
         logger_service: Arc::new(Mutex::new(LoggerService::new())),
         theme: ApplicationTheme::new(),
@@ -146,6 +150,7 @@ fn build_root_widget() -> impl Widget<ApplicationState> {
             Layout::Main => Box::new(MainLayout::build_ui()),
             Layout::ChangePassword => Box::new(ChangePasswordLayout::build_ui()),
             Layout::Otp => Box::new(OtpLayout::build_ui(&data.otp_layout)),
+            Layout::Report => Box::new(ReportLayout::build_ui()),
         },
     )
 }
@@ -158,11 +163,24 @@ impl AppDelegate<ApplicationState> for MyDelegate {
         _ctx: &mut DelegateCtx,
         _target: Target,
         cmd: &Command,
-        _data: &mut ApplicationState,
+        data: &mut ApplicationState,
         _env: &Env,
     ) -> Handled {
         if let Some(button_data) = cmd.get(CUSTOM_DATA_BUTTON_CLICKED) {
-            println!("open report with id {}", button_data.report_id);
+            let report = data
+                .net_service
+                .lock()
+                .unwrap()
+                .query_report(button_data.report_id);
+            if let Err(app_error) = report {
+                println!("ERROR: {}", app_error.to_string());
+                return Handled::Yes;
+            }
+            let report = report.unwrap();
+
+            data.report_layout.report = report;
+            data.current_layout = Layout::Report;
+
             Handled::Yes
         } else {
             Handled::No

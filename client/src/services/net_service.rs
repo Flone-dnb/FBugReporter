@@ -19,6 +19,7 @@ const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
 // Custom.
 use super::config_service::ConfigService;
 use super::net_packets::*;
+use crate::layouts::report_layout::ReportData;
 use crate::misc::app_error::AppError;
 
 const A_B_BITS: u64 = 2048; // if changed, change protocol version
@@ -250,6 +251,67 @@ impl NetService {
                 total_reports,
             } => {
                 return Ok((reports, total_reports));
+            }
+            _ => {
+                return Err(AppError::new(
+                    "unexpected packet received",
+                    file!(),
+                    line!(),
+                ));
+            }
+        }
+    }
+    pub fn query_report(&mut self, report_id: u64) -> Result<ReportData, AppError> {
+        if !self.is_connected {
+            return Err(AppError::new("not connected", file!(), line!()));
+        }
+
+        // Prepare packet to send.
+        let packet = OutClientPacket::QueryReport { report_id };
+
+        let result = self.send_packet(packet);
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        let result = self.receive_packet();
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+        let serialized_packet = result.unwrap();
+
+        // Deserialize.
+        let packet = bincode::deserialize::<InClientPacket>(&serialized_packet);
+        if let Err(e) = packet {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let packet = packet.unwrap();
+
+        match packet {
+            InClientPacket::Report {
+                id,
+                title,
+                game_name,
+                game_version,
+                text,
+                date,
+                time,
+                sender_name,
+                sender_email,
+                os_info,
+            } => {
+                return Ok(ReportData {
+                    id,
+                    title,
+                    game_name,
+                    game_version,
+                    text,
+                    date,
+                    time,
+                    sender_name,
+                    sender_email,
+                    os_info,
+                });
             }
             _ => {
                 return Err(AppError::new(

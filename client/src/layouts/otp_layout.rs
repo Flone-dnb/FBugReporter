@@ -16,7 +16,7 @@ const WIDTH_PADDING: f64 = 0.25;
 const TOP_PADDING: f64 = 0.1;
 const BOTTOM_PADDING: f64 = 0.1;
 const BUTTONS_WIDTH_PADDING: f64 = 1.0;
-const BUTTON_HEIGHT: f64 = 0.2;
+const BUTTON_HEIGHT: f64 = 0.14;
 const TEXT_SIZE: f64 = 20.0;
 const ROW_SPACING: f64 = 0.2;
 
@@ -90,7 +90,7 @@ impl OtpLayout {
                     .must_fill_main_axis(true)
                     .with_flex_child(SizedBox::empty().expand(), BUTTONS_WIDTH_PADDING)
                     .with_flex_child(
-                        Label::new("Enter your OTP here:")
+                        Label::new("Enter your OTP:")
                             .with_text_size(TEXT_SIZE)
                             .expand(),
                         1.0,

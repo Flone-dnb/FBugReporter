@@ -41,6 +41,9 @@ pub enum OutClientPacket {
         page: u64,
         amount: u64,
     },
+    QueryReport {
+        report_id: u64,
+    },
 }
 
 // should be exactly the same as server's struct
@@ -63,5 +66,17 @@ pub enum InClientPacket {
     ReportsSummary {
         reports: Vec<ReportSummary>,
         total_reports: u64,
+    },
+    Report {
+        id: u64,
+        title: String,
+        game_name: String,
+        game_version: String,
+        text: String,
+        date: String,
+        time: String,
+        sender_name: String,
+        sender_email: String,
+        os_info: String,
     },
 }

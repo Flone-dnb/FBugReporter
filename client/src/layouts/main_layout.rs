@@ -21,7 +21,7 @@ pub struct MainLayout {
     pub current_page: u64,
 
     #[data(ignore)]
-    reports: Rc<RefCell<Vec<ReportSummary>>>, // using Rc because Data requires Clone
+    pub reports: Rc<RefCell<Vec<ReportSummary>>>, // using Rc because Data requires Clone
 
     #[data(ignore)]
     total_reports: Cell<u64>,
@@ -37,7 +37,7 @@ impl MainLayout {
     }
     pub fn build_ui() -> impl Widget<ApplicationState> {
         ViewSwitcher::new(
-            // repaint ui when current page changed
+            // repaint UI when current page changed
             |data: &ApplicationState, _env| data.main_layout.current_page,
             |selector, data, _env| match selector {
                 _ => Box::new(MainLayout::build_ui_internal(data)),

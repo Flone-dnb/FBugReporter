@@ -55,6 +55,19 @@ pub enum AddUserResult {
     Error(AppError),
 }
 
+pub struct ReportData {
+    pub id: u64,
+    pub title: String,
+    pub game_name: String,
+    pub game_version: String,
+    pub text: String,
+    pub date: String,
+    pub time: String,
+    pub sender_name: String,
+    pub sender_email: String,
+    pub os_info: String,
+}
+
 pub struct DatabaseManager {
     connection: Connection,
 }
@@ -198,6 +211,119 @@ impl DatabaseManager {
                 time,
             })
         }
+    }
+    pub fn get_report(&self, report_id: u64) -> Result<ReportData, AppError> {
+        let mut stmt = self
+            .connection
+            .prepare(&format!(
+                "SELECT * FROM {} WHERE id == {}",
+                REPORT_TABLE_NAME, report_id
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+
+        let row = rows.next();
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let row = row.unwrap();
+        if row.is_none() {
+            return Err(AppError::new(
+                &format!("report with id '{}' was not found", report_id),
+                file!(),
+                line!(),
+            ));
+        }
+
+        let row = row.unwrap();
+
+        // Get report id.
+        let id = row.get(0);
+        if let Err(e) = id {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let id: u64 = id.unwrap();
+
+        // Get report title.
+        let title = row.get(1);
+        if let Err(e) = title {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let title: String = title.unwrap();
+
+        // Get report text.
+        let text = row.get(2);
+        if let Err(e) = text {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let text: String = text.unwrap();
+
+        // Get report sender name.
+        let sender_name = row.get(3);
+        if let Err(e) = sender_name {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let sender_name: String = sender_name.unwrap();
+
+        // Get report sender email.
+        let sender_email = row.get(4);
+        if let Err(e) = sender_email {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let sender_email: String = sender_email.unwrap();
+
+        // Get report game name.
+        let game_name = row.get(5);
+        if let Err(e) = game_name {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let game_name: String = game_name.unwrap();
+
+        // Get report game version.
+        let game_version = row.get(6);
+        if let Err(e) = game_version {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let game_version: String = game_version.unwrap();
+
+        // Get reporter OS info.
+        let os_info = row.get(7);
+        if let Err(e) = os_info {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let os_info: String = os_info.unwrap();
+
+        // Get report date.
+        let date = row.get(8);
+        if let Err(e) = date {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let date: String = date.unwrap();
+
+        // Get report time.
+        let time = row.get(9);
+        if let Err(e) = time {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let time: String = time.unwrap();
+
+        Ok(ReportData {
+            id,
+            title,
+            game_name,
+            game_version,
+            text,
+            date,
+            time,
+            sender_name,
+            sender_email,
+            os_info,
+        })
     }
     /// Adds a new user to the database.
     pub fn add_user(&self, username: &str) -> AddUserResult {

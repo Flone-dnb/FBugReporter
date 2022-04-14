@@ -1,7 +1,12 @@
+// Std.
+use std::fs::File;
+use std::io::Write;
+
 // External.
 use druid::widget::{prelude::*, Scroll, SizedBox};
 use druid::widget::{Button, Flex, Label, Padding};
 use druid::WidgetExt;
+use native_dialog::{FileDialog, MessageDialog, MessageType};
 
 // Custom.
 use crate::{ApplicationState, Layout};
@@ -47,6 +52,8 @@ impl ReportLayout {
     }
 
     pub fn build_ui() -> impl Widget<ApplicationState> {
+        // TODO: check if we have rights to show delete button
+
         Padding::new(
             5.0,
             Flex::column()
@@ -170,7 +177,68 @@ impl ReportLayout {
         data.main_layout.reports.borrow_mut().clear(); // will refresh reports list
         data.current_layout = Layout::Main;
     }
+    fn on_delete_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
+        let yes = MessageDialog::new()
+            .set_type(MessageType::Info)
+            .set_title(&format!("Report #{}", data.report_layout.report.id))
+            .set_text("Are you sure you want to delete this report?")
+            .show_confirm()
+            .unwrap();
+        if !yes {
+            return;
+        }
+
+        // TODO: remove this report
+        // TODO: if OK switch to main layout
+    }
     fn on_save_to_file_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
-        // TODO
+        let path = FileDialog::new()
+            .add_filter("Text file", &["txt"])
+            .set_filename(&format!("Report #{}.txt", data.report_layout.report.id))
+            .show_save_single_file()
+            .unwrap();
+        if path.is_none() {
+            println!("FileDialog returned None");
+            return;
+        }
+        let path = path.unwrap();
+
+        println!(
+            "Received path of the file to save report:\npath:{}\nreport id:{}",
+            path.to_str().unwrap(),
+            data.report_layout.report.id
+        );
+
+        let mut file = File::create(path.to_str().unwrap()).unwrap();
+        writeln!(&mut file, "id: {}", data.report_layout.report.id).unwrap();
+        writeln!(&mut file, "title: {}", data.report_layout.report.title).unwrap();
+        writeln!(
+            &mut file,
+            "game_name: {}",
+            data.report_layout.report.game_name
+        )
+        .unwrap();
+        writeln!(
+            &mut file,
+            "game_version: {}",
+            data.report_layout.report.game_version
+        )
+        .unwrap();
+        writeln!(&mut file, "date: {}", data.report_layout.report.date).unwrap();
+        writeln!(&mut file, "time: {}", data.report_layout.report.time).unwrap();
+        writeln!(
+            &mut file,
+            "sender_name: {}",
+            data.report_layout.report.sender_name
+        )
+        .unwrap();
+        writeln!(
+            &mut file,
+            "sender_email: {}",
+            data.report_layout.report.sender_email
+        )
+        .unwrap();
+        writeln!(&mut file, "os_info: {}", data.report_layout.report.os_info).unwrap();
+        writeln!(&mut file, "text:\n{}", data.report_layout.report.text).unwrap();
     }
 }

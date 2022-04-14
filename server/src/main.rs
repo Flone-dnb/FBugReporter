@@ -26,7 +26,11 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     loop {
-        io::stdout().flush().ok().expect("could not flush stdout");
+        let result = io::stdout().flush().ok();
+        if result.is_none() {
+            println!("could not flush stdout, continuing...");
+            continue;
+        }
         let mut input = String::new();
 
         if args.len() > 1 {
@@ -34,9 +38,11 @@ fn main() {
                 input = "start".to_string();
             }
         } else {
-            io::stdin()
-                .read_line(&mut input)
-                .expect("unable to read user input");
+            let result = io::stdin().read_line(&mut input);
+            if let Err(e) = result {
+                println!("unable to read input (error: {}), continuing...", e);
+                continue;
+            }
 
             input.pop(); // pop '\n'
             if cfg!(windows) {

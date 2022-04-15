@@ -44,6 +44,9 @@ pub enum OutClientPacket {
     QueryReport {
         report_id: u64,
     },
+    DeleteReport {
+        report_id: u64,
+    },
 }
 
 // should be exactly the same as server's struct
@@ -61,6 +64,7 @@ pub enum InClientPacket {
     // should be exactly the same as server's enum
     LoginAnswer {
         is_ok: bool,
+        is_admin: bool,
         fail_reason: Option<ClientLoginFailReason>,
     },
     ReportsSummary {
@@ -78,5 +82,8 @@ pub enum InClientPacket {
         sender_name: String,
         sender_email: String,
         os_info: String,
+    },
+    DeleteReportResult {
+        is_found_and_removed: bool,
     },
 }

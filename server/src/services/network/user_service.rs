@@ -377,6 +377,14 @@ impl UserService {
 
                 Ok(None)
             }
+            InClientPacket::DeleteReport { report_id } => {
+                let result = self.handle_client_delete_report_request(report_id);
+                if let Err(app_error) = result {
+                    return Err(app_error.add_entry(file!(), line!()));
+                }
+
+                Ok(None)
+            }
         }
     }
     /// Processes the client login packet.
@@ -402,6 +410,7 @@ impl UserService {
         if client_net_protocol != NETWORK_PROTOCOL_VERSION {
             let answer = OutClientPacket::LoginAnswer {
                 is_ok: false,
+                is_admin: false,
                 fail_reason: Some(ClientLoginFailReason::WrongProtocol {
                     server_protocol: NETWORK_PROTOCOL_VERSION,
                 }),
@@ -484,6 +493,7 @@ impl UserService {
 
             let answer = OutClientPacket::LoginAnswer {
                 is_ok: false,
+                is_admin: false,
                 fail_reason: Some(ClientLoginFailReason::NeedFirstPassword),
             };
             if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, answer) {
@@ -556,6 +566,7 @@ impl UserService {
                 // Send QR code.
                 let answer = OutClientPacket::LoginAnswer {
                     is_ok: false,
+                    is_admin: false,
                     fail_reason: Some(ClientLoginFailReason::SetupOTP { qr_code }),
                 };
                 if let Err(err) =
@@ -570,6 +581,7 @@ impl UserService {
                     // Need OTP.
                     let answer = OutClientPacket::LoginAnswer {
                         is_ok: false,
+                        is_admin: false,
                         fail_reason: Some(ClientLoginFailReason::NeedOTP),
                     };
                     if let Err(err) =
@@ -621,14 +633,24 @@ impl UserService {
             }
         }
 
+        let mut _is_admin = false;
         {
+            let guard = self.database.lock().unwrap();
+
             // Update last login time/date/ip.
-            if let Err(app_error) = self.database.lock().unwrap().update_user_last_login(
+            if let Err(app_error) = guard.update_user_last_login(
                 &username,
                 &self.socket.peer_addr().unwrap().ip().to_string(),
             ) {
                 return Err(app_error.add_entry(file!(), line!()));
             }
+
+            // Check if user is admin.
+            let result = guard.is_user_admin(&username);
+            if let Err(app_error) = result {
+                return Err(app_error.add_entry(file!(), line!()));
+            }
+            _is_admin = result.unwrap();
         }
 
         {
@@ -654,6 +676,7 @@ impl UserService {
         // Answer "connected".
         let answer = OutClientPacket::LoginAnswer {
             is_ok: true,
+            is_admin: _is_admin,
             fail_reason: None,
         };
         if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, answer) {
@@ -685,6 +708,75 @@ impl UserService {
         let packet = OutClientPacket::ReportsSummary {
             reports,
             total_reports: report_count,
+        };
+
+        // Send reports.
+        let result = UserService::send_packet(&mut self.socket, &self.secret_key, packet);
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        Ok(())
+    }
+    fn handle_client_delete_report_request(&mut self, report_id: u64) -> Result<(), AppError> {
+        // Check if this user has admin privileges.
+        {
+            let mut username = String::new();
+            if self.username.is_some() {
+                username = self.username.as_ref().unwrap().clone();
+            }
+            let result = self.database.lock().unwrap().is_user_admin(&username);
+            if let Err(e) = result {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            let is_admin = result.unwrap();
+
+            if is_admin {
+                self.logger.lock().unwrap().print_and_log(
+                    LogCategory::Info,
+                    &format!(
+                        "admin user '{}' requested to delete a report with id {}",
+                        &username, report_id
+                    ),
+                )
+            } else {
+                let message = format!(
+                    "user '{}' tried to \
+                    delete a report with id {} without admin privileges",
+                    &username, is_admin
+                );
+                self.logger
+                    .lock()
+                    .unwrap()
+                    .print_and_log(LogCategory::Warning, &message);
+                return Err(AppError::new(&message, file!(), line!()));
+            }
+        }
+
+        // Remove report from database.
+        let result = self.database.lock().unwrap().remove_report(report_id);
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+        let found = result.unwrap();
+        if found == false {
+            let mut username = String::new();
+            if self.username.is_some() {
+                username = self.username.as_ref().unwrap().clone();
+            }
+            self.logger.lock().unwrap().print_and_log(
+                LogCategory::Warning,
+                &format!(
+                    "admin user '{}' tried to \
+                    delete a report with id {} while a report with this id does not exist",
+                    &username, report_id
+                ),
+            );
+        }
+
+        // Prepare packet to send.
+        let packet = OutClientPacket::DeleteReportResult {
+            is_found_and_removed: found,
         };
 
         // Send reports.
@@ -768,6 +860,7 @@ impl UserService {
             AttemptResult::Fail { attempts_made } => {
                 let _answer = OutClientPacket::LoginAnswer {
                     is_ok: false,
+                    is_admin: false,
                     fail_reason: Some(ClientLoginFailReason::WrongCredentials {
                         result: ClientLoginFailResult::FailedAttempt {
                             failed_attempts_made: attempts_made,
@@ -791,6 +884,7 @@ impl UserService {
             AttemptResult::Ban => {
                 let _answer = OutClientPacket::LoginAnswer {
                     is_ok: false,
+                    is_admin: false,
                     fail_reason: Some(ClientLoginFailReason::WrongCredentials {
                         result: ClientLoginFailResult::Banned {
                             ban_time_in_min: self

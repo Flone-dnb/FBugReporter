@@ -44,8 +44,13 @@ impl NetService {
         })
     }
     /// Adds a new user to the database.
-    pub fn add_user(&mut self, username: &str) -> AddUserResult {
-        let result = self.database.lock().unwrap().add_user(username);
+    ///
+    /// Parameters:
+    /// - `username` login of the new user
+    /// - `is_admin` whether the user should have admin privileges or not
+    /// (be able to delete reports using the client application).
+    pub fn add_user(&mut self, username: &str, is_admin: bool) -> AddUserResult {
+        let result = self.database.lock().unwrap().add_user(username, is_admin);
         if let AddUserResult::Error(e) = result {
             return AddUserResult::Error(e.add_entry(file!(), line!()));
         } else {

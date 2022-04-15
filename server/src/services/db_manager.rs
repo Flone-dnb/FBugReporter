@@ -21,19 +21,13 @@ const REPORT_TABLE_HASH: &[u8] = &[
     226,
 ];
 const USER_TABLE_HASH: &[u8] = &[
-    179, 186, 80, 246, 153, 112, 181, 236, 128, 174, 246, 56, 18, 207, 187, 205, 195, 233, 114,
-    232, 101, 232, 167, 62, 117, 146, 20, 245, 92, 174, 204, 9, 51, 25, 167, 63, 70, 24, 23, 20,
-    16, 224, 225, 200, 12, 51, 191, 225, 22, 39, 142, 125, 162, 199, 74, 76, 200, 218, 189, 66,
-    243, 47, 180, 120,
-];
-const VERSION_TABLE_HASH: &[u8] = &[
-    94, 44, 135, 144, 199, 240, 160, 192, 134, 20, 58, 5, 166, 161, 247, 8, 243, 133, 150, 243,
-    170, 153, 111, 171, 177, 44, 21, 21, 216, 125, 205, 17, 4, 246, 33, 52, 25, 191, 115, 13, 109,
-    97, 3, 238, 17, 191, 125, 170, 23, 161, 189, 182, 35, 114, 128, 169, 94, 60, 56, 147, 84, 54,
-    43, 145,
+    179, 199, 233, 204, 132, 161, 204, 15, 152, 12, 233, 72, 42, 79, 252, 183, 189, 251, 215, 202,
+    231, 239, 91, 23, 60, 246, 24, 163, 210, 30, 170, 135, 202, 217, 94, 240, 145, 21, 214, 49, 30,
+    222, 23, 219, 226, 1, 250, 93, 145, 60, 222, 228, 75, 190, 7, 226, 183, 74, 167, 19, 26, 142,
+    161, 64,
 ];
 
-const SUPPORTED_DATABASE_VERSION: u64 = 0;
+const SUPPORTED_DATABASE_VERSION: u64 = 1;
 
 const SALT_LENGTH: u64 = 32;
 const OTP_SECRET_LENGTH: u64 = 256;
@@ -216,7 +210,9 @@ impl DatabaseManager {
         let mut stmt = self
             .connection
             .prepare(&format!(
-                "SELECT * FROM {} WHERE id == {}",
+                "SELECT id, report_name, report_text, sender_name, sender_email, \
+                game_name, game_version, os_info, date_created_at, time_created_at \
+                FROM {} WHERE id == {}",
                 REPORT_TABLE_NAME, report_id
             ))
             .unwrap();
@@ -326,7 +322,12 @@ impl DatabaseManager {
         })
     }
     /// Adds a new user to the database.
-    pub fn add_user(&self, username: &str) -> AddUserResult {
+    ///
+    /// Parameters:
+    /// - `username` login of the new user
+    /// - `is_admin` whether the user should have admin privileges or not
+    /// (be able to delete reports using the client application).
+    pub fn add_user(&self, username: &str, is_admin: bool) -> AddUserResult {
         // Check if username contains forbidden characters.
         let is_ok = username
             .chars()
@@ -393,6 +394,7 @@ impl DatabaseManager {
                 need_change_password,
                 need_setup_otp,
                 otp_secret_key,
+                is_admin,
                 last_login_date,
                 last_login_time,
                 last_login_ip,
@@ -400,7 +402,7 @@ impl DatabaseManager {
                 time_registered
             ) 
             VALUES 
-            (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 USER_TABLE_NAME
             ),
             params![
@@ -410,6 +412,7 @@ impl DatabaseManager {
                 1, // change password
                 1, // have not received OTP QR code
                 otp_secret,
+                is_admin,
                 datetime.date().naive_local().to_string(),
                 datetime.time().format("%H:%M:%S").to_string(),
                 "",
@@ -444,8 +447,38 @@ impl DatabaseManager {
             // password = hash(salt + hash(password))
             &format!(
                 "DELETE FROM {}
-                WHERE username = '{}'",
+                WHERE username == '{}'",
                 USER_TABLE_NAME, username
+            ),
+            params![],
+        ) {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        Ok(true)
+    }
+    /// Removes the report from database.
+    ///
+    /// Returns `Ok(true)` if the report was found and removed,
+    /// `Ok(false)` if the report was not found.
+    /// On failure returns error description via `AppError`.
+    pub fn remove_report(&self, report_id: u64) -> Result<bool, AppError> {
+        let result = self.is_report_exists(report_id);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let exists = result.unwrap();
+        if exists == false {
+            return Ok(false);
+        }
+
+        // Remove report.
+        if let Err(e) = self.connection.execute(
+            // password = hash(salt + hash(password))
+            &format!(
+                "DELETE FROM {}
+                WHERE id == {}",
+                REPORT_TABLE_NAME, report_id
             ),
             params![],
         ) {
@@ -615,6 +648,59 @@ impl DatabaseManager {
                 &format!(
                     "database returned 'need_change_password' equal to '{}' for user {}",
                     need_change_password, username
+                ),
+                file!(),
+                line!(),
+            ));
+        }
+    }
+    /// Check if a given user has admin privileges.
+    ///
+    /// Returns `Ok(true)` if yes, `Ok(false)` if no.
+    /// On failure returns `AppError`.
+    pub fn is_user_admin(&self, username: &str) -> Result<bool, AppError> {
+        let mut stmt = self
+            .connection
+            .prepare(&format!(
+                "SELECT is_admin FROM {} WHERE username='{}'",
+                USER_TABLE_NAME, username
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+
+        let row = rows.next();
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let row = row.unwrap();
+        if row.is_none() {
+            return Err(AppError::new(
+                &format!("database returned None for username {}", username),
+                file!(),
+                line!(),
+            ));
+        }
+        let row = row.unwrap();
+        let is_admin = row.get(0);
+        if let Err(e) = is_admin {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let is_admin: i32 = is_admin.unwrap();
+
+        if is_admin == 1 {
+            return Ok(true);
+        } else if is_admin == 0 {
+            return Ok(false);
+        } else {
+            return Err(AppError::new(
+                &format!(
+                    "database returned 'is_admin' equal to '{}' for user {}",
+                    is_admin, username
                 ),
                 file!(),
                 line!(),
@@ -823,6 +909,36 @@ impl DatabaseManager {
 
         Ok(true)
     }
+    /// Check if a given report exists in the database.
+    ///
+    /// Returns `Ok(true)` if the report exists, `Ok(false)` if not.
+    /// On failure returns `AppError`.
+    fn is_report_exists(&self, report_id: u64) -> Result<bool, AppError> {
+        let mut stmt = self
+            .connection
+            .prepare(&format!(
+                "SELECT id FROM {} WHERE id='{}'",
+                REPORT_TABLE_NAME, report_id
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+
+        let row = rows.next();
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let row = row.unwrap();
+        if row.is_none() {
+            return Ok(false);
+        }
+
+        Ok(true)
+    }
     fn create_report_table_if_not_found(connection: &mut Connection) -> Result<(), AppError> {
         // Check if table exists.
         let mut stmt = connection
@@ -839,14 +955,9 @@ impl DatabaseManager {
         let mut rows = result.unwrap();
         let row = rows.next().unwrap();
 
-        if row.is_none() {
-            // Create this table.
-            // TODO: IF CHANGING TABLE STRUCTURE,
-            // TODO: remember to increment SUPPORTED_DATABASE_VERSION
-            // TODO: and handle old database version in
-            // TODO: handle_old_database_version() function.
-            let table_structure = format!(
-                "CREATE TABLE {}(
+        // Create this table.
+        let table_structure = format!(
+            "CREATE TABLE {}(
                     id              INTEGER PRIMARY KEY AUTOINCREMENT,
                     report_name     TEXT NOT NULL,
                     report_text     TEXT NOT NULL,
@@ -858,27 +969,30 @@ impl DatabaseManager {
                     date_created_at TEXT NOT NULL,
                     time_created_at TEXT NOT NULL     
                 )",
-                REPORT_TABLE_NAME
-            );
+            REPORT_TABLE_NAME
+        );
 
-            // Calculate table structure hash.
-            let mut hasher = Sha512::new();
-            hasher.update(&table_structure);
-            let table_hash = hasher.finalize().to_vec();
+        // Calculate table structure hash.
+        let mut hasher = Sha512::new();
+        hasher.update(&table_structure);
+        let table_hash = hasher.finalize().to_vec();
 
-            if table_hash != REPORT_TABLE_HASH {
-                panic!("report table was changed and now is incompatible with old versions, \
+        if table_hash != REPORT_TABLE_HASH {
+            panic!("report table was changed and now is incompatible with old versions, \
                         to fix this panic, follow these steps:\n\
                         1. increment 'SUPPORTED_DATABASE_VERSION' constant\n\
                         2. handle old database version in 'handle_old_database_version()' function\n\
                         3. recalculate new table hash (sha512) and put it into 'REPORT_TABLE_HASH' constant.");
-            }
+        }
 
-            // Create table.
-            let result = connection.execute(&table_structure, []);
-            if let Err(e) = result {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
-            }
+        if row.is_some() {
+            return Ok(());
+        }
+
+        // Create table.
+        let result = connection.execute(&table_structure, []);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
 
         Ok(())
@@ -899,51 +1013,27 @@ impl DatabaseManager {
         let mut rows = result.unwrap();
         let row = rows.next().unwrap();
 
-        if row.is_none() {
-            // Create this table.
-            // TODO: IF CHANGING TABLE STRUCTURE,
-            // TODO: remember to increment SUPPORTED_DATABASE_VERSION
-            // TODO: and handle old database version in
-            // TODO: handle_old_database_version() function.
-            let table_structure = format!(
-                "CREATE TABLE {}(
+        if row.is_some() {
+            return Ok(());
+        }
+
+        let table_structure = format!(
+            "CREATE TABLE {}(
                     version INTEGER   
                 )",
-                VERSION_TABLE_NAME
-            );
+            VERSION_TABLE_NAME
+        );
 
-            // Calculate table structure hash.
-            let mut hasher = Sha512::new();
-            hasher.update(&table_structure);
-            let table_hash = hasher.finalize().to_vec();
-
-            if table_hash != VERSION_TABLE_HASH {
-                panic!("version table was changed and now is incompatible with old versions, \
-                        to fix this panic, follow these steps:\n\
-                        1. increment 'SUPPORTED_DATABASE_VERSION' constant\n\
-                        2. handle old database version in 'handle_old_database_version()' function\n\
-                        3. recalculate new table hash (sha512) and put it into 'VERSION_TABLE_HASH' constant.");
-            }
-
-            // Create table.
-            let result = connection.execute(&table_structure, []);
-            if let Err(e) = result {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
-            }
+        // Create table.
+        let result = connection.execute(&table_structure, []);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
 
         // Insert database version.
         if let Err(e) = connection.execute(
             // password = hash(salt + hash(password))
-            &format!(
-                "INSERT INTO {} 
-            (
-                version
-            ) 
-            VALUES 
-            (?1)",
-                VERSION_TABLE_NAME
-            ),
+            &format!("INSERT INTO {} (version) VALUES (?1)", VERSION_TABLE_NAME),
             params![SUPPORTED_DATABASE_VERSION],
         ) {
             return Err(AppError::new(&e.to_string(), file!(), line!()));
@@ -967,14 +1057,9 @@ impl DatabaseManager {
         let mut rows = result.unwrap();
         let row = rows.next().unwrap();
 
-        if row.is_none() {
-            // Create this table.
-            // TODO: IF CHANGING TABLE STRUCTURE,
-            // TODO: remember to increment SUPPORTED_DATABASE_VERSION
-            // TODO: and handle old database version in
-            // TODO: handle_old_database_version() function.
-            let table_structure = format!(
-                "CREATE TABLE {}(
+        // Create this table.
+        let table_structure = format!(
+            "CREATE TABLE {}(
                     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
                     username             TEXT NOT NULL UNIQUE,
                     salt                 TEXT NOT NULL,
@@ -982,38 +1067,42 @@ impl DatabaseManager {
                     need_change_password INTEGER NOT NULL,
                     need_setup_otp       INTEGER NOT NULL,
                     otp_secret_key       TEXT NOT NULL,
+                    is_admin             INTEGER NOT NULL,
                     last_login_date      TEXT NOT NULL,
                     last_login_time      TEXT NOT NULL,
                     last_login_ip        TEXT NOT NULL,
                     date_registered      TEXT NOT NULL,
                     time_registered      TEXT NOT NULL
                 )",
-                USER_TABLE_NAME
-            );
+            USER_TABLE_NAME
+        );
 
-            // Calculate table structure hash.
-            let mut hasher = Sha512::new();
-            hasher.update(&table_structure);
-            let table_hash = hasher.finalize().to_vec();
+        // Calculate table structure hash.
+        let mut hasher = Sha512::new();
+        hasher.update(&table_structure);
+        let table_hash = hasher.finalize().to_vec();
 
-            if table_hash != USER_TABLE_HASH {
-                panic!("user table was changed and now is incompatible with old versions, \
+        if table_hash != USER_TABLE_HASH {
+            panic!("user table was changed and now is incompatible with old versions, \
                         to fix this panic, follow these steps:\n\
                         1. increment 'SUPPORTED_DATABASE_VERSION' constant\n\
                         2. handle old database version in 'handle_old_database_version()' function\n\
                         3. recalculate new table hash (sha512) and put it into 'USER_TABLE_HASH' constant.");
-            }
+        }
 
-            let result = connection.execute(
-                // password = hash(salt + hash(password))
-                // need_change_password is '1' if the user
-                // just registered, thus we need to ask him of a new password.
-                &table_structure,
-                [],
-            );
-            if let Err(e) = result {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
-            }
+        if row.is_some() {
+            return Ok(());
+        }
+
+        let result = connection.execute(
+            // password = hash(salt + hash(password))
+            // need_change_password is '1' if the user
+            // just registered, thus we need to ask him of a new password.
+            &table_structure,
+            [],
+        );
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
 
         Ok(())
@@ -1047,13 +1136,55 @@ impl DatabaseManager {
         }
         let version = version.unwrap();
 
-        if version != SUPPORTED_DATABASE_VERSION {
-            // TODO: handle old version here.
-            // TODO: update old database to new format here.
-            // TODO: ...
-            // TODO: after everything is done, replace version value in the version table
-            // TODO: with a new one.
-            let notice_me = 42;
+        if version == SUPPORTED_DATABASE_VERSION {
+            return Ok(());
+        }
+
+        drop(row);
+        drop(rows);
+        drop(stmt);
+
+        if version == 0 {
+            // Upgrade to version 1.
+            if let Err(app_error) = DatabaseManager::upgrade_database_to_version_1(connection) {
+                return Err(app_error.add_entry(file!(), line!()));
+            }
+        }
+
+        // Handle old version here.
+        // Upgrade old database to the new format here.
+        //
+        // ... upgrade code here under if version == ...
+        //
+
+        // After everything is done, we drop the version table
+        // and insert the new version value.
+        if let Err(app_error) = DatabaseManager::drop_version_database(connection) {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+        if let Err(app_error) = DatabaseManager::create_version_table_if_not_found(connection) {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        Ok(())
+    }
+    fn drop_version_database(connection: &mut Connection) -> Result<(), AppError> {
+        if let Err(e) = connection.execute(&format!("DROP TABLE {}", VERSION_TABLE_NAME), params![])
+        {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        Ok(())
+    }
+    fn upgrade_database_to_version_1(connection: &mut Connection) -> Result<(), AppError> {
+        if let Err(e) = connection.execute(
+            &format!(
+                "ALTER TABLE {} ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0",
+                USER_TABLE_NAME
+            ),
+            params![],
+        ) {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
 
         Ok(())

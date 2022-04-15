@@ -51,8 +51,20 @@ impl ReportLayout {
         }
     }
 
-    pub fn build_ui() -> impl Widget<ApplicationState> {
-        // TODO: check if we have rights to show delete button
+    pub fn build_ui(data: &ApplicationState) -> impl Widget<ApplicationState> {
+        let mut delete_report_section: Flex<ApplicationState> = Flex::row();
+        if data.main_layout.is_user_admin {
+            delete_report_section = delete_report_section
+                .with_flex_child(SizedBox::empty().expand_width(), 0.5)
+                .with_child(
+                    Button::from_label(Label::new("Delete Report").with_text_size(TEXT_SIZE))
+                        .on_click(ReportLayout::on_delete_clicked),
+                )
+                .with_flex_child(SizedBox::empty().expand_width(), 0.5);
+        } else {
+            delete_report_section =
+                delete_report_section.with_flex_child(SizedBox::empty().expand_width(), 1.0)
+        }
 
         Padding::new(
             5.0,
@@ -162,7 +174,7 @@ impl ReportLayout {
                             Button::from_label(Label::new("Return").with_text_size(TEXT_SIZE))
                                 .on_click(ReportLayout::on_return_clicked),
                         )
-                        .with_flex_child(SizedBox::empty().expand_width(), 1.0)
+                        .with_flex_child(delete_report_section, 1.0)
                         .with_child(
                             Button::from_label(
                                 Label::new("Save to file").with_text_size(TEXT_SIZE),
@@ -188,8 +200,29 @@ impl ReportLayout {
             return;
         }
 
-        // TODO: remove this report
-        // TODO: if OK switch to main layout
+        let result = data
+            .net_service
+            .lock()
+            .unwrap()
+            .delete_report(data.report_layout.report.id);
+        if let Err(app_error) = result {
+            println!(
+                "ERROR: {}",
+                app_error.add_entry(file!(), line!()).to_string()
+            );
+            return;
+        }
+        let found = result.unwrap();
+
+        if found == false {
+            println!(
+                "ERROR: a report with id {} was not found",
+                data.report_layout.report.id
+            );
+        } else {
+            data.main_layout.reports.borrow_mut().clear(); // will refresh reports list
+            data.current_layout = Layout::Main;
+        }
     }
     fn on_save_to_file_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
         let path = FileDialog::new()

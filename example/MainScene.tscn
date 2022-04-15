@@ -157,7 +157,7 @@ text = "Describe your issue here! English is preferred, but any other language w
 Make sure to include:
     - level/location where the issue occurred;
 	- what happend: crash, freeze, graphical glitch, collision issues or something else;
-	- what did you do before the issue occurred;
+	- (important!) what did you do before the issue occurred;
 	- etc."
 
 [node name="EmptyHBoxContainer3" type="HBoxContainer" parent="VBoxContainer"]

@@ -150,7 +150,7 @@ fn build_root_widget() -> impl Widget<ApplicationState> {
             Layout::Main => Box::new(MainLayout::build_ui()),
             Layout::ChangePassword => Box::new(ChangePasswordLayout::build_ui()),
             Layout::Otp => Box::new(OtpLayout::build_ui(&data.otp_layout)),
-            Layout::Report => Box::new(ReportLayout::build_ui()),
+            Layout::Report => Box::new(ReportLayout::build_ui(&data)),
         },
     )
 }

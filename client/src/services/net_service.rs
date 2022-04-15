@@ -30,7 +30,7 @@ const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 pub const NETWORK_PROTOCOL_VERSION: u16 = 0;
 
 pub enum ConnectResult {
-    Connected,
+    Connected(bool),
     ConnectFailed(String),
     NeedFirstPassword,
     SetupOTP(String),
@@ -145,8 +145,13 @@ impl NetService {
         }
         let packet = packet.unwrap();
 
+        let mut _is_admin = false;
         match packet {
-            InClientPacket::LoginAnswer { is_ok, fail_reason } => {
+            InClientPacket::LoginAnswer {
+                is_ok,
+                is_admin,
+                fail_reason,
+            } => {
                 if !is_ok {
                     let mut _message = String::new();
                     match fail_reason.unwrap() {
@@ -191,6 +196,8 @@ impl NetService {
                         }
                     }
                     return ConnectResult::ConnectFailed(_message);
+                } else {
+                    _is_admin = is_admin;
                 }
             }
             _ => {
@@ -211,9 +218,9 @@ impl NetService {
 
         self.is_connected = true;
 
-        // return control here, don't drop the connection,
-        // wait for further commands from the user
-        ConnectResult::Connected
+        // Return control here, don't drop the connection,
+        // wait for further commands from the user.
+        ConnectResult::Connected(_is_admin)
     }
     pub fn query_reports(
         &mut self,
@@ -312,6 +319,47 @@ impl NetService {
                     sender_email,
                     os_info,
                 });
+            }
+            _ => {
+                return Err(AppError::new(
+                    "unexpected packet received",
+                    file!(),
+                    line!(),
+                ));
+            }
+        }
+    }
+    pub fn delete_report(&mut self, report_id: u64) -> Result<bool, AppError> {
+        if !self.is_connected {
+            return Err(AppError::new("not connected", file!(), line!()));
+        }
+
+        // Prepare packet to send.
+        let packet = OutClientPacket::DeleteReport { report_id };
+
+        let result = self.send_packet(packet);
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        let result = self.receive_packet();
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+        let serialized_packet = result.unwrap();
+
+        // Deserialize.
+        let packet = bincode::deserialize::<InClientPacket>(&serialized_packet);
+        if let Err(e) = packet {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let packet = packet.unwrap();
+
+        match packet {
+            InClientPacket::DeleteReportResult {
+                is_found_and_removed,
+            } => {
+                return Ok(is_found_and_removed);
             }
             _ => {
                 return Err(AppError::new(

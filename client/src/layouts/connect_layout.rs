@@ -219,7 +219,8 @@ impl ConnectLayout {
             ConnectResult::NeedOTP => {
                 data.current_layout = Layout::Otp;
             }
-            ConnectResult::Connected => {
+            ConnectResult::Connected(is_admin) => {
+                data.main_layout.is_user_admin = is_admin;
                 data.connect_layout.password = String::new();
                 data.current_layout = Layout::Main;
             }

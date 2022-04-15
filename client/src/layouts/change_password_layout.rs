@@ -200,7 +200,9 @@ impl ChangePasswordLayout {
 
                 data.current_layout = Layout::Otp;
             }
-            ConnectResult::Connected => {
+            ConnectResult::Connected(is_admin) => {
+                data.main_layout.is_user_admin = is_admin;
+
                 data.change_password_layout.new_password_repeat = String::new();
                 data.change_password_layout.new_password = String::new();
                 data.change_password_layout.old_password = String::new();

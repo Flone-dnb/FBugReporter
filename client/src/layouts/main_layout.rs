@@ -24,6 +24,9 @@ pub struct MainLayout {
     pub reports: Rc<RefCell<Vec<ReportSummary>>>, // using Rc because Data requires Clone
 
     #[data(ignore)]
+    pub is_user_admin: bool,
+
+    #[data(ignore)]
     total_reports: Cell<u64>,
 }
 
@@ -33,6 +36,7 @@ impl MainLayout {
             current_page: 1,
             reports: Rc::new(RefCell::new(Vec::new())),
             total_reports: Cell::new(0),
+            is_user_admin: false,
         }
     }
     pub fn build_ui() -> impl Widget<ApplicationState> {

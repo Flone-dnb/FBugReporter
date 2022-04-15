@@ -26,9 +26,11 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     loop {
-        let result = io::stdout().flush().ok();
-        if result.is_none() {
-            println!("could not flush stdout, continuing...");
+        if let Err(e) = io::stdout().flush() {
+            println!(
+                "could not flush stdout (error: {}), continuing...",
+                e.to_string()
+            );
             continue;
         }
         let mut input = String::new();
@@ -38,8 +40,7 @@ fn main() {
                 input = "start".to_string();
             }
         } else {
-            let result = io::stdin().read_line(&mut input);
-            if let Err(e) = result {
+            if let Err(e) = io::stdin().read_line(&mut input) {
                 println!("unable to read input (error: {}), continuing...", e);
                 continue;
             }
@@ -73,7 +74,41 @@ fn main() {
             if username_str.is_empty() {
                 println!("username is empty");
             } else {
-                let result = net_service.add_user(&username_str);
+                println!("should this user be able to delete reports using the client application? (y/n)");
+                if let Err(e) = io::stdout().flush() {
+                    println!(
+                        "could not flush stdout (error: {}), continuing...",
+                        e.to_string()
+                    );
+                    continue;
+                }
+                if let Err(e) = io::stdin().read_line(&mut input) {
+                    println!("unable to read input (error: {}), continuing...", e);
+                    continue;
+                }
+
+                input.pop(); // pop '\n'
+                if cfg!(windows) {
+                    input.pop(); // pop '\r'
+                }
+
+                input = String::from(
+                    input
+                        .strip_prefix(&format!("add-user {}", &username_str))
+                        .unwrap(),
+                );
+
+                if input != "y" && input != "Y" && input != "n" && input != "N" {
+                    println!("'{}' is not a valid answer, try again...", input);
+                    continue;
+                }
+
+                let mut is_admin = false;
+                if input == "y" || input == "Y" {
+                    is_admin = true;
+                }
+
+                let result = net_service.add_user(&username_str, is_admin);
                 match result {
                     AddUserResult::Ok { user_password } => {
                         println!(
@@ -115,10 +150,17 @@ fn main() {
                     remove_user_confirm_string
                 );
 
-                io::stdout().flush().ok().expect("could not flush stdout");
-                io::stdin()
-                    .read_line(&mut input)
-                    .expect("unable to read user input");
+                if let Err(e) = io::stdout().flush() {
+                    println!(
+                        "could not flush stdout (error: {}), continuing...",
+                        e.to_string()
+                    );
+                    continue;
+                }
+                if let Err(e) = io::stdin().read_line(&mut input) {
+                    println!("unable to read input (error: {}), continuing...", e);
+                    continue;
+                }
 
                 input.pop(); // pop '\n'
                 if cfg!(windows) {

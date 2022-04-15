@@ -60,7 +60,7 @@ impl MainLayout {
 
         if data.main_layout.reports.borrow().len() == 0 {
             reports_column
-                .add_child(Label::new("No reports was received yet!").with_text_size(TEXT_SIZE))
+                .add_child(Label::new("No reports were received yet!").with_text_size(TEXT_SIZE))
         } else {
             for report in data.main_layout.reports.borrow().iter() {
                 reports_column.add_child(

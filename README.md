@@ -67,4 +67,4 @@ In order to build an app you need to enter its directory and run:
 cargo build --release
 ```
 
-The compiled executable be located at `/reporter/target/release/` (with the extension `.dll` for Windows and `.so` for Linux).
+The compiled executable be located at `/target/release/` (with the extension `.dll` for Windows and `.so` for Linux).

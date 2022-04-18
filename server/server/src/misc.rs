@@ -40,18 +40,18 @@ pub enum ReportResult {
     NetworkIssue,
     // this enum should be in sync with the server's enum
 }
-impl ReportResult {
-    pub fn value(&self) -> i32 {
-        match *self {
-            ReportResult::Ok => 0,
-            ReportResult::ServerNotSet => 1, // if changing any values here
-            ReportResult::InvalidInput => 2, // also change them in the reporter
-            ReportResult::CouldNotConnect => 3, // ...
-            ReportResult::InternalError => 4,
-            ReportResult::WrongProtocol => 5,
-            ReportResult::ServerRejected => 6,
-            ReportResult::NetworkIssue => 7,
-        }
-    }
-}
+// impl ReportResult {
+//     pub fn value(&self) -> i32 {
+//         match *self {
+//             ReportResult::Ok => 0,
+//             ReportResult::ServerNotSet => 1, // if changing any values here
+//             ReportResult::InvalidInput => 2, // also change them in the reporter
+//             ReportResult::CouldNotConnect => 3, // ...
+//             ReportResult::InternalError => 4,
+//             ReportResult::WrongProtocol => 5,
+//             ReportResult::ServerRejected => 6,
+//             ReportResult::NetworkIssue => 7,
+//         }
+//     }
+// }
 // --------------------------------------------------------

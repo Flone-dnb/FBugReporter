@@ -6,7 +6,6 @@ use std::io::*;
 // Custom.
 use services::logger_service::Logger;
 use services::network::net_service::NetService;
-use shared::db_manager::*;
 
 mod misc;
 mod services;

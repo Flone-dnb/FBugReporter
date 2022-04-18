@@ -5,3 +5,4 @@ server_config.ini
 banned_ips.ini
 *.db3
 .vscode
+logs

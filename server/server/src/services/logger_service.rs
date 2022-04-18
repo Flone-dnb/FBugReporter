@@ -74,7 +74,31 @@ impl Logger {
             }
         }
 
-        let log_path = log_path + LOG_FILE_NAME;
+        log_path += "logs";
+
+        // Ending.
+        #[cfg(target_os = "linux")]
+        {
+            log_path += "/";
+        }
+        #[cfg(target_os = "windows")]
+        {
+            log_path += "\\";
+        }
+
+        if !Path::new(&log_path).exists() {
+            if let Err(e) = create_dir(&log_path) {
+                panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
+            }
+        } else {
+            Logger::remove_oldest_log_if_needed(&log_path);
+        }
+
+        let local = Local::now();
+
+        let log_path = log_path
+            + &format!("{}_", local.format("%Y-%m-%d_%H:%M:%S").to_string())
+            + LOG_FILE_NAME;
 
         // Remove log file if exists.
         if Path::new(&log_path).exists() {
@@ -87,6 +111,25 @@ impl Logger {
         let log_file = File::create(&log_path);
         if let Err(e) = log_file {
             panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
+        }
+    }
+    fn remove_oldest_log_if_needed(log_path: &str) {
+        let paths = std::fs::read_dir(log_path);
+        if let Err(e) = paths {
+            panic!("{}", e);
+        }
+        let paths = paths.unwrap();
+
+        for path in paths {
+            if let Err(e) = path {
+                panic!("{}", e);
+            }
+            let path = path.unwrap();
+
+            if path.file_type().unwrap().is_file() {
+                // TODO:
+                // let metadata = fs::metadata("foo.txt")
+            }
         }
     }
 }

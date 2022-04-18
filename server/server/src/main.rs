@@ -22,7 +22,23 @@ fn main() {
     }
     let mut net_service = net_service.unwrap();
 
-    let args: Vec<String> = env::args().collect();
+    let mut args: Vec<String> = env::args().collect();
+
+    let mut under_monitor = false;
+    for arg in args.iter() {
+        if arg == "--under-monitor" {
+            under_monitor = true;
+        }
+    }
+
+    if !under_monitor {
+        println!("");
+        println!("---------------------------------------");
+        println!("WARNING: you should only run the server using the 'monitor' app");
+        println!("WARNING: please, run the 'monitor' app to launch the server");
+        println!("---------------------------------------");
+        println!("");
+    }
 
     loop {
         if let Err(e) = io::stdout().flush() {
@@ -32,12 +48,14 @@ fn main() {
             );
             continue;
         }
+
         let mut input = String::new();
 
         if args.len() > 1 {
             if args[1] == "--start" {
                 input = "start".to_string();
             }
+            args.clear();
         } else {
             if let Err(e) = io::stdin().read_line(&mut input) {
                 println!("unable to read input (error: {}), continuing...", e);

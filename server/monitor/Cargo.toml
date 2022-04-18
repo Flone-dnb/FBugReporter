@@ -1,0 +1,8 @@
+[package]
+name = "monitor"
+authors = ["Aleksandr Tretyakov"]
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]

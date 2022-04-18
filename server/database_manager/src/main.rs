@@ -1,29 +1,60 @@
 // Std.
 use std::env;
+use std::fs;
 use std::io;
 use std::io::*;
 
 // Custom.
-use services::db_manager::{AddUserResult, USERNAME_CHARSET};
-use services::logger_service::Logger;
-use services::network::net_service::NetService;
+use shared::db_manager::*;
 
-mod error;
-mod misc;
-mod services;
+/// Looks if there is a database file in the current directory.
+/// Returns `true` if a database was found, `false` if not.
+fn find_database() -> bool {
+    let paths = fs::read_dir(".");
+    if let Err(e) = paths {
+        panic!("{}", e);
+    }
+    let paths = paths.unwrap();
+
+    for path in paths {
+        if let Err(e) = path {
+            panic!("{}", e);
+        }
+        let path = path.unwrap();
+
+        if path.file_type().unwrap().is_file() {
+            if path.file_name().to_str().unwrap() == DATABASE_NAME {
+                return true;
+            }
+        }
+    }
+
+    false
+}
 
 fn main() {
-    println!("FBugReporter (server) (v{}).", env!("CARGO_PKG_VERSION"));
+    println!(
+        "FBugReporter (database manager) (v{}).",
+        env!("CARGO_PKG_VERSION")
+    );
     println!("Type 'help' to see commands...\n");
 
-    let net_service = NetService::new(Logger::new());
-    if let Err(err) = net_service {
-        let error = err.add_entry(file!(), line!());
-        panic!("{}", error);
+    if !find_database() {
+        println!(
+            "No '{}' file was found in the current directory, make sure \
+            the database is created (the server will create it once it's started \
+            for the first time).",
+            DATABASE_NAME
+        );
+        return;
     }
-    let mut net_service = net_service.unwrap();
 
-    let args: Vec<String> = env::args().collect();
+    let database_manager = DatabaseManager::new();
+    if let Err(app_error) = database_manager {
+        let app_error = app_error.add_entry(file!(), line!());
+        panic!("{}", app_error);
+    }
+    let database_manager = database_manager.unwrap();
 
     loop {
         if let Err(e) = io::stdout().flush() {
@@ -35,35 +66,23 @@ fn main() {
         }
         let mut input = String::new();
 
-        if args.len() > 1 {
-            if args[1] == "--start" {
-                input = "start".to_string();
-            }
-        } else {
-            if let Err(e) = io::stdin().read_line(&mut input) {
-                println!("unable to read input (error: {}), continuing...", e);
-                continue;
-            }
+        if let Err(e) = io::stdin().read_line(&mut input) {
+            println!("unable to read input (error: {}), continuing...", e);
+            continue;
+        }
 
-            input.pop(); // pop '\n'
-            if cfg!(windows) {
-                input.pop(); // pop '\r'
-            }
+        input.pop(); // pop '\n'
+        if cfg!(windows) {
+            input.pop(); // pop '\r'
         }
 
         if input == "help" {
-            println!("\noptions:");
-            println!("--start - starts the server on launch");
             println!("\ncommands:");
-            println!("start - starts the server with the current configuration");
             println!("add-user <username> - adds a new user");
             println!("remove-user <username> - removes a user");
-            println!("config - show the current server configuration");
             println!("exit - exit the application");
-        } else if input == "start" {
-            net_service.start();
-        } else if input == "config" {
-            println!("{:#?}", net_service.server_config);
+        } else if input == "exit" {
+            break;
         } else if input.contains("add-user ") {
             let username_str: String = input
                 .chars()
@@ -108,7 +127,7 @@ fn main() {
                     is_admin = true;
                 }
 
-                let result = net_service.add_user(&username_str, is_admin);
+                let result = database_manager.add_user(&username_str, is_admin);
                 match result {
                     AddUserResult::Ok { user_password } => {
                         println!(
@@ -174,7 +193,7 @@ fn main() {
                 );
 
                 if input == remove_user_confirm_string {
-                    let result = net_service.remove_user(&username_str);
+                    let result = database_manager.remove_user(&username_str);
                     if let Err(app_error) = result {
                         panic!("{} at [{}, {}]", app_error.to_string(), file!(), line!());
                     } else {
@@ -199,8 +218,6 @@ fn main() {
                     );
                 }
             }
-        } else if input == "exit" {
-            break;
         } else {
             println!("command '{}' not found", input);
         }

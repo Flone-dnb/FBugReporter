@@ -2,7 +2,9 @@
 use serde::{Deserialize, Serialize};
 
 // Custom.
-use crate::misc::{GameReport, ReportResult};
+use crate::misc::ReportResult;
+use shared::report::GameReport;
+use shared::report::ReportSummary;
 
 // --------------------------------------------------------
 
@@ -69,16 +71,6 @@ pub enum InClientPacket {
     DeleteReport {
         report_id: u64,
     },
-}
-
-// should be exactly the same as client's struct
-#[derive(Serialize, Deserialize)]
-pub struct ReportSummary {
-    pub id: u64,
-    pub title: String,
-    pub game: String,
-    pub date: String,
-    pub time: String,
 }
 
 #[derive(Serialize, Deserialize)]

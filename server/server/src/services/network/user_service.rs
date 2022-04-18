@@ -16,13 +16,14 @@ use serde::Serialize;
 use sha2::{Digest, Sha512};
 use totp_rs::{Algorithm, TOTP};
 
-use super::ban_manager::*;
 // Custom.
+use super::ban_manager::*;
 use super::net_packets::*;
-use crate::error::AppError;
 use crate::misc::*;
-use crate::services::db_manager::DatabaseManager;
 use crate::services::logger_service::*;
+use shared::db_manager::DatabaseManager;
+use shared::error::AppError;
+use shared::report::GameReport;
 
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version

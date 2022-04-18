@@ -4,13 +4,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 // Custom.
-use crate::error::AppError;
 use crate::services::{
     config_service::ServerConfig,
-    db_manager::{AddUserResult, DatabaseManager},
     logger_service::*,
     network::{ban_manager::BanManager, user_service::UserService},
 };
+use shared::db_manager::*;
+use shared::error::AppError;
 
 pub struct NetService {
     pub logger: Arc<Mutex<Logger>>,

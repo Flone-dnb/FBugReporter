@@ -5,10 +5,10 @@ use rusqlite::{params, Connection, Result};
 use sha2::{Digest, Sha512};
 
 // Custom.
-use super::network::net_packets::ReportSummary;
-use crate::{error::AppError, misc::GameReport};
+use crate::report::ReportSummary;
+use crate::{error::AppError, report::GameReport};
 
-const DATABASE_NAME: &str = "database.db3";
+pub const DATABASE_NAME: &str = "database.db3";
 
 const REPORT_TABLE_NAME: &str = "report";
 const USER_TABLE_NAME: &str = "user";

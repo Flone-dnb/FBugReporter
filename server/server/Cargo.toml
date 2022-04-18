@@ -1,6 +1,6 @@
 [package]
 name = "server"
-authors = ["Aleksandr \"Flone\" Tretyakov"]
+authors = ["Aleksandr Tretyakov"]
 version = "1.0.0"
 edition = "2021"
 license = "MIT"
@@ -19,6 +19,7 @@ rusqlite = "0.26.3"
 sha2 = "0.10.1"
 configparser = "3.0.0"
 totp-rs = {version = "0.7.4", features = ["qr"]}
+shared = {path = "../shared"}
 
 [target.'cfg(windows)'.dependencies]
 platform-dirs = "0.3.0"

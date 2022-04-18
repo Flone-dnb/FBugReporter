@@ -50,3 +50,21 @@ See the example project in the `example` folder and `example/MainScene.gd` for h
 The server uses SQLite to store data. In order to build the server you need to have `sqlite3` installed.
 
 Windows users are special 🙃, they need to build sqlite library in order to build the server, you can use the following guide for example: https://gist.github.com/zeljic/d8b542788b225b1bcb5fce169ee28c55
+
+**Build:**
+
+The server consists of 3 applications:
+
+- `server`: the actual server
+- `database_manager`: used to add/remove users (even when the server is running)
+- `monitor`: simple helper app that will restart the server if it crashed
+
+You need to build each application and put resulting executable files in the same folder (so that you will have `server`, `database_manager` and `monitor` all in the same folder).
+
+In order to build an app you need to enter its directory and run:
+
+```
+cargo build --release
+```
+
+The compiled executable be located at `/reporter/target/release/` (with the extension `.dll` for Windows and `.so` for Linux).

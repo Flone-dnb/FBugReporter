@@ -9,7 +9,7 @@ use rand::Rng;
 
 // Custom.
 use super::logger_service::LOG_FILE_NAME;
-use crate::error::AppError;
+use shared::error::AppError;
 
 const RANDOM_PORT_RANGE: Range<u16> = 7000..65535;
 const DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS: u32 = 3;

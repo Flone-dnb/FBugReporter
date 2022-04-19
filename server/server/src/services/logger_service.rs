@@ -1,12 +1,14 @@
 // Std.
 use std::fs::{File, *};
 use std::io::prelude::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 // External.
 use chrono::Local;
 
 pub const LOG_FILE_NAME: &str = "server.log";
+const LOG_DIR: &str = "logs";
+const MAX_LOG_FILE_COUNT: usize = 10;
 
 pub enum LogCategory {
     Info,
@@ -14,13 +16,16 @@ pub enum LogCategory {
     Error,
 }
 
-pub struct Logger;
+pub struct Logger {
+    current_log_file: String,
+}
 
 impl Logger {
     /// Removes old log file and creates an empty one.
     pub fn new() -> Self {
-        Logger::recreate_log_file();
-        Self {}
+        Self {
+            current_log_file: Logger::recreate_log_file(),
+        }
     }
     pub fn print_and_log(&self, category: LogCategory, text: &str) {
         let mut message = String::new();
@@ -50,14 +55,14 @@ impl Logger {
         let log_file = OpenOptions::new()
             .write(true)
             .append(true)
-            .open(LOG_FILE_NAME);
+            .open(&self.current_log_file);
         if let Err(e) = log_file {
             panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
         }
 
         log_file.unwrap()
     }
-    fn recreate_log_file() {
+    fn recreate_log_file() -> String {
         let mut log_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
 
         // Check ending.
@@ -74,7 +79,7 @@ impl Logger {
             }
         }
 
-        log_path += "logs";
+        log_path += LOG_DIR;
 
         // Ending.
         #[cfg(target_os = "linux")]
@@ -112,24 +117,60 @@ impl Logger {
         if let Err(e) = log_file {
             panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
         }
+
+        log_path
     }
     fn remove_oldest_log_if_needed(log_path: &str) {
         let paths = std::fs::read_dir(log_path);
-        if let Err(e) = paths {
-            panic!("{}", e);
+        if let Err(ref e) = paths {
+            println!("ERROR: {} at [{}, {}]", e, file!(), line!());
+            return;
         }
         let paths = paths.unwrap();
 
+        let mut logs: Vec<(PathBuf, u64)> = Vec::new();
+
         for path in paths {
-            if let Err(e) = path {
-                panic!("{}", e);
+            if let Err(ref e) = path {
+                println!("ERROR: {} at [{}, {}]", e, file!(), line!());
+                continue;
             }
             let path = path.unwrap();
 
             if path.file_type().unwrap().is_file() {
-                // TODO:
-                // let metadata = fs::metadata("foo.txt")
+                let metadata = metadata(path.path());
+                if let Err(ref e) = metadata {
+                    println!("ERROR: {} at [{}, {}]", e, file!(), line!());
+                    continue;
+                }
+                let metadata = metadata.unwrap();
+                let last_modified = metadata.modified();
+                if let Err(e) = last_modified {
+                    println!("ERROR: {} at [{}, {}]", e, file!(), line!());
+                    continue;
+                }
+                let elapsed_seconds = last_modified.unwrap().elapsed();
+                if let Err(e) = elapsed_seconds {
+                    println!("ERROR: {} at [{}, {}]", e, file!(), line!());
+                    continue;
+                }
+                logs.push((path.path(), elapsed_seconds.unwrap().as_secs()));
             }
+        }
+
+        if logs.is_empty() {
+            return;
+        }
+
+        if logs.len() < MAX_LOG_FILE_COUNT {
+            return;
+        }
+
+        logs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        // Remove the oldest log file.
+        if let Err(e) = remove_file(logs.last().unwrap().0.clone()) {
+            println!("ERROR: failed to remove oldest log file, error: {}", e);
         }
     }
 }

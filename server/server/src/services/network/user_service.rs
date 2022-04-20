@@ -9,6 +9,7 @@ use std::time::{Duration, SystemTime};
 use aes::Aes256;
 use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
+use chrono::{DateTime, Local};
 use cmac::{Cmac, Mac, NewMac};
 use num_bigint::{BigUint, RandomBits};
 use rand::{Rng, RngCore};
@@ -35,21 +36,26 @@ const NETWORK_PROTOCOL_VERSION: u16 = 0;
 const MAX_PACKET_SIZE_IN_BYTES: u32 = 131_072; // 128 kB for now
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 25;
 const MAX_WAIT_TIME_IN_READ_WRITE_MS: u64 = 5000;
+const KEEP_ALIVE_CHECK_INTERVAL_MS: u64 = 60000; // 1 minute
+const DISCONNECT_IF_INACTIVE_IN_SEC: u64 = 1800; // 30 minutes
 
 enum IoResult {
     Ok(usize),
     Fin,
     Err(AppError),
 }
+
 pub struct UserService {
     logger: Arc<Mutex<Logger>>,
     socket: TcpStream,
+    socket_addr: Option<SocketAddr>,
     secret_key: Vec<u8>,
     connected_users_count: Arc<Mutex<usize>>,
     exit_error: Option<Result<String, AppError>>,
     database: Arc<Mutex<DatabaseManager>>,
     ban_manager: Option<Arc<Mutex<BanManager>>>,
     username: Option<String>,
+    time_of_last_received_packet: DateTime<Local>, // only for clients
 }
 
 impl UserService {
@@ -84,6 +90,8 @@ impl UserService {
             database,
             ban_manager,
             username: None,
+            socket_addr: None,
+            time_of_last_received_packet: Local::now(),
         }
     }
     pub fn new_reporter(
@@ -115,7 +123,9 @@ impl UserService {
             secret_key: Vec::new(),
             database,
             ban_manager: None,
+            socket_addr: None,
             username: None,
+            time_of_last_received_packet: Local::now(),
         }
     }
     /// After this function is finished the object should be destroyed.
@@ -128,7 +138,7 @@ impl UserService {
         self.secret_key = secret_key.unwrap();
 
         let mut is_fin = false; // don't check, react to FIN as error
-        let packet = self.receive_packet(true, &mut is_fin);
+        let packet = self.receive_packet(&mut is_fin, None);
         if let Err(app_error) = packet {
             self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
             return;
@@ -142,6 +152,8 @@ impl UserService {
             return;
         }
         let packet = packet.unwrap();
+
+        self.socket_addr = Some(self.socket.peer_addr().unwrap());
 
         let result = self.handle_reporter_packet(packet);
         if let Err(app_error) = result {
@@ -168,7 +180,7 @@ impl UserService {
         self.secret_key = secret_key.unwrap();
 
         let mut is_fin = false; // don't check, react to FIN as error
-        let packet = self.receive_packet(true, &mut is_fin);
+        let packet = self.receive_packet(&mut is_fin, None);
         if let Err(app_error) = packet {
             self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
             return;
@@ -194,6 +206,9 @@ impl UserService {
             self.exit_error = Some(Ok(result.unwrap()));
             return;
         }
+
+        // Save address.
+        self.socket_addr = Some(self.socket.peer_addr().unwrap());
 
         // Connected.
         let result = self.wait_for_client_requests();
@@ -272,7 +287,7 @@ impl UserService {
                     LogCategory::Info,
                     &format!(
                         "Received a report from socket {}",
-                        self.socket.peer_addr().unwrap()
+                        self.socket_addr.unwrap()
                     ),
                 );
 
@@ -297,7 +312,14 @@ impl UserService {
                     LogCategory::Info,
                     &format!(
                         "Saved a report from socket {}",
-                        self.socket.peer_addr().unwrap()
+                        match self.socket_addr {
+                            Some(addr) => {
+                                addr.to_string()
+                            }
+                            None => {
+                                String::new()
+                            }
+                        }
                     ),
                 );
 
@@ -921,12 +943,12 @@ impl UserService {
     /// Returns `AppError` as `Err` if there was an internal error
     /// (bug).
     fn wait_for_client_requests(&mut self) -> Result<Option<String>, AppError> {
-        // TODO: add keep-alive for clients
-
         let mut is_fin = false;
 
+        self.time_of_last_received_packet = Local::now();
+
         loop {
-            let result = self.receive_packet(false, &mut is_fin);
+            let result = self.receive_packet(&mut is_fin, Some(KEEP_ALIVE_CHECK_INTERVAL_MS));
             if is_fin {
                 return Ok(None);
             }
@@ -934,6 +956,17 @@ impl UserService {
                 return Err(app_error.add_entry(file!(), line!()));
             }
             let packet = result.unwrap();
+
+            if packet.is_empty() {
+                // Timeout.
+                let result = self.check_client_keep_alive();
+                if let Err(message) = result {
+                    return Ok(Some(message));
+                }
+                continue;
+            } else {
+                self.time_of_last_received_packet = Local::now();
+            }
 
             // Deserialize.
             let packet = bincode::deserialize::<InClientPacket>(&packet);
@@ -952,6 +985,40 @@ impl UserService {
                 return Ok(result);
             }
         }
+    }
+    /// Checks if the connection is not lost.
+    ///
+    /// Returns `Ok(())` if connection is not lost,
+    /// returns `Err(String)` if the connection was lost
+    /// (contains connection lost message).
+    fn check_client_keep_alive(&mut self) -> Result<(), String> {
+        let time_diff = Local::now() - self.time_of_last_received_packet;
+
+        if time_diff.num_seconds() >= DISCONNECT_IF_INACTIVE_IN_SEC as i64 {
+            // Disconnect.
+            if self.username.is_some() {
+                return Err(format!(
+                    "disconnecting user '{}' due to inactivity for {} second(-s)",
+                    self.username.as_ref().unwrap(),
+                    DISCONNECT_IF_INACTIVE_IN_SEC
+                ));
+            } else {
+                return Err(format!(
+                    "disconnecting socket {} due to inactivity for {} second(-s)",
+                    match self.socket_addr {
+                        Some(addr) => {
+                            addr.to_string()
+                        }
+                        None => {
+                            String::new()
+                        }
+                    },
+                    DISCONNECT_IF_INACTIVE_IN_SEC
+                ));
+            }
+        }
+
+        Ok(())
     }
     fn establish_secure_connection(socket: &mut TcpStream) -> Result<Vec<u8>, AppError> {
         // taken from https://www.rfc-editor.org/rfc/rfc5114#section-2.1
@@ -1044,7 +1111,7 @@ impl UserService {
         // Receive open key 'B' size.
         let mut b_open_len_buf = vec![0u8; std::mem::size_of::<u64>()];
         loop {
-            match UserService::read_from_socket(socket, &mut b_open_len_buf, true) {
+            match UserService::read_from_socket(socket, &mut b_open_len_buf) {
                 IoResult::Fin => {
                     return Err(AppError::new("unexpected FIN received", file!(), line!()));
                 }
@@ -1066,7 +1133,7 @@ impl UserService {
         let mut b_open_buf = vec![0u8; b_open_len as usize];
 
         loop {
-            match UserService::read_from_socket(socket, &mut b_open_buf, true) {
+            match UserService::read_from_socket(socket, &mut b_open_buf) {
                 IoResult::Fin => {
                     return Err(AppError::new("unexpected FIN received", file!(), line!()));
                 }
@@ -1224,10 +1291,17 @@ impl UserService {
 
         Ok(())
     }
+    /// Waits for next packet to arrive.
+    ///
+    /// Parameters:
+    /// - `is_fin`: will be `true` if the remove socket closed connection.
+    /// - `timeout_in_ms`: if specified will be used instead of the default timeout,
+    /// if we reached timeout and this parameter was not `None` will return `Ok` with
+    /// zero length vector.
     fn receive_packet(
         &mut self,
-        enable_wait_limit: bool,
         is_fin: &mut bool,
+        timeout_in_ms: Option<u64>,
     ) -> Result<Vec<u8>, AppError> {
         if self.secret_key.is_empty() {
             return Err(AppError::new(
@@ -1240,17 +1314,37 @@ impl UserService {
         // Read u32 (size of a packet)
         let mut packet_size_buf = [0u8; std::mem::size_of::<u32>() as usize];
         let mut _next_packet_size: u32 = 0;
-        match UserService::read_from_socket(
-            &mut self.socket,
-            &mut packet_size_buf,
-            enable_wait_limit,
-        ) {
+
+        let mut _result = IoResult::Fin;
+        if timeout_in_ms.is_some() {
+            let timeout_result = UserService::read_from_socket_with_timeout(
+                &mut self.socket,
+                &mut packet_size_buf,
+                timeout_in_ms.unwrap(),
+            );
+            if timeout_result.is_none() {
+                return Ok(Vec::new());
+            } else {
+                _result = timeout_result.unwrap();
+            }
+        } else {
+            _result = UserService::read_from_socket(&mut self.socket, &mut packet_size_buf);
+        }
+
+        match _result {
             IoResult::Fin => {
                 *is_fin = true;
                 return Err(AppError::new(
                     &format!(
                         "unexpected FIN received (socket: {})",
-                        self.socket.peer_addr().unwrap()
+                        match self.socket_addr {
+                            Some(addr) => {
+                                addr.to_string()
+                            }
+                            None => {
+                                String::new()
+                            }
+                        }
                     ),
                     file!(),
                     line!(),
@@ -1264,7 +1358,14 @@ impl UserService {
                             "not all data received (got: {}, expected: {}) (socket: {})",
                             byte_count,
                             packet_size_buf.len(),
-                            self.socket.peer_addr().unwrap()
+                            match self.socket_addr {
+                                Some(addr) => {
+                                    addr.to_string()
+                                }
+                                None => {
+                                    String::new()
+                                }
+                            }
                         ),
                         file!(),
                         line!(),
@@ -1274,7 +1375,18 @@ impl UserService {
                 let res = bincode::deserialize(&packet_size_buf);
                 if let Err(e) = res {
                     return Err(AppError::new(
-                        &format!("{:?} (socket: {})", e, self.socket.peer_addr().unwrap()),
+                        &format!(
+                            "{:?} (socket: {})",
+                            e,
+                            match self.socket_addr {
+                                Some(addr) => {
+                                    addr.to_string()
+                                }
+                                None => {
+                                    String::new()
+                                }
+                            }
+                        ),
                         file!(),
                         line!(),
                     ));
@@ -1291,7 +1403,14 @@ impl UserService {
                     "incoming packet is too big to receive ({} > {} bytes) (socket: {})",
                     _next_packet_size,
                     MAX_PACKET_SIZE_IN_BYTES,
-                    self.socket.peer_addr().unwrap()
+                    match self.socket_addr {
+                        Some(addr) => {
+                            addr.to_string()
+                        }
+                        None => {
+                            String::new()
+                        }
+                    }
                 ),
                 file!(),
                 line!(),
@@ -1300,17 +1419,20 @@ impl UserService {
 
         // Receive encrypted packet.
         let mut encrypted_packet = vec![0u8; _next_packet_size as usize];
-        match UserService::read_from_socket(
-            &mut self.socket,
-            &mut encrypted_packet,
-            enable_wait_limit,
-        ) {
+        match UserService::read_from_socket(&mut self.socket, &mut encrypted_packet) {
             IoResult::Fin => {
                 *is_fin = true;
                 return Err(AppError::new(
                     &format!(
                         "unexpected FIN received (socket: {})",
-                        self.socket.peer_addr().unwrap()
+                        match self.socket_addr {
+                            Some(addr) => {
+                                addr.to_string()
+                            }
+                            None => {
+                                String::new()
+                            }
+                        }
                     ),
                     file!(),
                     line!(),
@@ -1326,7 +1448,14 @@ impl UserService {
                 &format!(
                     "unexpected packet length ({}) (socket: {})",
                     encrypted_packet.len(),
-                    self.socket.peer_addr().unwrap()
+                    match self.socket_addr {
+                        Some(addr) => {
+                            addr.to_string()
+                        }
+                        None => {
+                            String::new()
+                        }
+                    }
                 ),
                 file!(),
                 line!(),
@@ -1340,7 +1469,18 @@ impl UserService {
         let decrypted_packet = cipher.decrypt_vec(&encrypted_packet);
         if let Err(e) = decrypted_packet {
             return Err(AppError::new(
-                &format!("{:?} (socket: {})", e, self.socket.peer_addr().unwrap()),
+                &format!(
+                    "{:?} (socket: {})",
+                    e,
+                    match self.socket_addr {
+                        Some(addr) => {
+                            addr.to_string()
+                        }
+                        None => {
+                            String::new()
+                        }
+                    }
+                ),
                 file!(),
                 line!(),
             ));
@@ -1355,7 +1495,18 @@ impl UserService {
         mac.update(&decrypted_packet);
         if let Err(e) = mac.verify(&tag) {
             return Err(AppError::new(
-                &format!("{:?} (socket: {})", e, self.socket.peer_addr().unwrap()),
+                &format!(
+                    "{:?} (socket: {})",
+                    e,
+                    match self.socket_addr {
+                        Some(addr) => {
+                            addr.to_string()
+                        }
+                        None => {
+                            String::new()
+                        }
+                    }
+                ),
                 file!(),
                 line!(),
             ));
@@ -1369,16 +1520,7 @@ impl UserService {
     ///
     /// * `socket`: socket to read the data from.
     /// * `buf`: buffer to write read data.
-    /// * `enable_wait_limit`: if socket has no data to read and this
-    /// argument is `false` this function will block until socket receives
-    /// new data, otherwise if `true` is specified, this function
-    /// will wait for `MAX_WAIT_TIME_IN_READ_WRITE_MS` maximum and then
-    /// return error if the socket still has no data to read.
-    fn read_from_socket(
-        socket: &mut TcpStream,
-        buf: &mut [u8],
-        enable_wait_limit: bool,
-    ) -> IoResult {
+    fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
         if buf.is_empty() {
             return IoResult::Err(AppError::new("passed 'buf' has 0 length", file!(), line!()));
         }
@@ -1386,12 +1528,19 @@ impl UserService {
         let mut total_wait_time_ms: u64 = 0;
 
         loop {
-            if enable_wait_limit && total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
+            if total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
                 return IoResult::Err(AppError::new(
                     &format!(
                         "reached maximum response wait time limit of {} ms for socket {}",
                         MAX_WAIT_TIME_IN_READ_WRITE_MS,
-                        socket.peer_addr().unwrap(),
+                        match socket.peer_addr() {
+                            Ok(addr) => {
+                                addr.to_string()
+                            }
+                            Err(_) => {
+                                String::new()
+                            }
+                        },
                     ),
                     file!(),
                     line!(),
@@ -1409,7 +1558,14 @@ impl UserService {
                                 "failed to read (got: {}, expected: {}) (socket {})",
                                 n,
                                 buf.len(),
-                                socket.peer_addr().unwrap(),
+                                match socket.peer_addr() {
+                                    Ok(addr) => {
+                                        addr.to_string()
+                                    }
+                                    Err(_) => {
+                                        String::new()
+                                    }
+                                },
                             ),
                             file!(),
                             line!(),
@@ -1425,10 +1581,102 @@ impl UserService {
                 }
                 Err(e) => {
                     return IoResult::Err(AppError::new(
-                        &format!("{:?} (socket {})", e, socket.peer_addr().unwrap(),),
+                        &format!(
+                            "{:?} (socket {})",
+                            e,
+                            match socket.peer_addr() {
+                                Ok(addr) => {
+                                    addr.to_string()
+                                }
+                                Err(_) => {
+                                    String::new()
+                                }
+                            },
+                        ),
                         file!(),
                         line!(),
                     ));
+                }
+            };
+        }
+    }
+    /// Reads data from the specified socket.
+    ///
+    /// Arguments:
+    ///
+    /// * `socket`: socket to read the data from.
+    /// * `buf`: buffer to write read data.
+    ///
+    /// Returns `None` if timeout reached.
+    fn read_from_socket_with_timeout(
+        socket: &mut TcpStream,
+        buf: &mut [u8],
+        timeout_in_ms: u64,
+    ) -> Option<IoResult> {
+        if buf.is_empty() {
+            return Some(IoResult::Err(AppError::new(
+                "passed 'buf' has 0 length",
+                file!(),
+                line!(),
+            )));
+        }
+
+        let mut total_wait_time_ms: u64 = 0;
+
+        loop {
+            if total_wait_time_ms >= timeout_in_ms {
+                return None;
+            }
+
+            match socket.read(buf) {
+                Ok(0) => {
+                    return Some(IoResult::Fin);
+                }
+                Ok(n) => {
+                    if n != buf.len() {
+                        return Some(IoResult::Err(AppError::new(
+                            &format!(
+                                "failed to read (got: {}, expected: {}) (socket {})",
+                                n,
+                                buf.len(),
+                                match socket.peer_addr() {
+                                    Ok(addr) => {
+                                        addr.to_string()
+                                    }
+                                    Err(_) => {
+                                        String::new()
+                                    }
+                                },
+                            ),
+                            file!(),
+                            line!(),
+                        )));
+                    }
+
+                    return Some(IoResult::Ok(n));
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(WOULD_BLOCK_RETRY_AFTER_MS));
+                    total_wait_time_ms += WOULD_BLOCK_RETRY_AFTER_MS;
+                    continue;
+                }
+                Err(e) => {
+                    return Some(IoResult::Err(AppError::new(
+                        &format!(
+                            "{:?} (socket {})",
+                            e,
+                            match socket.peer_addr() {
+                                Ok(addr) => {
+                                    addr.to_string()
+                                }
+                                Err(_) => {
+                                    String::new()
+                                }
+                            },
+                        ),
+                        file!(),
+                        line!(),
+                    )));
                 }
             };
         }
@@ -1459,7 +1707,14 @@ impl UserService {
                     &format!(
                         "reached maximum response wait time limit of {} ms for socket {}",
                         MAX_WAIT_TIME_IN_READ_WRITE_MS,
-                        socket.peer_addr().unwrap(),
+                        match socket.peer_addr() {
+                            Ok(addr) => {
+                                addr.to_string()
+                            }
+                            Err(_) => {
+                                String::new()
+                            }
+                        },
                     ),
                     file!(),
                     line!(),
@@ -1477,7 +1732,14 @@ impl UserService {
                                 "failed to write (got: {}, expected: {}) (socket {})",
                                 n,
                                 buf.len(),
-                                socket.peer_addr().unwrap(),
+                                match socket.peer_addr() {
+                                    Ok(addr) => {
+                                        addr.to_string()
+                                    }
+                                    Err(_) => {
+                                        String::new()
+                                    }
+                                },
                             ),
                             file!(),
                             line!(),
@@ -1493,7 +1755,18 @@ impl UserService {
                 }
                 Err(e) => {
                     return IoResult::Err(AppError::new(
-                        &format!("{:?} (socket {})", e, socket.peer_addr().unwrap()),
+                        &format!(
+                            "{:?} (socket {})",
+                            e,
+                            match socket.peer_addr() {
+                                Ok(addr) => {
+                                    addr.to_string()
+                                }
+                                Err(_) => {
+                                    String::new()
+                                }
+                            }
+                        ),
                         file!(),
                         line!(),
                     ));
@@ -1512,7 +1785,14 @@ impl Drop for UserService {
         } else {
             _message = format!(
                 "Closing connection with {}",
-                self.socket.peer_addr().unwrap()
+                match self.socket_addr {
+                    Some(addr) => {
+                        addr.to_string()
+                    }
+                    None => {
+                        String::new()
+                    }
+                }
             );
         }
 

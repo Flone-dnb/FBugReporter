@@ -9,6 +9,7 @@ use druid::WidgetExt;
 use native_dialog::{FileDialog, MessageDialog, MessageType};
 
 // Custom.
+use super::main_layout::REPORT_COUNT_PER_PAGE;
 use crate::{ApplicationState, Layout};
 
 #[derive(Clone, Data)]
@@ -186,7 +187,38 @@ impl ReportLayout {
         )
     }
     fn on_return_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
-        data.main_layout.reports.borrow_mut().clear(); // will refresh reports list
+        // Hack: do this here because query_reports from MainLayout
+        // does not have mut Data.
+        let result = data
+            .net_service
+            .lock()
+            .unwrap()
+            .query_reports(data.main_layout.current_page, REPORT_COUNT_PER_PAGE);
+
+        if let Err(app_error) = result {
+            if app_error.message.contains("FIN") {
+                data.current_layout = Layout::Connect;
+                data.connect_layout.connect_error = format!(
+                    "{}\nMost likely the server \
+                    closed connection due to your inactivity.",
+                    app_error.message
+                );
+            } else {
+                data.logger_service
+                    .lock()
+                    .unwrap()
+                    .log(&app_error.to_string());
+            }
+
+            return;
+        }
+        if result.is_ok() {
+            let (reports, total_count) = result.unwrap();
+            *data.main_layout.reports.borrow_mut() = reports;
+            data.main_layout.total_reports.set(total_count);
+        }
+
+        //data.main_layout.reports.borrow_mut().clear(); // will refresh reports list
         data.current_layout = Layout::Main;
     }
     fn on_delete_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
@@ -206,10 +238,20 @@ impl ReportLayout {
             .unwrap()
             .delete_report(data.report_layout.report.id);
         if let Err(app_error) = result {
-            println!(
-                "ERROR: {}",
-                app_error.add_entry(file!(), line!()).to_string()
-            );
+            if app_error.message.contains("FIN") {
+                data.current_layout = Layout::Connect;
+                data.connect_layout.connect_error = format!(
+                    "{}\nMost likely the server \
+                    closed connection due to your inactivity.",
+                    app_error.message
+                );
+            } else {
+                println!(
+                    "ERROR: {}",
+                    app_error.add_entry(file!(), line!()).to_string()
+                );
+            }
+
             return;
         }
         let found = result.unwrap();

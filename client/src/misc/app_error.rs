@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 #[derive(Debug)]
 pub struct AppError {
-    message: String,
+    pub message: String,
     file: &'static str,
     line: u32,
     stack: Vec<ErrorEntry>,

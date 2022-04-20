@@ -10,11 +10,11 @@ use druid::WidgetExt;
 // Custom.
 use crate::services::net_packets::ReportSummary;
 use crate::widgets::report::ReportWidget;
-use crate::ApplicationState;
+use crate::{ApplicationState, Layout};
 
 // Layout customization.
 const TEXT_SIZE: f64 = 18.0;
-const REPORT_COUNT_PER_PAGE: u64 = 15;
+pub const REPORT_COUNT_PER_PAGE: u64 = 15;
 
 #[derive(Clone, Data)]
 pub struct MainLayout {
@@ -27,7 +27,7 @@ pub struct MainLayout {
     pub is_user_admin: bool,
 
     #[data(ignore)]
-    total_reports: Cell<u64>,
+    pub total_reports: Cell<u64>,
 }
 
 impl MainLayout {
@@ -192,10 +192,19 @@ impl MainLayout {
             .query_reports(last_page, REPORT_COUNT_PER_PAGE);
 
         if let Err(app_error) = result {
-            data.logger_service
-                .lock()
-                .unwrap()
-                .log(&app_error.to_string());
+            if app_error.message.contains("FIN") {
+                data.current_layout = Layout::Connect;
+                data.connect_layout.connect_error = format!(
+                    "{}\nMost likely the server \
+                    closed connection due to your inactivity.",
+                    app_error.message
+                );
+            } else {
+                data.logger_service
+                    .lock()
+                    .unwrap()
+                    .log(&app_error.to_string());
+            }
             return;
         }
 
@@ -213,10 +222,19 @@ impl MainLayout {
             .query_reports(1, REPORT_COUNT_PER_PAGE);
 
         if let Err(app_error) = result {
-            data.logger_service
-                .lock()
-                .unwrap()
-                .log(&app_error.to_string());
+            if app_error.message.contains("FIN") {
+                data.current_layout = Layout::Connect;
+                data.connect_layout.connect_error = format!(
+                    "{}\nMost likely the server \
+                    closed connection due to your inactivity.",
+                    app_error.message
+                );
+            } else {
+                data.logger_service
+                    .lock()
+                    .unwrap()
+                    .log(&app_error.to_string());
+            }
             return;
         }
 
@@ -234,10 +252,19 @@ impl MainLayout {
             .query_reports(data.main_layout.current_page - 1, REPORT_COUNT_PER_PAGE);
 
         if let Err(app_error) = result {
-            data.logger_service
-                .lock()
-                .unwrap()
-                .log(&app_error.to_string());
+            if app_error.message.contains("FIN") {
+                data.current_layout = Layout::Connect;
+                data.connect_layout.connect_error = format!(
+                    "{}\nMost likely the server \
+                    closed connection due to your inactivity.",
+                    app_error.message
+                );
+            } else {
+                data.logger_service
+                    .lock()
+                    .unwrap()
+                    .log(&app_error.to_string());
+            }
             return;
         }
 
@@ -255,10 +282,19 @@ impl MainLayout {
             .query_reports(data.main_layout.current_page + 1, REPORT_COUNT_PER_PAGE);
 
         if let Err(app_error) = result {
-            data.logger_service
-                .lock()
-                .unwrap()
-                .log(&app_error.to_string());
+            if app_error.message.contains("FIN") {
+                data.current_layout = Layout::Connect;
+                data.connect_layout.connect_error = format!(
+                    "{}\nMost likely the server \
+                    closed connection due to your inactivity.",
+                    app_error.message
+                );
+            } else {
+                data.logger_service
+                    .lock()
+                    .unwrap()
+                    .log(&app_error.to_string());
+            }
             return;
         }
 

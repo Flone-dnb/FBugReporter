@@ -387,7 +387,14 @@ impl NetService {
                 return Err(AppError::new(
                     &format!(
                         "unexpected FIN received (socket: {})",
-                        self.socket.as_ref().unwrap().peer_addr().unwrap()
+                        match self.socket.as_ref().unwrap().peer_addr() {
+                            Ok(addr) => {
+                                addr.to_string()
+                            }
+                            Err(_) => {
+                                String::new()
+                            }
+                        }
                     ),
                     file!(),
                     line!(),
@@ -401,7 +408,14 @@ impl NetService {
                             "not all data received (got: {}, expected: {}) (socket: {})",
                             byte_count,
                             packet_size_buf.len(),
-                            self.socket.as_ref().unwrap().peer_addr().unwrap()
+                            match self.socket.as_ref().unwrap().peer_addr() {
+                                Ok(addr) => {
+                                    addr.to_string()
+                                }
+                                Err(_) => {
+                                    String::new()
+                                }
+                            }
                         ),
                         file!(),
                         line!(),
@@ -414,7 +428,14 @@ impl NetService {
                         &format!(
                             "{:?} (socket: {})",
                             e,
-                            self.socket.as_ref().unwrap().peer_addr().unwrap()
+                            match self.socket.as_ref().unwrap().peer_addr() {
+                                Ok(addr) => {
+                                    addr.to_string()
+                                }
+                                Err(_) => {
+                                    String::new()
+                                }
+                            }
                         ),
                         file!(),
                         line!(),
@@ -432,7 +453,14 @@ impl NetService {
                 return Err(AppError::new(
                     &format!(
                         "unexpected FIN received (socket: {})",
-                        self.socket.as_ref().unwrap().peer_addr().unwrap()
+                        match self.socket.as_ref().unwrap().peer_addr() {
+                            Ok(addr) => {
+                                addr.to_string()
+                            }
+                            Err(_) => {
+                                String::new()
+                            }
+                        }
                     ),
                     file!(),
                     line!(),
@@ -448,7 +476,14 @@ impl NetService {
                 &format!(
                     "unexpected packet length ({}) (socket: {})",
                     encrypted_packet.len(),
-                    self.socket.as_ref().unwrap().peer_addr().unwrap()
+                    match self.socket.as_ref().unwrap().peer_addr() {
+                        Ok(addr) => {
+                            addr.to_string()
+                        }
+                        Err(_) => {
+                            String::new()
+                        }
+                    }
                 ),
                 file!(),
                 line!(),
@@ -465,7 +500,14 @@ impl NetService {
                 &format!(
                     "{:?} (socket: {})",
                     e,
-                    self.socket.as_ref().unwrap().peer_addr().unwrap()
+                    match self.socket.as_ref().unwrap().peer_addr() {
+                        Ok(addr) => {
+                            addr.to_string()
+                        }
+                        Err(_) => {
+                            String::new()
+                        }
+                    }
                 ),
                 file!(),
                 line!(),
@@ -484,7 +526,14 @@ impl NetService {
                 &format!(
                     "{:?} (socket: {})",
                     e,
-                    self.socket.as_ref().unwrap().peer_addr().unwrap()
+                    match self.socket.as_ref().unwrap().peer_addr() {
+                        Ok(addr) => {
+                            addr.to_string()
+                        }
+                        Err(_) => {
+                            String::new()
+                        }
+                    }
                 ),
                 file!(),
                 line!(),

@@ -67,6 +67,8 @@ pub struct DatabaseManager {
 }
 
 impl DatabaseManager {
+    /// Open a new database connection.
+    /// If no database was created, will create a new one.
     pub fn new() -> Result<Self, AppError> {
         let result = Connection::open(DATABASE_NAME);
         if let Err(e) = result {
@@ -97,6 +99,7 @@ impl DatabaseManager {
 
         Ok(Self { connection })
     }
+    /// Returns the amount of reports the database contains.
     pub fn get_report_count(&self) -> Result<u64, AppError> {
         let mut stmt = self
             .connection
@@ -125,6 +128,17 @@ impl DatabaseManager {
             return Ok(count.unwrap());
         }
     }
+    /// Returns summary of reports from the database.
+    ///
+    /// Parameters:
+    /// - `page`: a "page" to query reports from
+    /// - `amount`: amount of reports to query
+    ///
+    /// In the database reports exist as a "list"
+    /// to implement "paging" in client application we use 2 values:
+    /// `page` and `amount` when querying reports. To query reports
+    /// we calculate starting id as `(page - 1) * amount` and select
+    /// `amount` rows starting from this starting id.
     pub fn get_reports(&self, mut page: u64, amount: u64) -> Result<Vec<ReportSummary>, AppError> {
         if page == 0 {
             page = 1;
@@ -206,6 +220,9 @@ impl DatabaseManager {
             })
         }
     }
+    /// Returns a report with the specified ID from the database.
+    ///
+    /// Returns error if a report with the specified ID does not exist.
     pub fn get_report(&self, report_id: u64) -> Result<ReportData, AppError> {
         let mut stmt = self
             .connection
@@ -563,6 +580,7 @@ impl DatabaseManager {
 
         Ok(())
     }
+    /// Saves a new report to the database.
     pub fn save_report(&self, game_report: GameReport) -> Result<(), AppError> {
         let datetime = Local::now();
 
@@ -939,6 +957,7 @@ impl DatabaseManager {
 
         Ok(true)
     }
+    /// Creates the `report` table if it was not found in the database.
     fn create_report_table_if_not_found(connection: &mut Connection) -> Result<(), AppError> {
         // Check if table exists.
         let mut stmt = connection
@@ -997,6 +1016,7 @@ impl DatabaseManager {
 
         Ok(())
     }
+    /// Creates the `version` table if it was not found in the database.
     fn create_version_table_if_not_found(connection: &mut Connection) -> Result<(), AppError> {
         // Check if table exists.
         let mut stmt = connection
@@ -1041,6 +1061,7 @@ impl DatabaseManager {
 
         Ok(())
     }
+    /// Creates the `user` table if it was not found in the database.
     fn create_user_table_if_not_found(connection: &mut Connection) -> Result<(), AppError> {
         // Check if table exists.
         let mut stmt = connection
@@ -1107,6 +1128,9 @@ impl DatabaseManager {
 
         Ok(())
     }
+    /// Looks if the existing database is not supported by this database manager.
+    /// If the existing database is not supported, will upgrade existing database
+    /// to the currently supported version.
     fn handle_old_database_version(connection: &mut Connection) -> Result<(), AppError> {
         // Get database version.
         let mut stmt = connection
@@ -1159,7 +1183,7 @@ impl DatabaseManager {
 
         // After everything is done, we drop the version table
         // and insert the new version value.
-        if let Err(app_error) = DatabaseManager::drop_version_database(connection) {
+        if let Err(app_error) = DatabaseManager::drop_version_table(connection) {
             return Err(app_error.add_entry(file!(), line!()));
         }
         if let Err(app_error) = DatabaseManager::create_version_table_if_not_found(connection) {
@@ -1168,7 +1192,8 @@ impl DatabaseManager {
 
         Ok(())
     }
-    fn drop_version_database(connection: &mut Connection) -> Result<(), AppError> {
+    /// Deletes the `version` table.
+    fn drop_version_table(connection: &mut Connection) -> Result<(), AppError> {
         if let Err(e) = connection.execute(&format!("DROP TABLE {}", VERSION_TABLE_NAME), params![])
         {
             return Err(AppError::new(&e.to_string(), file!(), line!()));
@@ -1176,6 +1201,7 @@ impl DatabaseManager {
 
         Ok(())
     }
+    /// Upgrades the database from version `0` to version `1`.
     fn upgrade_database_to_version_1(connection: &mut Connection) -> Result<(), AppError> {
         if let Err(e) = connection.execute(
             &format!(

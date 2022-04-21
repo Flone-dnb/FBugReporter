@@ -44,6 +44,7 @@ pub struct BanManager {
 }
 
 impl BanManager {
+    /// Creates a new ban manager.
     pub fn new(logger: Arc<Mutex<Logger>>, config: Arc<ServerConfig>) -> Self {
         if config.max_allowed_login_attempts == 0 {
             panic!("max_allowed_login_attempts should not be zero or negative.");

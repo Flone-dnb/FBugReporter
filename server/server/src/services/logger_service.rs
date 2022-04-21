@@ -27,6 +27,7 @@ impl Logger {
             current_log_file: Logger::recreate_log_file(),
         }
     }
+    /// Prints text on the screen and writes it to log file.
     pub fn print_and_log(&self, category: LogCategory, text: &str) {
         let mut message = String::new();
 
@@ -51,6 +52,7 @@ impl Logger {
             println!("[{}]: {}", datetime.naive_local(), message);
         }
     }
+    /// Opens log file for writing.
     fn open_log_file(&self) -> std::fs::File {
         let log_file = OpenOptions::new()
             .write(true)
@@ -62,6 +64,8 @@ impl Logger {
 
         log_file.unwrap()
     }
+    /// Removes log file (if exists) and creates a new one.
+    /// Returns path to the new log file.
     fn recreate_log_file() -> String {
         let mut log_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
 
@@ -124,6 +128,7 @@ impl Logger {
 
         log_path
     }
+    /// Removes the oldest log file if there are `MAX_LOG_FILE_COUNT` log files or more.
     fn remove_oldest_log_if_needed(log_path: &str) {
         let paths = std::fs::read_dir(log_path);
         if let Err(ref e) = paths {

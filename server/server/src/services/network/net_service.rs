@@ -43,6 +43,7 @@ impl NetService {
             ban_manager: Arc::new(Mutex::new(BanManager::new(logger, config))),
         })
     }
+    /// Starts waiting for client and reporter requests.
     pub fn start(&mut self) {
         {
             self.logger
@@ -127,6 +128,7 @@ impl NetService {
             ),
         );
     }
+    /// Waits for reporter connections.
     fn process_reporter_connections(
         listener_socket: TcpListener,
         logger: Arc<Mutex<Logger>>,
@@ -202,6 +204,7 @@ impl NetService {
             }
         }
     }
+    /// Waits for client connections.
     fn process_client_connections(
         listener_socket: TcpListener,
         logger: Arc<Mutex<Logger>>,

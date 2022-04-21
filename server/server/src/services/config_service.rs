@@ -87,6 +87,7 @@ impl ServerConfig {
             log_file_path: ServerConfig::get_log_file_path(),
         }
     }
+    /// Saves the current configuration to a file.
     fn save_config(&self) -> Result<(), AppError> {
         let mut config = Ini::new();
 
@@ -217,6 +218,7 @@ impl ServerConfig {
             }
         }
     }
+    /// Returns path used to store configuration.
     fn get_config_file_path() -> String {
         let mut config_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
 
@@ -236,6 +238,7 @@ impl ServerConfig {
 
         config_path + CONFIG_FILE_NAME
     }
+    /// Returns path used to store log file.
     fn get_log_file_path() -> String {
         let mut log_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
 
@@ -255,6 +258,7 @@ impl ServerConfig {
 
         log_path + LOG_FILE_NAME
     }
+    /// Generates random port value.
     fn generate_random_port(exclude_port: u16) -> u16 {
         let mut rng = rand::thread_rng();
 

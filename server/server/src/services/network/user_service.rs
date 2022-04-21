@@ -59,6 +59,7 @@ pub struct UserService {
 }
 
 impl UserService {
+    /// Creates a new client service to process client requests.
     pub fn new_client(
         logger: Arc<Mutex<Logger>>,
         socket: TcpStream,
@@ -94,6 +95,7 @@ impl UserService {
             time_of_last_received_packet: Local::now(),
         }
     }
+    /// Creates a new reporter service to process reporter requests.
     pub fn new_reporter(
         logger: Arc<Mutex<Logger>>,
         socket: TcpStream,
@@ -128,6 +130,8 @@ impl UserService {
             time_of_last_received_packet: Local::now(),
         }
     }
+    /// Processes reporter requests.
+    ///
     /// After this function is finished the object should be destroyed.
     pub fn process_reporter(&mut self) {
         let secret_key = UserService::establish_secure_connection(&mut self.socket);
@@ -166,6 +170,8 @@ impl UserService {
             return;
         }
     }
+    /// Processes client requests.
+    ///
     /// After this function is finished the object should be destroyed.
     ///
     /// # Warning
@@ -708,6 +714,9 @@ impl UserService {
 
         Ok(None)
     }
+    /// Handles client's "query reports" request.
+    ///
+    /// Will query reports and send them to the client.
     fn handle_client_reports_request(&mut self, page: u64, amount: u64) -> Result<(), AppError> {
         // Get reports from database.
         let guard = self.database.lock().unwrap();
@@ -741,6 +750,10 @@ impl UserService {
 
         Ok(())
     }
+    /// Handles client's "delete report" request.
+    ///
+    /// Looks if the client has admin privileges and removes a report
+    /// with the specified ID.
     fn handle_client_delete_report_request(&mut self, report_id: u64) -> Result<(), AppError> {
         // Check if this user has admin privileges.
         {
@@ -810,6 +823,10 @@ impl UserService {
 
         Ok(())
     }
+    /// Handles client's "query report" request.
+    ///
+    /// Queries the specified report from the database and returns
+    /// it to the client.
     fn handle_client_report_request(&mut self, report_id: u64) -> Result<(), AppError> {
         {
             // Log this event.
@@ -1020,6 +1037,9 @@ impl UserService {
 
         Ok(())
     }
+    /// Generates a secret key that will be used to encrypt network packets.
+    ///
+    /// Returns `Ok(Vec<u8>)` with the secret key if no errors occurred.
     fn establish_secure_connection(socket: &mut TcpStream) -> Result<Vec<u8>, AppError> {
         // taken from https://www.rfc-editor.org/rfc/rfc5114#section-2.1
         let p = BigUint::parse_bytes(
@@ -1211,6 +1231,10 @@ impl UserService {
 
         Ok(())
     }
+    /// Encrypts and sends a packet.
+    ///
+    /// Usually packet is `OutClientPacket` or `OutReporterPacket`,
+    /// see `net_packets.rs`.
     fn send_packet<T>(socket: &mut TcpStream, secret_key: &[u8], packet: T) -> Result<(), AppError>
     where
         T: Serialize,
@@ -1517,9 +1541,8 @@ impl UserService {
     /// Reads data from the specified socket.
     ///
     /// Arguments:
-    ///
-    /// * `socket`: socket to read the data from.
-    /// * `buf`: buffer to write read data.
+    /// - `socket`: socket to read the data from.
+    /// - `buf`: buffer to write read data.
     fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
         if buf.is_empty() {
             return IoResult::Err(AppError::new("passed 'buf' has 0 length", file!(), line!()));
@@ -1603,9 +1626,8 @@ impl UserService {
     /// Reads data from the specified socket.
     ///
     /// Arguments:
-    ///
-    /// * `socket`: socket to read the data from.
-    /// * `buf`: buffer to write read data.
+    /// - `socket`: socket to read the data from.
+    /// - `buf`: buffer to write read data.
     ///
     /// Returns `None` if timeout reached.
     fn read_from_socket_with_timeout(
@@ -1684,10 +1706,9 @@ impl UserService {
     /// Writes the specified buffer to the socket.
     ///
     /// Arguments:
-    ///
-    /// * `socket`: socket to write this data to.
-    /// * `buf`: buffer to write to the socket.
-    /// * `enable_wait_limit`: if `false` will wait for write operation to finish
+    /// - `socket`: socket to write this data to.
+    /// - `buf`: buffer to write to the socket.
+    /// - `enable_wait_limit`: if `false` will wait for write operation to finish
     /// infinitely, otherwise will wait for maximum `MAX_WAIT_TIME_IN_READ_WRITE_MS`
     /// for operation to finish and return error in case of a timeout.
     fn write_to_socket(
@@ -1777,6 +1798,7 @@ impl UserService {
 }
 
 impl Drop for UserService {
+    /// Logs information about connection being closed.
     fn drop(&mut self) {
         let mut _message = String::new();
 

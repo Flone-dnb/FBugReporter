@@ -795,7 +795,7 @@ impl UserService {
             return Err(app_error.add_entry(file!(), line!()));
         }
         let found = result.unwrap();
-        if found == false {
+        if !found {
             let mut username = String::new();
             if self.username.is_some() {
                 username = self.username.as_ref().unwrap().clone();
@@ -1078,18 +1078,14 @@ impl UserService {
         pg_send_buf.append(&mut g_buf);
 
         // Send p and g values.
-        loop {
-            match UserService::write_to_socket(socket, &mut pg_send_buf, true) {
-                IoResult::Fin => {
-                    return Err(AppError::new("unexpected FIN received", file!(), line!()));
-                }
-                IoResult::Err(err) => {
-                    return Err(err.add_entry(file!(), line!()));
-                }
-                IoResult::Ok(_) => {
-                    break;
-                }
+        match UserService::write_to_socket(socket, &mut pg_send_buf, true) {
+            IoResult::Fin => {
+                return Err(AppError::new("unexpected FIN received", file!(), line!()));
             }
+            IoResult::Err(err) => {
+                return Err(err.add_entry(file!(), line!()));
+            }
+            IoResult::Ok(_) => {}
         }
 
         // Generate secret key 'a'.
@@ -1114,34 +1110,26 @@ impl UserService {
         }
         let mut a_open_len_buf = a_open_len_buf.unwrap();
         a_open_len_buf.append(&mut a_open_buf);
-        loop {
-            match UserService::write_to_socket(socket, &mut a_open_len_buf, true) {
-                IoResult::Fin => {
-                    return Err(AppError::new("unexpected FIN received", file!(), line!()));
-                }
-                IoResult::Err(err) => {
-                    return Err(err.add_entry(file!(), line!()));
-                }
-                IoResult::Ok(_) => {
-                    break;
-                }
+        match UserService::write_to_socket(socket, &mut a_open_len_buf, true) {
+            IoResult::Fin => {
+                return Err(AppError::new("unexpected FIN received", file!(), line!()));
             }
+            IoResult::Err(err) => {
+                return Err(err.add_entry(file!(), line!()));
+            }
+            IoResult::Ok(_) => {}
         }
 
         // Receive open key 'B' size.
         let mut b_open_len_buf = vec![0u8; std::mem::size_of::<u64>()];
-        loop {
-            match UserService::read_from_socket(socket, &mut b_open_len_buf) {
-                IoResult::Fin => {
-                    return Err(AppError::new("unexpected FIN received", file!(), line!()));
-                }
-                IoResult::Err(err) => {
-                    return Err(err.add_entry(file!(), line!()));
-                }
-                IoResult::Ok(_) => {
-                    break;
-                }
+        match UserService::read_from_socket(socket, &mut b_open_len_buf) {
+            IoResult::Fin => {
+                return Err(AppError::new("unexpected FIN received", file!(), line!()));
             }
+            IoResult::Err(err) => {
+                return Err(err.add_entry(file!(), line!()));
+            }
+            IoResult::Ok(_) => {}
         }
 
         // Receive open key 'B'.
@@ -1152,18 +1140,14 @@ impl UserService {
         let b_open_len = b_open_len.unwrap();
         let mut b_open_buf = vec![0u8; b_open_len as usize];
 
-        loop {
-            match UserService::read_from_socket(socket, &mut b_open_buf) {
-                IoResult::Fin => {
-                    return Err(AppError::new("unexpected FIN received", file!(), line!()));
-                }
-                IoResult::Err(err) => {
-                    return Err(err.add_entry(file!(), line!()));
-                }
-                IoResult::Ok(_) => {
-                    break;
-                }
+        match UserService::read_from_socket(socket, &mut b_open_buf) {
+            IoResult::Fin => {
+                return Err(AppError::new("unexpected FIN received", file!(), line!()));
             }
+            IoResult::Err(err) => {
+                return Err(err.add_entry(file!(), line!()));
+            }
+            IoResult::Ok(_) => {}
         }
 
         let b_open_big = bincode::deserialize::<BigUint>(&b_open_buf);
@@ -1251,7 +1235,7 @@ impl UserService {
         let mut binary_packet = bincode::serialize(&packet).unwrap();
 
         // CMAC.
-        let mut mac = Cmac::<Aes256>::new_from_slice(&secret_key).unwrap();
+        let mut mac = Cmac::<Aes256>::new_from_slice(secret_key).unwrap();
         mac.update(&binary_packet);
         let result = mac.finalize();
         let mut tag_bytes = result.into_bytes().to_vec();
@@ -1301,16 +1285,12 @@ impl UserService {
         send_buffer.append(&mut encrypted_packet);
 
         // Send.
-        loop {
-            match UserService::write_to_socket(socket, &mut send_buffer, true) {
-                IoResult::Fin => {
-                    return Err(AppError::new("unexpected FIN received", file!(), line!()));
-                }
-                IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
-                IoResult::Ok(_) => {
-                    break;
-                }
+        match UserService::write_to_socket(socket, &mut send_buffer, true) {
+            IoResult::Fin => {
+                return Err(AppError::new("unexpected FIN received", file!(), line!()));
             }
+            IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
+            IoResult::Ok(_) => {}
         }
 
         Ok(())
@@ -1489,7 +1469,7 @@ impl UserService {
         encrypted_packet = encrypted_packet[IV_LENGTH..].to_vec();
 
         // Decrypt packet.
-        let cipher = Aes256Cbc::new_from_slices(&self.secret_key, &iv).unwrap();
+        let cipher = Aes256Cbc::new_from_slices(&self.secret_key, iv).unwrap();
         let decrypted_packet = cipher.decrypt_vec(&encrypted_packet);
         if let Err(e) = decrypted_packet {
             return Err(AppError::new(

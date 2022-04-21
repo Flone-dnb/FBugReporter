@@ -168,10 +168,10 @@ impl BanManager {
         banned_list_guard.retain(|ip| {
             let time_diff = Local::now() - ip.ban_start_time;
             if time_diff.num_minutes() < self.config.ban_time_duration_in_min {
-                return true;
+                true
             } else {
                 BanManager::remove_banned_ip_from_disk(ip, &self.logger);
-                return false;
+                false
             }
         });
 
@@ -215,14 +215,14 @@ impl BanManager {
                     &format!(
                         "Banned IP address ({}) attempted to connect. \
                             Connection was rejected.",
-                        ip.to_string()
+                        ip
                     ),
                 );
-                return true; // still banned
+                true // still banned
             } else {
                 // Remove from banned ips.
                 banned_list_guard.remove(banned_ip_index);
-                return false;
+                false
             }
         } else {
             // Check if user failed to login before.
@@ -240,7 +240,7 @@ impl BanManager {
                 }
             }
 
-            return false;
+            false
         }
     }
     /// Removes the specified IP from the failed ips list.
@@ -248,8 +248,8 @@ impl BanManager {
         let mut failed_ip_list_guard = self.failed_ip_list.lock().unwrap();
 
         let index_to_remove = failed_ip_list_guard.iter().position(|x| x.ip == ip);
-        if index_to_remove.is_some() {
-            failed_ip_list_guard.remove(index_to_remove.unwrap());
+        if let Some(index) = index_to_remove {
+            failed_ip_list_guard.remove(index);
         } // else: user made no failed login attempts before
     }
     /// Reads banned IPs from .ini file (if it exists)
@@ -285,11 +285,7 @@ impl BanManager {
             if let Err(e) = ip {
                 self.logger.lock().unwrap().print_and_log(
                     LogCategory::Warning,
-                    &format!(
-                        "failed to parse banned ip '{}', error: {}",
-                        key,
-                        e.to_string()
-                    ),
+                    &format!("failed to parse banned ip '{}', error: {}", key, e),
                 );
                 continue;
             }
@@ -303,7 +299,7 @@ impl BanManager {
                     &format!(
                         "failed to parse datetime '{}', error: {}",
                         value.as_ref().unwrap(),
-                        e.to_string()
+                        e
                     ),
                 );
                 continue;
@@ -318,7 +314,7 @@ impl BanManager {
             count_ip += 1;
         }
 
-        return count_ip;
+        count_ip
     }
     /// Saves the banned IP address to the disk.
     fn store_banned_ip(ip: &BannedIP, logger: &Arc<Mutex<Logger>>) {

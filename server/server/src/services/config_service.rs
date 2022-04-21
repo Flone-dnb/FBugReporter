@@ -63,7 +63,7 @@ impl ServerConfig {
         }
 
         // Read settings from .ini file.
-        if server_config.read_config(&config) == true {
+        if server_config.read_config(&config) {
             if let Err(e) = server_config.save_config() {
                 // Non-critical error.
                 print!(
@@ -208,7 +208,7 @@ impl ServerConfig {
                 println!(
                     "WARNING: could not parse \"{}\" value, using default value instead (error: {}).",
                     key,
-                    e.to_string()
+                    e
                 );
                 *param = default_value;
                 true

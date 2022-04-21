@@ -31,20 +31,17 @@ fn main() {
     }
 
     if !under_monitor {
-        println!("");
+        println!();
         println!("---------------------------------------");
         println!("WARNING: you should only run the server using the 'monitor' app");
         println!("WARNING: please, run the 'monitor' app to launch the server");
         println!("---------------------------------------");
-        println!("");
+        println!();
     }
 
     loop {
         if let Err(e) = io::stdout().flush() {
-            println!(
-                "could not flush stdout (error: {}), continuing...",
-                e.to_string()
-            );
+            println!("could not flush stdout (error: {}), continuing...", e);
             continue;
         }
 

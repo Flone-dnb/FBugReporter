@@ -105,11 +105,7 @@ impl Logger {
 
         let local = Local::now();
 
-        let filename = format!(
-            "{}_{}",
-            local.format("%Y-%m-%d_%H-%M-%S").to_string(),
-            LOG_FILE_NAME
-        );
+        let filename = format!("{}_{}", local.format("%Y-%m-%d_%H-%M-%S"), LOG_FILE_NAME);
 
         log_path += &filename;
 

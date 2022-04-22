@@ -2,6 +2,11 @@
 
 ![](screenshot.png?raw=true)
 
+# Supported Platforms
+
+- Windows
+- Linux
+
 # Information
 
 # Information: Server

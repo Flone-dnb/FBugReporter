@@ -178,7 +178,7 @@ impl ReportLayout {
                         .with_flex_child(delete_report_section, 1.0)
                         .with_child(
                             Button::from_label(
-                                Label::new("Save to file").with_text_size(TEXT_SIZE),
+                                Label::new("Save to File").with_text_size(TEXT_SIZE),
                             )
                             .on_click(ReportLayout::on_save_to_file_clicked),
                         ),

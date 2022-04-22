@@ -726,6 +726,7 @@ func replace_string_in_file(file_path string, replace_from string, replace_to st
 
 	readFile.Close()
 	writer.Flush()
+	write_file.Close()
 
 	err = os.Remove(file_path)
 	if err != nil {

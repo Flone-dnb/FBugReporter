@@ -38,7 +38,8 @@ func main() {
 
 	var ok = false
 	var project_dir string
-	var binary_dir string
+	var binary_dir_win string
+	var binary_dir_linux string
 	var lib_dir string
 	var script_dir string
 
@@ -79,14 +80,30 @@ func main() {
 		message = "Specify where we should put the reporter library (reporter.dll) " +
 			"(this should be located somewhere in your project directory, for example: " +
 			"*your project directory*/bin/win64/):"
+		binary_dir_win, ok = ask_directory(message).Get()
+		if !ok {
+			return
+		}
+
+		message = "Now specify the same thing but for Linux libraries (.so files):"
+		binary_dir_linux, ok = ask_directory(message).Get()
+		if !ok {
+			return
+		}
 	} else {
 		message = "Specify where we should put the reporter library (libreporter.so) " +
 			"(this should be located somewhere in your project directory, for example: " +
 			"*your project directory*/bin/x11_64/):"
-	}
-	binary_dir, ok = ask_directory(message).Get()
-	if !ok {
-		return
+		binary_dir_linux, ok = ask_directory(message).Get()
+		if !ok {
+			return
+		}
+
+		message = "Now specify the same thing but for Windows libraries (.dll files):"
+		binary_dir_win, ok = ask_directory(message).Get()
+		if !ok {
+			return
+		}
 	}
 
 	fmt.Println()
@@ -108,13 +125,9 @@ func main() {
 		return
 	}
 
-	var binary_file string
-	if runtime.GOOS == "windows" {
-		binary_file = filepath.Join(binary_dir, "reporter.dll")
-	} else {
-		binary_file = filepath.Join(binary_dir, "libreporter.so")
-	}
-	install_reporter(binary_file, project_dir, lib_dir, script_dir, session)
+	var binary_file_win = filepath.Join(binary_dir_win, "reporter.dll")
+	var binary_file_linux = filepath.Join(binary_dir_linux, "libreporter.so")
+	install_reporter(binary_file_win, binary_file_linux, project_dir, lib_dir, script_dir, session)
 }
 
 func is_rust_installed(session *sh.Session) bool {
@@ -219,7 +232,7 @@ func ask_user(question string) optional.Optional[bool] {
 	}
 }
 
-func install_reporter(binary_dst string, project_root_dir string, lib_dir string, script_dir string, session *sh.Session) {
+func install_reporter(binary_dst_win string, binary_dst_linux string, project_root_dir string, lib_dir string, script_dir string, session *sh.Session) {
 	var wd, err = os.Getwd()
 	if err != nil {
 		fmt.Println(err)
@@ -248,18 +261,20 @@ func install_reporter(binary_dst string, project_root_dir string, lib_dir string
 	if runtime.GOOS == "windows" {
 		binary_src = filepath.Join(session.Getwd(), "target", "release", "reporter.dll")
 		fmt.Println("Adding reporter.dll")
+		if copy(binary_src, binary_dst_win) {
+			return
+		}
 	} else {
 		binary_src = filepath.Join(session.Getwd(), "target", "release", "libreporter.so")
 		fmt.Println("Adding libreporter.so")
-	}
-
-	if copy(binary_src, binary_dst) {
-		return
+		if copy(binary_src, binary_dst_linux) {
+			return
+		}
 	}
 
 	var gdns_name = "reporter.gdns"
 
-	if write_lib_files(project_root_dir, lib_dir, binary_dst, gdns_name) {
+	if write_lib_files(project_root_dir, lib_dir, binary_dst_win, binary_dst_linux, gdns_name) {
 		return
 	}
 
@@ -331,112 +346,70 @@ func copy(src string, dst string) bool {
 }
 
 // Returns 'true' if an error occurred.
-func write_lib_files(project_root_dir string, lib_dir string, bin_file string, gdns_name string) bool {
+func write_lib_files(project_root_dir string, lib_dir string, bin_file_win string, bin_file_linux string, gdns_name string) bool {
 	var gdnlib_name = "reporter.gdnlib"
 
 	fmt.Println("Adding reporter.gdnlib")
 
-	var _, err = os.Stat(filepath.Join(lib_dir, gdnlib_name))
-	if err == nil {
-		// Already exists.
-		var yes, ok = ask_user(fmt.Sprint("The file ", filepath.Join(lib_dir, gdnlib_name),
-			" already exists, do you want to overwrite it? (y/n)")).Get()
-		if !ok {
-			return true
-		}
-
-		if yes {
-			var result = write_gdnlib(project_root_dir, lib_dir, bin_file, gdnlib_name)
-			if result {
-				return true
-			}
-		}
-	} else {
-		var result = write_gdnlib(project_root_dir, lib_dir, bin_file, gdnlib_name)
-		if result {
-			return true
-		}
+	// Just write, don't ask.
+	var result = write_gdnlib(project_root_dir, lib_dir, bin_file_win, bin_file_linux, gdnlib_name)
+	if result {
+		return true
 	}
 
 	fmt.Println("Adding reporter.gdns")
 
-	_, err = os.Stat(filepath.Join(lib_dir, gdns_name))
-	if err == nil {
-		// Already exists.
-		var yes, ok = ask_user(fmt.Sprint("The file ", filepath.Join(lib_dir, gdns_name),
-			" already exists, do you want to overwrite it? (y/n)")).Get()
-		if !ok {
-			return true
-		}
-
-		if yes {
-			var result = write_gdns(project_root_dir, lib_dir, bin_file, gdnlib_name, gdns_name)
-			if result {
-				return true
-			}
-		}
+	// Just write, don't ask.
+	if runtime.GOOS == "windows" {
+		return write_gdns(project_root_dir, lib_dir, bin_file_win, gdnlib_name, gdns_name)
 	} else {
-		var result = write_gdns(project_root_dir, lib_dir, bin_file, gdnlib_name, gdns_name)
-		if result {
-			return true
-		}
+		return write_gdns(project_root_dir, lib_dir, bin_file_linux, gdnlib_name, gdns_name)
 	}
-
-	return false
 }
 
-func write_gdnlib(project_root_dir string, lib_dir string, bin_file string, gdnlib_name string) bool {
+func write_gdnlib(project_root_dir string, lib_dir string, bin_file_win string, bin_file_linux string, gdnlib_name string) bool {
 	var cfg_file = filepath.Join(lib_dir, gdnlib_name)
 
 	var cfg *ini.File
 	var err error
-	cfg, err = ini.Load(cfg_file)
-	if err != nil {
-		// File does not exist.
-		cfg = ini.Empty()
+
+	_, err = os.Stat(cfg_file)
+	if err != os.ErrNotExist {
+		// Exists. Attempting to read will result in parsing error,
+		// because 'dependencies' section contains arrays.
+		return false
 	}
 
-	var bin_relative = strings.TrimPrefix(bin_file, project_root_dir)
-	if runtime.GOOS == "windows" {
-		bin_relative = strings.TrimPrefix(bin_relative, "\\")
-	} else {
-		bin_relative = strings.TrimPrefix(bin_relative, "/")
-	}
+	cfg = ini.Empty()
 
-	bin_relative = strings.ReplaceAll(bin_relative, "\\", "/")
+	var bin_relative_win = strings.TrimPrefix(bin_file_win, project_root_dir)
+	bin_relative_win = strings.TrimPrefix(bin_relative_win, "\\")
+	bin_relative_win = strings.TrimPrefix(bin_relative_win, "/")
+	bin_relative_win = strings.ReplaceAll(bin_relative_win, "\\", "/")
+
+	var bin_relative_linux = strings.TrimPrefix(bin_file_linux, project_root_dir)
+	bin_relative_linux = strings.TrimPrefix(bin_relative_linux, "\\")
+	bin_relative_linux = strings.TrimPrefix(bin_relative_linux, "/")
+	bin_relative_linux = strings.ReplaceAll(bin_relative_linux, "\\", "/")
 
 	// -----------------------------------
 
 	var section *ini.Section
-	var section_name = "general"
-	if !cfg.HasSection(section_name) {
-		section, err = cfg.NewSection(section_name)
-		if err != nil {
-			fmt.Println(err)
-			return true
-		}
-	} else {
-		section, err = cfg.GetSection(section_name)
-		if err != nil {
-			fmt.Println(err)
-			return true
-		}
+	section, err = cfg.NewSection("general")
+	if err != nil {
+		fmt.Println(err)
+		return true
 	}
 
-	if !section.HasKey("singleton") {
-		_, err = section.NewKey("singleton", "false")
-		if err != nil {
-			fmt.Println(err)
-			return true
-		}
+	_, err = section.NewKey("singleton", "false")
+	if err != nil {
+		fmt.Println(err)
+		return true
 	}
-
-	if !section.HasKey("load_once") {
-		_, err = section.NewKey("load_once", "true")
-		if err != nil {
-			fmt.Println(err)
-			return true
-		}
+	_, err = section.NewKey("load_once", "true")
+	if err != nil {
+		fmt.Println(err)
+		return true
 	}
 
 	if !section.HasKey("symbol_prefix") {
@@ -447,82 +420,48 @@ func write_gdnlib(project_root_dir string, lib_dir string, bin_file string, gdnl
 		}
 	}
 
-	if !section.HasKey("reloadable") {
-		_, err = section.NewKey("reloadable", "true")
-		if err != nil {
-			fmt.Println(err)
-			return true
-		}
+	_, err = section.NewKey("reloadable", "true")
+	if err != nil {
+		fmt.Println(err)
+		return true
 	}
 
 	// -----------------------------------
 
-	section_name = "entry"
-	if !cfg.HasSection(section_name) {
-		section, err = cfg.NewSection(section_name)
-		if err != nil {
-			fmt.Println(err)
-			return true
-		}
-	} else {
-		section, err = cfg.GetSection(section_name)
-		if err != nil {
-			fmt.Println(err)
-			return true
-		}
+	section, err = cfg.NewSection("entry")
+	if err != nil {
+		fmt.Println(err)
+		return true
 	}
 
-	if runtime.GOOS == "windows" {
-		if !section.HasKey("Windows.64") {
-			_, err = section.NewKey("Windows.64", "\"res://"+bin_relative+"\"")
-			if err != nil {
-				fmt.Println(err)
-				return true
-			}
-		}
-	} else {
-		if !section.HasKey("X11.64") {
-			_, err = section.NewKey("X11.64", "\"res://"+bin_relative+"\"")
-			if err != nil {
-				fmt.Println(err)
-				return true
-			}
-		}
+	_, err = section.NewKey("Windows.64", "\"res://"+bin_relative_win+"\"")
+	if err != nil {
+		fmt.Println(err)
+		return true
+	}
+	_, err = section.NewKey("X11.64", "\"res://"+bin_relative_linux+"\"")
+	if err != nil {
+		fmt.Println(err)
+		return true
 	}
 
 	// -----------------------------------
 
-	section_name = "dependencies"
-	if !cfg.HasSection(section_name) {
-		section, err = cfg.NewSection(section_name)
-		if err != nil {
-			fmt.Println(err)
-			return true
-		}
-	} else {
-		section, err = cfg.GetSection(section_name)
-		if err != nil {
-			fmt.Println(err)
-			return true
-		}
+	section, err = cfg.NewSection("dependencies")
+	if err != nil {
+		fmt.Println(err)
+		return true
 	}
 
-	if runtime.GOOS == "windows" {
-		if !section.HasKey("Windows.64") {
-			_, err = section.NewKey("Windows.64", "[  ]")
-			if err != nil {
-				fmt.Println(err)
-				return true
-			}
-		}
-	} else {
-		if !section.HasKey("X11.64") {
-			_, err = section.NewKey("X11.64", "[  ]")
-			if err != nil {
-				fmt.Println(err)
-				return true
-			}
-		}
+	_, err = section.NewKey("Windows.64", "[  ]")
+	if err != nil {
+		fmt.Println(err)
+		return true
+	}
+	_, err = section.NewKey("X11.64", "[  ]")
+	if err != nil {
+		fmt.Println(err)
+		return true
 	}
 
 	// -----------------------------------
@@ -537,6 +476,14 @@ func write_gdnlib(project_root_dir string, lib_dir string, bin_file string, gdnl
 }
 
 func write_gdns(project_root_dir string, lib_dir string, bin_file string, gdnlib_name string, gdns_name string) bool {
+	var cfg_file = filepath.Join(lib_dir, gdns_name)
+
+	var _, err = os.Stat(cfg_file)
+	if err != os.ErrNotExist {
+		// Exists.
+		return false
+	}
+
 	var cfg = ini.Empty()
 
 	var gdnlib_relative = strings.TrimPrefix(lib_dir, project_root_dir)
@@ -551,7 +498,8 @@ func write_gdns(project_root_dir string, lib_dir string, bin_file string, gdnlib
 
 	// -----------------------------------
 
-	var section, err = cfg.NewSection("gd_resource type=\"NativeScript\" load_steps=2 format=2")
+	var section *ini.Section
+	_, err = cfg.NewSection("gd_resource type=\"NativeScript\" load_steps=2 format=2")
 	if err != nil {
 		fmt.Println(err)
 		return true
@@ -591,7 +539,7 @@ func write_gdns(project_root_dir string, lib_dir string, bin_file string, gdnlib
 
 	// -----------------------------------
 
-	err = cfg.SaveTo(filepath.Join(lib_dir, gdns_name))
+	err = cfg.SaveTo(cfg_file)
 	if err != nil {
 		fmt.Println(err)
 		return true

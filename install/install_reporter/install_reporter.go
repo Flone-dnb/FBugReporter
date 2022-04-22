@@ -634,8 +634,8 @@ func write_script_files(project_root_dir string, lib_dir string, script_dir stri
 	_, err = os.Stat(gd_dst)
 	if err == nil {
 		// Already exists.
-		var yes, ok = ask_user(fmt.Sprint("The file", gd_dst,
-			"already exists, do you want to overwrite it? (y/n)")).Get()
+		var yes, ok = ask_user(fmt.Sprint("The file ", gd_dst,
+			" already exists, do you want to overwrite it? (y/n)")).Get()
 		if !ok {
 			return true
 		}
@@ -664,8 +664,8 @@ func write_script_files(project_root_dir string, lib_dir string, script_dir stri
 
 	_, err = os.Stat(tscn_dst)
 	if err == nil {
-		var yes, ok = ask_user(fmt.Sprint("The file", tscn_dst,
-			"already exists, do you want to overwrite it? (y/n)")).Get()
+		var yes, ok = ask_user(fmt.Sprint("The file ", tscn_dst,
+			" already exists, do you want to overwrite it? (y/n)")).Get()
 		if !ok {
 			return true
 		}

@@ -324,14 +324,14 @@ impl ReporterService {
         let packet = packet.unwrap();
         match packet {
             InPacket::ReportAnswer { result_code } => Ok(result_code),
-            _ => {
-                return Err(format!(
-                    "An error occurred at [{}, {}]: unexpected packet received ({:?})\n\n",
-                    file!(),
-                    line!(),
-                    packet
-                ));
-            }
+            // _ => {
+            //     return Err(format!(
+            //         "An error occurred at [{}, {}]: unexpected packet received ({:?})\n\n",
+            //         file!(),
+            //         line!(),
+            //         packet
+            //     ));
+            // }
         }
     }
     fn establish_secure_connection(&mut self) -> Result<Vec<u8>, String> {

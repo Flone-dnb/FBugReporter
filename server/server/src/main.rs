@@ -72,7 +72,7 @@ fn main() {
             println!("config - show the current server configuration");
             println!("exit - exit the application");
         } else if input == "start" {
-            net_service.start();
+            net_service.start(under_monitor);
         } else if input == "config" {
             println!("{:#?}", net_service.server_config);
         } else if input == "exit" {

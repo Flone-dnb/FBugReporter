@@ -44,7 +44,7 @@ impl NetService {
         })
     }
     /// Starts waiting for client and reporter requests.
-    pub fn start(&mut self) {
+    pub fn start(&mut self, blocking: bool) {
         {
             self.logger
                 .lock()
@@ -84,6 +84,22 @@ impl NetService {
         }
         let listener_socker_clients = listener_socker_clients.unwrap();
 
+        let logger_guard = self.logger.lock().unwrap();
+        logger_guard.print_and_log(
+            LogCategory::Info,
+            &format!(
+                "Ready to accept client connections on port {}",
+                self.server_config.port_for_clients
+            ),
+        );
+        logger_guard.print_and_log(
+            LogCategory::Info,
+            &format!(
+                "Ready to accept reporter connections on port {}",
+                self.server_config.port_for_reporters
+            ),
+        );
+
         // Process reporters.
         let logger_copy = self.logger.clone();
         let connected_clone = self.connected_socket_count.clone();
@@ -102,7 +118,7 @@ impl NetService {
         let connected_clone = self.connected_socket_count.clone();
         let database_clone = self.database.clone();
         let ban_manager_clone = self.ban_manager.clone();
-        thread::spawn(move || {
+        if blocking {
             NetService::process_client_connections(
                 listener_socker_clients,
                 logger_copy,
@@ -110,23 +126,17 @@ impl NetService {
                 database_clone,
                 ban_manager_clone,
             );
-        });
-
-        let logger_guard = self.logger.lock().unwrap();
-        logger_guard.print_and_log(
-            LogCategory::Info,
-            &format!(
-                "Ready to accept client connections on port {}",
-                self.server_config.port_for_clients
-            ),
-        );
-        logger_guard.print_and_log(
-            LogCategory::Info,
-            &format!(
-                "Ready to accept reporter connections on port {}",
-                self.server_config.port_for_reporters
-            ),
-        );
+        } else {
+            thread::spawn(move || {
+                NetService::process_client_connections(
+                    listener_socker_clients,
+                    logger_copy,
+                    connected_clone,
+                    database_clone,
+                    ban_manager_clone,
+                );
+            });
+        }
     }
     /// Waits for reporter connections.
     fn process_reporter_connections(

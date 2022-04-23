@@ -155,7 +155,7 @@ func install_client(resulting_binary_path string, session *sh.Session) {
 
 	// Check that Cargo.toml exists here.
 	_, err = os.Stat(filepath.Join(session.Getwd(), "Cargo.toml"))
-	if err == os.ErrNotExist {
+	if os.IsNotExist(err) {
 		fmt.Println("Could not find client source code and 'Cargo.toml' file at", session.Getwd())
 		return
 	}

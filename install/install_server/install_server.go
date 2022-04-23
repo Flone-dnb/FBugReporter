@@ -12,6 +12,7 @@ import (
 
 	"4d63.com/optional"
 	"github.com/codeskyblue/go-sh"
+	"github.com/go-ini/ini"
 )
 
 func main() {
@@ -186,11 +187,38 @@ func install_server(install_dir string, session *sh.Session) {
 	fmt.Println()
 
 	if runtime.GOOS != "windows" {
-		// TODO: ask about systemd unit
-		fmt.Println("Now, in order to start the 'monitor' you need to 'chmod +x' it, " +
-			"BUT FIRST you need to change mode of the 'server' because the 'monitor' will attempt " +
-			"to run the 'server'. If the 'server' does not have 'execute' mode the 'monitor' " +
-			"will fail on startup.")
+		err = session.Command("chmod", "+x", filepath.Join(install_dir, "server")).Run()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		err = session.Command("chmod", "+x", filepath.Join(install_dir, "monitor")).Run()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		err = session.Command("chmod", "+x", filepath.Join(install_dir, "database_manager")).Run()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		var yes, ok = ask_user("Do you want to install systemd service to autostart the " +
+			"'monitor'? (y/n)").Get()
+		if !ok {
+			return
+		}
+
+		if yes {
+			if install_systemd_service(install_dir, session) {
+				return
+			}
+		}
+
+		fmt.Println()
+		fmt.Println("Finished installation.")
 	} else {
 		fmt.Println("Note that the 'monitor' is not added to autostart, it's up to you to do so.")
 	}
@@ -339,6 +367,64 @@ func copy(src string, dst string) bool {
 		fmt.Println(err)
 		return true
 	}
+
+	return false
+}
+
+// Returns 'true' if an error occurred.
+func install_systemd_service(install_dir string, session *sh.Session) bool {
+	var cfg = ini.Empty()
+
+	var section, err = cfg.NewSection("Unit")
+	if err != nil {
+		fmt.Println(err)
+		return true
+	}
+
+	section.NewKey("Description", "FBugReporter Server")
+
+	section, err = cfg.NewSection("Service")
+	if err != nil {
+		fmt.Println(err)
+		return true
+	}
+
+	section.NewKey("WorkingDirectory", install_dir)
+	section.NewKey("ExecStart", filepath.Join(install_dir, "monitor"))
+
+	section, err = cfg.NewSection("Install")
+	if err != nil {
+		fmt.Println(err)
+		return true
+	}
+
+	section.NewKey("WantedBy", "multi-user.target")
+
+	err = cfg.SaveTo(filepath.Join(install_dir, "fbugreporter.service"))
+	if err != nil {
+		fmt.Println(err)
+		return true
+	}
+
+	err = session.Command("sudo", "mv", filepath.Join(install_dir, "fbugreporter.service"), "/etc/systemd/system").Run()
+	if err != nil {
+		fmt.Println(err)
+		return true
+	}
+
+	err = session.Command("sudo", "systemctl", "enable", "fbugreporter.service").Run()
+	if err != nil {
+		fmt.Println(err)
+		return true
+	}
+
+	fmt.Println()
+	fmt.Println("The 'monitor' was added as a service. It will autostart on boot.")
+	fmt.Println("Use \"sudo systemctl start fbugreporter.service\" to start it right now.")
+	fmt.Println("Use \"sudo systemctl status fbugreporter.service\" to view current status/logs.")
+	fmt.Println()
+	fmt.Println("Use \"sudo systemctl disable fbugreporter.service\" to disable autostart.")
+	fmt.Println("And \"sudo rm /etc/systemd/system/fbugreporter.service\" to remove it.")
 
 	return false
 }

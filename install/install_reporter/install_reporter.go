@@ -85,7 +85,8 @@ func main() {
 			return
 		}
 
-		message = "Now specify the same thing but for Linux libraries (.so files):"
+		message = "Now specify the same thing but for Linux libraries (.so files), " +
+			"for example: *your project directory*/bin/x11_64/:"
 		binary_dir_linux, ok = ask_directory(message).Get()
 		if !ok {
 			return
@@ -99,7 +100,8 @@ func main() {
 			return
 		}
 
-		message = "Now specify the same thing but for Windows libraries (.dll files):"
+		message = "Now specify the same thing but for Windows libraries (.dll files), " +
+			"for example: *your project directory*/bin/win64/:"
 		binary_dir_win, ok = ask_directory(message).Get()
 		if !ok {
 			return
@@ -374,13 +376,14 @@ func write_gdnlib(project_root_dir string, lib_dir string, bin_file_win string, 
 	var err error
 
 	_, err = os.Stat(cfg_file)
-	if err != os.ErrNotExist {
+	if os.IsNotExist(err) {
+		cfg = ini.Empty()
+	} else {
+		fmt.Println(gdnlib_name, "already exists, skipping...")
 		// Exists. Attempting to read will result in parsing error,
 		// because 'dependencies' section contains arrays.
 		return false
 	}
-
-	cfg = ini.Empty()
 
 	var bin_relative_win = strings.TrimPrefix(bin_file_win, project_root_dir)
 	bin_relative_win = strings.TrimPrefix(bin_relative_win, "\\")
@@ -477,14 +480,15 @@ func write_gdnlib(project_root_dir string, lib_dir string, bin_file_win string, 
 
 func write_gdns(project_root_dir string, lib_dir string, bin_file string, gdnlib_name string, gdns_name string) bool {
 	var cfg_file = filepath.Join(lib_dir, gdns_name)
+	var cfg *ini.File
 
 	var _, err = os.Stat(cfg_file)
-	if err != os.ErrNotExist {
-		// Exists.
+	if os.IsNotExist(err) {
+		cfg = ini.Empty()
+	} else {
+		fmt.Println(gdns_name, "already exists, skipping...")
 		return false
 	}
-
-	var cfg = ini.Empty()
 
 	var gdnlib_relative = strings.TrimPrefix(lib_dir, project_root_dir)
 	if runtime.GOOS == "windows" {

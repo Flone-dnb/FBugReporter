@@ -32,8 +32,10 @@ In order to run these scripts you need to have [Go](https://go.dev/dl/) installe
 
 If you want to integrate FBugReporter into your Godot game, just clone/download this repository and run each script (the order does not matter), they will setup everything for you.
 
+# Update
+
 If you want to update FBugReporter you need to update everything (reporter, client, server). For this just clone/download this repository with updated code and run each script again,
-they wil ask you to overwrite the files. Make sure to specify the same parameters you specified when you were installing this for the first time.
+they will ask you to overwrite the files. Make sure to specify the same parameters you specified when you were installing this for the first time.
 
 # Information
 

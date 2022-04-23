@@ -88,7 +88,8 @@ See the example project in the `example` folder and `example/MainScene.gd` for h
 ## Build: Server
 **Requirements:**
 
-The server uses SQLite to store data. In order to build the server you need to have `sqlite3` installed.
+To build the server you will need [Rust](https://www.rust-lang.org/tools/install).
+The server uses SQLite to store data. In order to build the server you also need have `sqlite3` installed.
 
 For Windows users we have a built version of `sqlite3` in `server/sqlite3-windows`. In order to use it, create an environment variable with the name `SQLITE3_LIB_DIR` that points to this directory before building the `server` or `database_manager`.
 
@@ -111,3 +112,15 @@ cargo build --release
 The compiled executable be located at `/target/release/`.
 
 Note that Windows users also need to have `sqlite3.dll` library next to the compiled programs, put compiled `server.exe`, `database_manager.exe` and `monitor.exe` to the same directory and copy `sqlite3.dll` from `server/sqlite3-windows` in this folder.
+
+## Build: Client
+
+To build the client you will need [Rust](https://www.rust-lang.org/tools/install).
+
+Then in the `client` folder run:
+
+```
+cargo build --release
+```
+
+The compiled client binary will be located at `/client/target/release/`.

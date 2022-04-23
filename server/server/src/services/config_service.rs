@@ -3,8 +3,6 @@ use std::{ops::Range, str::FromStr};
 
 // External.
 use configparser::ini::Ini;
-#[cfg(target_os = "windows")]
-use platform_dirs::UserDirs;
 use rand::Rng;
 
 // Custom.

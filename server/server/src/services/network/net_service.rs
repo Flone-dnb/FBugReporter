@@ -84,27 +84,29 @@ impl NetService {
         }
         let listener_socker_clients = listener_socker_clients.unwrap();
 
-        let logger_guard = self.logger.lock().unwrap();
-        logger_guard.print_and_log(
-            LogCategory::Info,
-            &format!(
-                "Ready to accept client connections on port {}",
-                self.server_config.port_for_clients
-            ),
-        );
-        logger_guard.print_and_log(
-            LogCategory::Info,
-            &format!(
-                "Ready to accept reporter connections on port {}",
-                self.server_config.port_for_reporters
-            ),
-        );
+        {
+            let logger_guard = self.logger.lock().unwrap();
+            logger_guard.print_and_log(
+                LogCategory::Info,
+                &format!(
+                    "Ready to accept client connections on port {}",
+                    self.server_config.port_for_clients
+                ),
+            );
+            logger_guard.print_and_log(
+                LogCategory::Info,
+                &format!(
+                    "Ready to accept reporter connections on port {}",
+                    self.server_config.port_for_reporters
+                ),
+            );
+        }
 
         // Process reporters.
         let logger_copy = self.logger.clone();
         let connected_clone = self.connected_socket_count.clone();
         let database_clone = self.database.clone();
-        thread::spawn(move || {
+        let reporter_handle = thread::spawn(move || {
             NetService::process_reporter_connections(
                 listener_socker_reporters,
                 logger_copy,
@@ -118,7 +120,7 @@ impl NetService {
         let connected_clone = self.connected_socket_count.clone();
         let database_clone = self.database.clone();
         let ban_manager_clone = self.ban_manager.clone();
-        if blocking {
+        let client_handle = thread::spawn(move || {
             NetService::process_client_connections(
                 listener_socker_clients,
                 logger_copy,
@@ -126,16 +128,11 @@ impl NetService {
                 database_clone,
                 ban_manager_clone,
             );
-        } else {
-            thread::spawn(move || {
-                NetService::process_client_connections(
-                    listener_socker_clients,
-                    logger_copy,
-                    connected_clone,
-                    database_clone,
-                    ban_manager_clone,
-                );
-            });
+        });
+
+        if blocking {
+            reporter_handle.join().unwrap();
+            client_handle.join().unwrap();
         }
     }
     /// Waits for reporter connections.

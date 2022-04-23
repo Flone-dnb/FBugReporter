@@ -1,0 +1,6 @@
+4d63.com/optional v0.2.0 h1:VtMa/Iy8Xn5JuIqJYwDScgBSBsZsKCwP7s35NiUB+8A=
+4d63.com/optional v0.2.0/go.mod h1:DBA8tAdkYkYbvRq1lK3FyDBBzioAJzZzQPC6Vj+a3jk=
+github.com/codegangsta/inject v0.0.0-20150114235600-33e0aa1cb7c0 h1:sDMmm+q/3+BukdIpxwO365v/Rbspp2Nt5XntgQRXq8Q=
+github.com/codegangsta/inject v0.0.0-20150114235600-33e0aa1cb7c0/go.mod h1:4Zcjuz89kmFXt9morQgcfYZAYZ5n8WHjt81YYWIwtTM=
+github.com/codeskyblue/go-sh v0.0.0-20200712050446-30169cf553fe h1:69JI97HlzP+PH5Mi1thcGlDoBr6PS2Oe+l3mNmAkbs4=
+github.com/codeskyblue/go-sh v0.0.0-20200712050446-30169cf553fe/go.mod h1:VQx0hjo2oUeQkQUET7wRwradO6f+fN5jzXgB/zROxxE=

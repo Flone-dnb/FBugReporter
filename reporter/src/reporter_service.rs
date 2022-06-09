@@ -5,15 +5,15 @@ use std::thread;
 use std::time::Duration;
 
 // External.
+use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use aes::Aes256;
-use block_modes::block_padding::Pkcs7;
-use block_modes::{BlockMode, Cbc};
-use cmac::{Cmac, Mac, NewMac};
+use cmac::{Cmac, Mac};
 use num_bigint::{BigUint, RandomBits};
 use rand::{Rng, RngCore};
 
-type Aes256Cbc = Cbc<Aes256, Pkcs7>;
-const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
+type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
+type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
+const SECRET_KEY_SIZE: usize = 32; // if changed, change protocol version
 
 // Custom.
 use crate::logger_service::Logger;
@@ -26,7 +26,7 @@ const IV_LENGTH: usize = 16; // if changed, change protocol version
 const CMAC_TAG_LENGTH: usize = 16; // if changed, change protocol version
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 
-pub const NETWORK_PROTOCOL_VERSION: u16 = 0;
+pub const NETWORK_PROTOCOL_VERSION: u16 = 1;
 
 enum IoResult {
     Ok(usize),
@@ -90,7 +90,18 @@ impl ReporterService {
         } else {
             logger.log("Secure connection established.");
         }
-        let secret_key = secret_key.unwrap();
+        let result = secret_key.unwrap().try_into();
+        if result.is_err() {
+            return (
+                ReportResult::InternalError,
+                Some(format!(
+                    "failed to convert Vec<u8> to generic array at [{}, {}]\n\n",
+                    file!(),
+                    line!()
+                )),
+            );
+        }
+        let secret_key: [u8; SECRET_KEY_SIZE] = result.unwrap();
 
         // Prepare packet.
         let packet = OutPacket::ReportPacket {
@@ -123,10 +134,10 @@ impl ReporterService {
 
         // Encrypt packet.
         let mut rng = rand::thread_rng();
-        let mut iv = vec![0u8; IV_LENGTH];
+        let mut iv = [0u8; IV_LENGTH];
         rng.fill_bytes(&mut iv);
-        let cipher = Aes256Cbc::new_from_slices(&secret_key, &iv).unwrap();
-        let mut encrypted_packet = cipher.encrypt_vec(&binary_packet);
+        let mut encrypted_packet = Aes256CbcEnc::new(&secret_key.into(), &iv.into())
+            .encrypt_padded_vec_mut::<Pkcs7>(&binary_packet);
 
         // Prepare encrypted packet len buffer.
         if encrypted_packet.len() + IV_LENGTH > std::u32::MAX as usize {
@@ -158,7 +169,7 @@ impl ReporterService {
         let mut send_buffer = encrypted_len_buf.unwrap();
 
         // Merge all to one buffer.
-        send_buffer.append(&mut iv);
+        send_buffer.append(&mut Vec::from(iv));
         send_buffer.append(&mut encrypted_packet);
 
         // Send to the server.
@@ -206,7 +217,10 @@ impl ReporterService {
 
         return (result_code, None);
     }
-    fn receive_answer(&mut self, secret_key: &[u8]) -> Result<ReportResult, String> {
+    fn receive_answer(
+        &mut self,
+        secret_key: &[u8; SECRET_KEY_SIZE],
+    ) -> Result<ReportResult, String> {
         if secret_key.is_empty() {
             return Err(format!(
                 "An error occurred at [{}, {}]: secure connected is not established - can't receive a packet.",
@@ -279,12 +293,23 @@ impl ReporterService {
                 encrypted_packet.len(),
             ));
         }
-        let iv = &encrypted_packet[..IV_LENGTH].to_vec();
+        let iv = encrypted_packet[..IV_LENGTH].to_vec();
         encrypted_packet = encrypted_packet[IV_LENGTH..].to_vec();
 
+        // Convert IV.
+        let iv = iv.try_into();
+        if iv.is_err() {
+            return Err(format!(
+                "An error occurred at [{}, {}]: failed to convert iv to generic array\n\n",
+                file!(),
+                line!(),
+            ));
+        }
+        let iv: [u8; IV_LENGTH] = iv.unwrap();
+
         // Decrypt packet.
-        let cipher = Aes256Cbc::new_from_slices(&secret_key, &iv).unwrap();
-        let decrypted_packet = cipher.decrypt_vec(&encrypted_packet);
+        let decrypted_packet = Aes256CbcDec::new(secret_key.into(), &iv.into())
+            .decrypt_padded_vec_mut::<Pkcs7>(&encrypted_packet);
         if let Err(e) = decrypted_packet {
             return Err(format!(
                 "An error occurred at [{}, {}]: {:?}\n\n",
@@ -296,12 +321,25 @@ impl ReporterService {
         let mut decrypted_packet = decrypted_packet.unwrap();
 
         // CMAC
-        let mut mac = Cmac::<Aes256>::new_from_slice(&secret_key).unwrap();
+        let mut mac = Cmac::<Aes256>::new_from_slice(secret_key).unwrap();
         let tag: Vec<u8> = decrypted_packet
             .drain(decrypted_packet.len().saturating_sub(CMAC_TAG_LENGTH)..)
             .collect();
         mac.update(&decrypted_packet);
-        if let Err(e) = mac.verify(&tag) {
+
+        // Convert tag.
+        let tag = tag.try_into();
+        if tag.is_err() {
+            return Err(format!(
+                "An error occurred at [{}, {}]: failed to convert cmac tag to generic array\n\n",
+                file!(),
+                line!(),
+            ));
+        }
+        let tag: [u8; CMAC_TAG_LENGTH] = tag.unwrap();
+
+        // Check that tag is correct.
+        if let Err(e) = mac.verify(&tag.into()) {
             return Err(format!(
                 "An error occurred at [{}, {}]: {:?}\n\n",
                 file!(),
@@ -324,14 +362,6 @@ impl ReporterService {
         let packet = packet.unwrap();
         match packet {
             InPacket::ReportAnswer { result_code } => Ok(result_code),
-            // _ => {
-            //     return Err(format!(
-            //         "An error occurred at [{}, {}]: unexpected packet received ({:?})\n\n",
-            //         file!(),
-            //         line!(),
-            //         packet
-            //     ));
-            // }
         }
     }
     fn establish_secure_connection(&mut self) -> Result<Vec<u8>, String> {
@@ -563,7 +593,7 @@ impl ReporterService {
         let secret_key = a_open_big.modpow(&b, &p);
         let mut secret_key_str = secret_key.to_str_radix(10);
 
-        if secret_key_str.len() < KEY_LENGTH_IN_BYTES {
+        if secret_key_str.len() < SECRET_KEY_SIZE {
             if secret_key_str.is_empty() {
                 return Err(format!(
                     "An error occurred at [{}, {}]: generated secret key is empty.\n\n",
@@ -575,13 +605,13 @@ impl ReporterService {
             loop {
                 secret_key_str += &secret_key_str.clone();
 
-                if secret_key_str.len() >= KEY_LENGTH_IN_BYTES {
+                if secret_key_str.len() >= SECRET_KEY_SIZE {
                     break;
                 }
             }
         }
 
-        Ok(Vec::from(&secret_key_str[0..KEY_LENGTH_IN_BYTES]))
+        Ok(Vec::from(&secret_key_str[0..SECRET_KEY_SIZE]))
     }
     fn read_from_socket(&mut self, buf: &mut [u8]) -> IoResult {
         if buf.is_empty() {

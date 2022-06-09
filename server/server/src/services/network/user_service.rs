@@ -6,16 +6,21 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 
 // External.
+use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use aes::Aes256;
-use block_modes::block_padding::Pkcs7;
-use block_modes::{BlockMode, Cbc};
 use chrono::{DateTime, Local};
-use cmac::{Cmac, Mac, NewMac};
+use cmac::{Cmac, Mac};
 use num_bigint::{BigUint, RandomBits};
 use rand::{Rng, RngCore};
 use serde::Serialize;
 use sha2::{Digest, Sha512};
 use totp_rs::{Algorithm, TOTP};
+
+type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
+type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
+const SECRET_KEY_SIZE: usize = 32; // if changed, change protocol version
+
+const TOTP_ALGORITHM: Algorithm = Algorithm::SHA1; // if changed, change protocol version
 
 // Custom.
 use super::ban_manager::*;
@@ -26,13 +31,10 @@ use shared::db_manager::DatabaseManager;
 use shared::error::AppError;
 use shared::report::GameReport;
 
-type Aes256Cbc = Cbc<Aes256, Pkcs7>;
-const KEY_LENGTH_IN_BYTES: usize = 32; // if changed, change protocol version
-
 const A_B_BITS: u64 = 2048; // if changed, change protocol version
 const IV_LENGTH: usize = 16; // if changed, change protocol version
 const CMAC_TAG_LENGTH: usize = 16; // if changed, change protocol version
-const NETWORK_PROTOCOL_VERSION: u16 = 0;
+const NETWORK_PROTOCOL_VERSION: u16 = 1;
 const MAX_PACKET_SIZE_IN_BYTES: u32 = 131_072; // 128 kB for now
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 25;
 const MAX_WAIT_TIME_IN_READ_WRITE_MS: u64 = 5000;
@@ -49,7 +51,7 @@ pub struct UserService {
     logger: Arc<Mutex<Logger>>,
     socket: TcpStream,
     socket_addr: Option<SocketAddr>,
-    secret_key: Vec<u8>,
+    secret_key: [u8; SECRET_KEY_SIZE],
     connected_users_count: Arc<Mutex<usize>>,
     exit_error: Option<Result<String, AppError>>,
     database: Arc<Mutex<DatabaseManager>>,
@@ -87,7 +89,7 @@ impl UserService {
             socket,
             connected_users_count,
             exit_error: None,
-            secret_key: Vec::new(),
+            secret_key: [0; SECRET_KEY_SIZE],
             database,
             ban_manager,
             username: None,
@@ -122,7 +124,7 @@ impl UserService {
             socket,
             connected_users_count,
             exit_error: None,
-            secret_key: Vec::new(),
+            secret_key: [0; SECRET_KEY_SIZE],
             database,
             ban_manager: None,
             socket_addr: None,
@@ -139,7 +141,16 @@ impl UserService {
             self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
             return;
         }
-        self.secret_key = secret_key.unwrap();
+        let result = secret_key.unwrap().try_into();
+        if result.is_err() {
+            self.exit_error = Some(Err(AppError::new(
+                "failed to convert Vec<u8> to generic array",
+                file!(),
+                line!(),
+            )));
+            return;
+        }
+        self.secret_key = result.unwrap();
 
         let mut is_fin = false; // don't check, react to FIN as error
         let packet = self.receive_packet(&mut is_fin, None);
@@ -183,7 +194,16 @@ impl UserService {
             self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
             return;
         }
-        self.secret_key = secret_key.unwrap();
+        let result = secret_key.unwrap().try_into();
+        if result.is_err() {
+            self.exit_error = Some(Err(AppError::new(
+                "failed to convert Vec<u8> to generic array",
+                file!(),
+                line!(),
+            )));
+            return;
+        }
+        self.secret_key = result.unwrap();
 
         let mut is_fin = false; // don't check, react to FIN as error
         let packet = self.receive_packet(&mut is_fin, None);
@@ -577,8 +597,21 @@ impl UserService {
 
             if _need_setup_otp && otp.is_empty() {
                 // Generate QR code.
-                let totp = TOTP::new(Algorithm::SHA1, 6, 1, 30, otp_secret);
-                let qr_code = totp.get_qr("FBugReporter", &username);
+                let totp = TOTP::new(
+                    TOTP_ALGORITHM,
+                    6,
+                    1,
+                    30,
+                    otp_secret,
+                    Some(String::from("FBugReporter")),
+                    username.clone(),
+                );
+                if let Err(e) = totp {
+                    return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
+                }
+                let totp = totp.unwrap();
+
+                let qr_code = totp.get_qr();
                 if let Err(e) = qr_code {
                     return Err(AppError::new(&e.to_string(), file!(), line!()));
                 }
@@ -626,7 +659,12 @@ impl UserService {
                 }
 
                 // Generate current OTP.
-                let totp = TOTP::new(Algorithm::SHA1, 6, 1, 30, otp_secret);
+                let totp = TOTP::new(TOTP_ALGORITHM, 6, 1, 30, otp_secret, None, String::new());
+                if let Err(e) = totp {
+                    return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
+                }
+                let totp = totp.unwrap();
+
                 let time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
                 if let Err(e) = time {
                     return Err(AppError::new(&e.to_string(), file!(), line!()));
@@ -1160,7 +1198,7 @@ impl UserService {
         let secret_key = b_open_big.modpow(&a, &p);
         let mut secret_key_str = secret_key.to_str_radix(10);
 
-        if secret_key_str.len() < KEY_LENGTH_IN_BYTES {
+        if secret_key_str.len() < SECRET_KEY_SIZE {
             if secret_key_str.is_empty() {
                 return Err(AppError::new(
                     "generated secret key is empty",
@@ -1172,13 +1210,13 @@ impl UserService {
             loop {
                 secret_key_str += &secret_key_str.clone();
 
-                if secret_key_str.len() >= KEY_LENGTH_IN_BYTES {
+                if secret_key_str.len() >= SECRET_KEY_SIZE {
                     break;
                 }
             }
         }
 
-        Ok(Vec::from(&secret_key_str[0..KEY_LENGTH_IN_BYTES]))
+        Ok(Vec::from(&secret_key_str[0..SECRET_KEY_SIZE]))
     }
     /// Returns [`Ok`] if the fields have the correct length (amount of characters, not byte count),
     /// otherwise returns the field type and its received length (not the limit, actual length).
@@ -1219,7 +1257,11 @@ impl UserService {
     ///
     /// Usually packet is `OutClientPacket` or `OutReporterPacket`,
     /// see `net_packets.rs`.
-    fn send_packet<T>(socket: &mut TcpStream, secret_key: &[u8], packet: T) -> Result<(), AppError>
+    fn send_packet<T>(
+        socket: &mut TcpStream,
+        secret_key: &[u8; SECRET_KEY_SIZE],
+        packet: T,
+    ) -> Result<(), AppError>
     where
         T: Serialize,
     {
@@ -1255,10 +1297,10 @@ impl UserService {
 
         // Encrypt packet.
         let mut rng = rand::thread_rng();
-        let mut iv = vec![0u8; IV_LENGTH];
+        let mut iv = [0u8; IV_LENGTH];
         rng.fill_bytes(&mut iv);
-        let cipher = Aes256Cbc::new_from_slices(&secret_key, &iv).unwrap();
-        let mut encrypted_packet = cipher.encrypt_vec(&binary_packet);
+        let mut encrypted_packet = Aes256CbcEnc::new(secret_key.into(), &iv.into())
+            .encrypt_padded_vec_mut::<Pkcs7>(&binary_packet);
 
         // Prepare encrypted packet len buffer.
         if encrypted_packet.len() + IV_LENGTH > std::u32::MAX as usize {
@@ -1281,7 +1323,7 @@ impl UserService {
         let mut send_buffer = encrypted_len_buf.unwrap();
 
         // Merge all to one buffer.
-        send_buffer.append(&mut iv);
+        send_buffer.append(&mut Vec::from(iv));
         send_buffer.append(&mut encrypted_packet);
 
         // Send.
@@ -1465,12 +1507,23 @@ impl UserService {
                 line!(),
             ));
         }
-        let iv = &encrypted_packet[..IV_LENGTH].to_vec();
+        let iv = encrypted_packet[..IV_LENGTH].to_vec();
         encrypted_packet = encrypted_packet[IV_LENGTH..].to_vec();
 
+        // Convert IV.
+        let iv = iv.try_into();
+        if iv.is_err() {
+            return Err(AppError::new(
+                "failed to convert iv to generic array",
+                file!(),
+                line!(),
+            ));
+        }
+        let iv: [u8; IV_LENGTH] = iv.unwrap();
+
         // Decrypt packet.
-        let cipher = Aes256Cbc::new_from_slices(&self.secret_key, iv).unwrap();
-        let decrypted_packet = cipher.decrypt_vec(&encrypted_packet);
+        let decrypted_packet = Aes256CbcDec::new(&self.secret_key.into(), &iv.into())
+            .decrypt_padded_vec_mut::<Pkcs7>(&encrypted_packet);
         if let Err(e) = decrypted_packet {
             return Err(AppError::new(
                 &format!(
@@ -1497,7 +1550,20 @@ impl UserService {
             .drain(decrypted_packet.len().saturating_sub(CMAC_TAG_LENGTH)..)
             .collect();
         mac.update(&decrypted_packet);
-        if let Err(e) = mac.verify(&tag) {
+
+        // Convert tag.
+        let tag = tag.try_into();
+        if tag.is_err() {
+            return Err(AppError::new(
+                "failed to convert cmac tag to generic array",
+                file!(),
+                line!(),
+            ));
+        }
+        let tag: [u8; CMAC_TAG_LENGTH] = tag.unwrap();
+
+        // Check that tag is correct.
+        if let Err(e) = mac.verify(&tag.into()) {
             return Err(AppError::new(
                 &format!(
                     "{:?} (socket: {})",

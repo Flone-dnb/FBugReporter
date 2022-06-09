@@ -22,7 +22,7 @@ struct Reporter {
     last_error: String,
 }
 
-#[gdnative::methods]
+#[methods]
 impl Reporter {
     fn new(_owner: &Node) -> Self {
         Reporter {
@@ -188,6 +188,7 @@ pub fn init_panic_hook() {
             error_message = format!("[RUST] {}: unknown panic occurred", loc_string);
         }
         godot_error!("{}", error_message);
+
         // Uncomment the following line if backtrace crate is included as a dependency
         godot_error!("Backtrace:\n{:?}", Backtrace::new());
         (*(old_hook.as_ref()))(panic_info);

@@ -6,6 +6,7 @@ use druid::{
     widget::{FillStrat, Image},
 };
 use druid::{Lens, LensExt, TextAlignment, WidgetExt};
+use image::DynamicImage::ImageRgba8;
 
 // Custom.
 use crate::services::net_service::ConnectResult;
@@ -38,22 +39,29 @@ impl OtpLayout {
     pub fn build_ui(&self) -> impl Widget<ApplicationState> {
         let mut qr_code_item = Flex::column();
         if self.qr_code.is_some() {
-            let image = photon_rs::base64_to_image(self.qr_code.as_ref().unwrap());
-            let pixels = image.get_raw_pixels();
+            // Decode base64.
+            let decoded = base64::decode(self.qr_code.as_ref().unwrap()).unwrap();
+
+            // Convert to image pixels.
+            let mut img = image::load_from_memory(decoded.as_slice()).unwrap();
+            img = ImageRgba8(img.to_rgba8());
+
+            let image_width = img.width() as usize;
+            let image_height = img.height() as usize;
+            let raw_pixels = img.into_bytes();
+
+            // Construct pixel buffer to display.
             let image_data = ImageBuf::from_raw(
-                pixels,
+                raw_pixels,
                 ImageFormat::RgbaSeparate,
-                image.get_width() as usize,
-                image.get_width() as usize,
+                image_width,
+                image_height,
             );
 
             let image_widget = Image::new(image_data)
                 .fill_mode(FillStrat::Fill)
                 .interpolation_mode(InterpolationMode::Bilinear)
-                .fix_size(
-                    (image.get_width() / 4) as f64,
-                    (image.get_width() / 4) as f64,
-                );
+                .fix_size((image_width / 4) as f64, (image_height / 4) as f64);
 
             qr_code_item = qr_code_item
                 .with_flex_child(

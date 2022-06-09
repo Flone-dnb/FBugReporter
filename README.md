@@ -2,6 +2,8 @@
 
 ![](screenshot.png?raw=true)
 
+**Project Status**: active (new features as well as bug fixes are on the way).
+
 # Supported Platforms
 
 - Windows

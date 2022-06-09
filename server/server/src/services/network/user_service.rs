@@ -84,6 +84,8 @@ impl UserService {
             );
         }
 
+        let socket_addr = socket.peer_addr().unwrap();
+
         UserService {
             logger,
             socket,
@@ -93,7 +95,7 @@ impl UserService {
             database,
             ban_manager,
             username: None,
-            socket_addr: None,
+            socket_addr: Some(socket_addr),
             time_of_last_received_packet: Local::now(),
         }
     }
@@ -119,6 +121,8 @@ impl UserService {
             );
         }
 
+        let socket_addr = socket.peer_addr().unwrap();
+
         UserService {
             logger,
             socket,
@@ -127,7 +131,7 @@ impl UserService {
             secret_key: [0; SECRET_KEY_SIZE],
             database,
             ban_manager: None,
-            socket_addr: None,
+            socket_addr: Some(socket_addr),
             username: None,
             time_of_last_received_packet: Local::now(),
         }
@@ -167,8 +171,6 @@ impl UserService {
             return;
         }
         let packet = packet.unwrap();
-
-        self.socket_addr = Some(self.socket.peer_addr().unwrap());
 
         let result = self.handle_reporter_packet(packet);
         if let Err(app_error) = result {
@@ -232,9 +234,6 @@ impl UserService {
             self.exit_error = Some(Ok(result.unwrap()));
             return;
         }
-
-        // Save address.
-        self.socket_addr = Some(self.socket.peer_addr().unwrap());
 
         // Connected.
         let result = self.wait_for_client_requests();

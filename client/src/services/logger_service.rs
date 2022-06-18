@@ -4,15 +4,15 @@ use std::io::prelude::*;
 use std::path::Path;
 
 // External.
+use chrono::Local;
 #[cfg(target_os = "windows")]
 use platform_dirs::UserDirs;
-use time::OffsetDateTime;
 
 const LOG_FILE_NAME: &str = "client.log";
 #[cfg(target_os = "windows")]
 const LOG_FILE_DIR: &str = "FBugReporter";
 
-pub struct LoggerService {
+pub struct LoggerService {  
     log_file_path: String,
 }
 
@@ -76,41 +76,11 @@ impl LoggerService {
     pub fn log(&self, text: &str) {
         let mut log_file = self.open_log_file();
 
-        let mut datetime = String::from("error");
+        let datetime = Local::now();
 
-        // Try to get date and time.
-        let format =
-            time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second]");
-
-        if let Err(ref e) = format {
-            let error = format!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
-            println!("{}", error);
-            let _result = writeln!(log_file, "{}", error);
-        } else {
-            let format = format.unwrap();
-
-            let localdatetime = OffsetDateTime::now_local();
-            if let Err(ref e) = localdatetime {
-                let error = format!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
-                println!("{}", error);
-                let _result = writeln!(log_file, "{}", error);
-            } else {
-                let localdatetime = localdatetime.unwrap();
-                let result = localdatetime.format(&format);
-                if let Err(ref e) = result {
-                    let error = format!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
-                    println!("{}", error);
-                    let _result = writeln!(log_file, "{}", error);
-                } else {
-                    datetime = result.unwrap();
-                }
-            }
-        }
-
-        if let Err(e) = writeln!(log_file, "[{}]: {}", datetime, text) {
+        if let Err(e) = writeln!(log_file, "[{}]: {}", datetime.naive_local(), text) {
             panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
         }
-        println!("[{}]: {}", datetime, text);
     }
     fn open_log_file(&self) -> std::fs::File {
         let log_file = OpenOptions::new()

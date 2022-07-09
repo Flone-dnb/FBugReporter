@@ -12,13 +12,14 @@ pub const DATABASE_NAME: &str = "database.db3";
 
 const REPORT_TABLE_NAME: &str = "report";
 const USER_TABLE_NAME: &str = "user";
+const ATTACHMENT_TABLE_NAME: &str = "attachment";
 const VERSION_TABLE_NAME: &str = "version";
 
 const REPORT_TABLE_HASH: &[u8] = &[
-    61, 115, 240, 65, 82, 203, 101, 187, 246, 7, 57, 65, 37, 33, 146, 7, 116, 211, 101, 99, 145,
-    128, 108, 127, 232, 41, 47, 6, 53, 22, 244, 58, 186, 221, 227, 37, 199, 217, 134, 49, 226, 79,
-    164, 250, 215, 136, 114, 72, 71, 180, 83, 50, 211, 251, 214, 2, 127, 131, 105, 113, 23, 43, 25,
-    226,
+    158, 21, 8, 202, 214, 61, 94, 63, 56, 50, 126, 200, 244, 198, 125, 37, 0, 153, 116, 141, 15,
+    11, 48, 160, 50, 110, 165, 128, 140, 85, 196, 95, 193, 74, 107, 154, 149, 99, 110, 89, 146,
+    124, 113, 35, 202, 214, 246, 205, 201, 243, 112, 11, 110, 0, 72, 42, 46, 178, 157, 141, 234,
+    148, 214, 28,
 ];
 const USER_TABLE_HASH: &[u8] = &[
     179, 199, 233, 204, 132, 161, 204, 15, 152, 12, 233, 72, 42, 79, 252, 183, 189, 251, 215, 202,
@@ -26,8 +27,14 @@ const USER_TABLE_HASH: &[u8] = &[
     222, 23, 219, 226, 1, 250, 93, 145, 60, 222, 228, 75, 190, 7, 226, 183, 74, 167, 19, 26, 142,
     161, 64,
 ];
+const ATTACHMENT_TABLE_HASH: &[u8] = &[
+    117, 230, 157, 236, 161, 238, 147, 115, 41, 198, 133, 57, 88, 45, 210, 6, 74, 116, 142, 26,
+    238, 164, 216, 18, 172, 247, 248, 75, 152, 10, 87, 129, 62, 244, 26, 96, 105, 14, 12, 112, 209,
+    94, 55, 250, 77, 9, 133, 23, 35, 148, 175, 214, 85, 32, 113, 85, 189, 17, 231, 4, 84, 176, 63,
+    157,
+];
 
-const SUPPORTED_DATABASE_VERSION: u64 = 1;
+const SUPPORTED_DATABASE_VERSION: u64 = 2;
 
 const SALT_LENGTH: u64 = 32;
 const OTP_SECRET_LENGTH: u64 = 256;
@@ -93,6 +100,14 @@ impl DatabaseManager {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
+        // Check 'attachment' table.
+        if let Err(app_error) =
+            DatabaseManager::create_attachment_table_if_not_found(&mut connection)
+        {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        // Handle old database version.
         if let Err(app_error) = DatabaseManager::handle_old_database_version(&mut connection) {
             return Err(app_error.add_entry(file!(), line!()));
         }
@@ -474,7 +489,7 @@ impl DatabaseManager {
 
         Ok(true)
     }
-    /// Removes the report from database.
+    /// Removes a report from the database.
     ///
     /// Returns `Ok(true)` if the report was found and removed,
     /// `Ok(false)` if the report was not found.
@@ -489,9 +504,60 @@ impl DatabaseManager {
             return Ok(false);
         }
 
+        // Get report attachments string.
+        let mut stmt = self
+            .connection
+            .prepare(&format!(
+                "SELECT attachments FROM {}
+                WHERE id == {}",
+                REPORT_TABLE_NAME, report_id
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let mut rows = result.unwrap();
+        let row = rows.next();
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let row = row.unwrap();
+        if row.is_some() {
+            // Process attachments.
+            let row = row.unwrap();
+            let attachments: Result<String> = row.get(0);
+            if let Err(e) = attachments {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            let attachments = attachments.unwrap();
+            let attachment_ids: Vec<&str> = attachments.split_ascii_whitespace().collect();
+            for attachment_id in attachment_ids {
+                let attach_id = attachment_id.parse::<u64>();
+                if let Err(e) = attach_id {
+                    return Err(AppError::new(&e.to_string(), file!(), line!()));
+                }
+                let attach_id: u64 = attach_id.unwrap();
+
+                // Remove attachment.
+                if let Err(e) = self.connection.execute(
+                    &format!(
+                        "DELETE FROM {}
+                        WHERE id == {}",
+                        ATTACHMENT_TABLE_NAME, attach_id
+                    ),
+                    params![],
+                ) {
+                    return Err(AppError::new(&e.to_string(), file!(), line!()));
+                }
+            }
+        }
+
         // Remove report.
         if let Err(e) = self.connection.execute(
-            // password = hash(salt + hash(password))
             &format!(
                 "DELETE FROM {}
                 WHERE id == {}",
@@ -975,6 +1041,8 @@ impl DatabaseManager {
         let row = rows.next().unwrap();
 
         // Create this table.
+        // 'attachments' below is a string of IDs from 'attachment' table
+        // separated by spaces
         let table_structure = format!(
             "CREATE TABLE {}(
                     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -986,7 +1054,8 @@ impl DatabaseManager {
                     game_version    TEXT NOT NULL,
                     os_info         TEXT NOT NULL,
                     date_created_at TEXT NOT NULL,
-                    time_created_at TEXT NOT NULL     
+                    time_created_at TEXT NOT NULL,
+                    attachments     TEXT    
                 )",
             REPORT_TABLE_NAME
         );
@@ -997,7 +1066,7 @@ impl DatabaseManager {
         let table_hash = hasher.finalize().to_vec();
 
         if table_hash != REPORT_TABLE_HASH {
-            panic!("report table was changed and now is incompatible with old versions, \
+            panic!("\"report\" table was changed and now is incompatible with old versions, \
                         to fix this panic, follow these steps:\n\
                         1. increment 'SUPPORTED_DATABASE_VERSION' constant\n\
                         2. handle old database version in 'handle_old_database_version()' function\n\
@@ -1059,6 +1128,8 @@ impl DatabaseManager {
             return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
 
+        println!("INFO: database version is {}", SUPPORTED_DATABASE_VERSION);
+
         Ok(())
     }
     /// Creates the `user` table if it was not found in the database.
@@ -1079,6 +1150,9 @@ impl DatabaseManager {
         let row = rows.next().unwrap();
 
         // Create this table.
+        // password = hash(salt + hash(password))
+        // need_change_password is '1' if the user
+        // just registered, thus we need to ask him of a new password.
         let table_structure = format!(
             "CREATE TABLE {}(
                     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1104,7 +1178,7 @@ impl DatabaseManager {
         let table_hash = hasher.finalize().to_vec();
 
         if table_hash != USER_TABLE_HASH {
-            panic!("user table was changed and now is incompatible with old versions, \
+            panic!("\"user\" table was changed and now is incompatible with old versions, \
                         to fix this panic, follow these steps:\n\
                         1. increment 'SUPPORTED_DATABASE_VERSION' constant\n\
                         2. handle old database version in 'handle_old_database_version()' function\n\
@@ -1115,13 +1189,59 @@ impl DatabaseManager {
             return Ok(());
         }
 
-        let result = connection.execute(
-            // password = hash(salt + hash(password))
-            // need_change_password is '1' if the user
-            // just registered, thus we need to ask him of a new password.
-            &table_structure,
-            [],
+        let result = connection.execute(&table_structure, []);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        Ok(())
+    }
+    /// Creates the `attachment` table if it was not found in the database.
+    fn create_attachment_table_if_not_found(connection: &mut Connection) -> Result<(), AppError> {
+        // Check if table exists.
+        let mut stmt = connection
+            .prepare(&format!(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='{}'",
+                ATTACHMENT_TABLE_NAME
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+        let row = rows.next().unwrap();
+
+        // Create this table.
+        let table_structure = format!(
+            "CREATE TABLE {}(
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    data                 BLOB NOT NULL,
+                    file_extension       TEXT NOT NULL,
+                    size_in_bytes        INTEGER NUL NULL
+                )",
+            ATTACHMENT_TABLE_NAME
         );
+
+        // Calculate table structure hash.
+        let mut hasher = Sha512::new();
+        hasher.update(&table_structure);
+        let table_hash = hasher.finalize().to_vec();
+
+        if table_hash != ATTACHMENT_TABLE_HASH {
+            panic!("\"attachment\" table was changed and now is incompatible with old versions, \
+                        to fix this panic, follow these steps:\n\
+                        1. increment 'SUPPORTED_DATABASE_VERSION' constant\n\
+                        2. handle old database version in 'handle_old_database_version()' function\n\
+                        3. recalculate new table hash (sha512) and put it into 'ATTACHMENT_TABLE_HASH' constant.");
+        }
+
+        if row.is_some() {
+            return Ok(());
+        }
+
+        let result = connection.execute(&table_structure, []);
         if let Err(e) = result {
             return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
@@ -1164,6 +1284,11 @@ impl DatabaseManager {
             return Ok(());
         }
 
+        println!(
+            "INFO: current database version {} is old, updating to the latest database version {}...",
+            version, SUPPORTED_DATABASE_VERSION
+        );
+
         drop(row);
         drop(rows);
         drop(stmt);
@@ -1171,6 +1296,13 @@ impl DatabaseManager {
         if version == 0 {
             // Upgrade to version 1.
             if let Err(app_error) = DatabaseManager::upgrade_database_to_version_1(connection) {
+                return Err(app_error.add_entry(file!(), line!()));
+            }
+        }
+
+        if version == 1 {
+            // Upgrade to version 2.
+            if let Err(app_error) = DatabaseManager::upgrade_database_to_version_2(connection) {
                 return Err(app_error.add_entry(file!(), line!()));
             }
         }
@@ -1207,6 +1339,20 @@ impl DatabaseManager {
             &format!(
                 "ALTER TABLE {} ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0",
                 USER_TABLE_NAME
+            ),
+            params![],
+        ) {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        Ok(())
+    }
+    /// Upgrades the database from version `0` to version `2`.
+    fn upgrade_database_to_version_2(connection: &mut Connection) -> Result<(), AppError> {
+        if let Err(e) = connection.execute(
+            &format!(
+                "ALTER TABLE {} ADD COLUMN attachments TEXT",
+                REPORT_TABLE_NAME
             ),
             params![],
         ) {

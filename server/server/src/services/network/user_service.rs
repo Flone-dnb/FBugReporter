@@ -25,17 +25,16 @@ const TOTP_ALGORITHM: Algorithm = Algorithm::SHA1; // if changed, change protoco
 // Custom.
 use super::ban_manager::*;
 use super::net_packets::*;
-use crate::misc::*;
 use crate::services::logger_service::*;
 use shared::db_manager::DatabaseManager;
 use shared::error::AppError;
-use shared::report::GameReport;
+use shared::report::*;
 
 const A_B_BITS: u64 = 2048; // if changed, change protocol version
 const IV_LENGTH: usize = 16; // if changed, change protocol version
 const CMAC_TAG_LENGTH: usize = 16; // if changed, change protocol version
 const NETWORK_PROTOCOL_VERSION: u16 = 1;
-const MAX_PACKET_SIZE_IN_BYTES: u32 = 131_072; // 128 kB for now
+const MAX_PACKET_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS: u64 = 131_072; // 128 kB
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 25;
 const MAX_WAIT_TIME_IN_READ_WRITE_MS: u64 = 5000;
 const KEEP_ALIVE_CHECK_INTERVAL_MS: u64 = 60000; // 1 minute
@@ -49,15 +48,16 @@ enum IoResult {
 
 pub struct UserService {
     logger: Arc<Mutex<Logger>>,
+    database: Arc<Mutex<DatabaseManager>>,
     socket: TcpStream,
     socket_addr: Option<SocketAddr>,
     secret_key: [u8; SECRET_KEY_SIZE],
     connected_users_count: Arc<Mutex<usize>>,
     exit_error: Option<Result<String, AppError>>,
-    database: Arc<Mutex<DatabaseManager>>,
     ban_manager: Option<Arc<Mutex<BanManager>>>,
     username: Option<String>,
     time_of_last_received_packet: DateTime<Local>, // only for clients
+    max_total_attachment_size_in_mb: u64,          // only for reporters
 }
 
 impl UserService {
@@ -94,6 +94,7 @@ impl UserService {
             secret_key: [0; SECRET_KEY_SIZE],
             database,
             ban_manager,
+            max_total_attachment_size_in_mb: 0,
             username: None,
             socket_addr: Some(socket_addr),
             time_of_last_received_packet: Local::now(),
@@ -106,6 +107,7 @@ impl UserService {
         addr: SocketAddr,
         connected_users_count: Arc<Mutex<usize>>,
         database: Arc<Mutex<DatabaseManager>>,
+        max_attachment_size_in_mb: u64,
     ) -> Self {
         {
             let mut guard = connected_users_count.lock().unwrap();
@@ -134,6 +136,7 @@ impl UserService {
             socket_addr: Some(socket_addr),
             username: None,
             time_of_last_received_packet: Local::now(),
+            max_total_attachment_size_in_mb: max_attachment_size_in_mb,
         }
     }
     /// Processes reporter requests.
@@ -266,6 +269,7 @@ impl UserService {
             InReporterPacket::ReportPacket {
                 reporter_net_protocol,
                 game_report,
+                attachments,
             } => {
                 // Check protocol version.
                 if reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
@@ -317,7 +321,12 @@ impl UserService {
                 );
 
                 {
-                    if let Err(err) = self.database.lock().unwrap().save_report(game_report) {
+                    if let Err(err) = self
+                        .database
+                        .lock()
+                        .unwrap()
+                        .save_report(game_report, attachments)
+                    {
                         let result_code = ReportResult::InternalError;
 
                         // Notify reporter of our failure.
@@ -1358,7 +1367,7 @@ impl UserService {
 
         // Read u32 (size of a packet)
         let mut packet_size_buf = [0u8; std::mem::size_of::<u32>() as usize];
-        let mut _next_packet_size: u32 = 0;
+        let mut _next_packet_size: u64 = 0;
 
         let mut _result = IoResult::Fin;
         if timeout_in_ms.is_some() {
@@ -1417,7 +1426,7 @@ impl UserService {
                     ));
                 }
 
-                let res = bincode::deserialize(&packet_size_buf);
+                let res = bincode::deserialize::<u32>(&packet_size_buf);
                 if let Err(e) = res {
                     return Err(AppError::new(
                         &format!(
@@ -1437,17 +1446,20 @@ impl UserService {
                     ));
                 }
 
-                _next_packet_size = res.unwrap();
+                _next_packet_size = res.unwrap() as u64;
             }
         }
 
+        let max_allowed_packet_size = MAX_PACKET_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS
+            + self.max_total_attachment_size_in_mb * 1024 * 1024;
+
         // Check packet size.
-        if _next_packet_size > MAX_PACKET_SIZE_IN_BYTES {
+        if _next_packet_size > max_allowed_packet_size {
             return Err(AppError::new(
                 &format!(
                     "incoming packet is too big to receive ({} > {} bytes) (socket: {})",
                     _next_packet_size,
-                    MAX_PACKET_SIZE_IN_BYTES,
+                    max_allowed_packet_size,
                     match self.socket_addr {
                         Some(addr) => {
                             addr.to_string()

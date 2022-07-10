@@ -7,7 +7,6 @@ use std::io::*;
 use services::logger_service::Logger;
 use services::network::net_service::NetService;
 
-mod misc;
 mod services;
 
 fn main() {

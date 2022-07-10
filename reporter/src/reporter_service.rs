@@ -17,9 +17,9 @@ const SECRET_KEY_SIZE: usize = 32; // if changed, change protocol version
 
 // Custom.
 use crate::logger_service::Logger;
-use crate::misc::{GameReport, ReportResult};
 use crate::net_packets::InPacket;
 use crate::net_packets::OutPacket;
+use shared::report::*;
 
 const A_B_BITS: u64 = 2048; // if changed, change protocol version
 const IV_LENGTH: usize = 16; // if changed, change protocol version
@@ -47,6 +47,7 @@ impl ReporterService {
         server_addr: SocketAddrV4,
         report: GameReport,
         logger: &mut Logger,
+        attachments: Vec<ReportAttachment>,
     ) -> (ReportResult, Option<String>) {
         let tcp_socket = TcpStream::connect(server_addr);
 
@@ -107,6 +108,7 @@ impl ReporterService {
         let packet = OutPacket::ReportPacket {
             reporter_net_protocol: NETWORK_PROTOCOL_VERSION,
             game_report: report,
+            attachments,
         };
 
         // Serialize.

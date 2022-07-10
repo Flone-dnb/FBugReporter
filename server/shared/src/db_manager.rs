@@ -5,8 +5,8 @@ use rusqlite::{params, Connection, Result};
 use sha2::{Digest, Sha512};
 
 // Custom.
-use crate::report::ReportSummary;
-use crate::{error::AppError, report::GameReport};
+use crate::error::AppError;
+use crate::report::*;
 
 pub const DATABASE_NAME: &str = "database.db3";
 
@@ -28,10 +28,10 @@ const USER_TABLE_HASH: &[u8] = &[
     161, 64,
 ];
 const ATTACHMENT_TABLE_HASH: &[u8] = &[
-    117, 230, 157, 236, 161, 238, 147, 115, 41, 198, 133, 57, 88, 45, 210, 6, 74, 116, 142, 26,
-    238, 164, 216, 18, 172, 247, 248, 75, 152, 10, 87, 129, 62, 244, 26, 96, 105, 14, 12, 112, 209,
-    94, 55, 250, 77, 9, 133, 23, 35, 148, 175, 214, 85, 32, 113, 85, 189, 17, 231, 4, 84, 176, 63,
-    157,
+    186, 212, 252, 66, 200, 99, 177, 168, 109, 87, 220, 64, 41, 251, 213, 41, 206, 12, 178, 120,
+    152, 92, 212, 83, 112, 103, 76, 142, 67, 29, 177, 189, 95, 247, 73, 91, 42, 39, 13, 206, 93,
+    120, 251, 158, 121, 124, 159, 24, 235, 194, 75, 171, 29, 171, 90, 35, 253, 14, 114, 247, 192,
+    158, 164, 108,
 ];
 
 const SUPPORTED_DATABASE_VERSION: u64 = 2;
@@ -77,6 +77,16 @@ impl DatabaseManager {
     /// Open a new database connection.
     /// If no database was created, will create a new one.
     pub fn new() -> Result<Self, AppError> {
+        let sqlite_version = rusqlite::version_number();
+        if sqlite_version < 3035000 {
+            // because we use RETURNING clause
+            panic!(
+                "Used SQLite version \"{}\" is not supported,
+                minimum supported version of SQLite is \"3.35.0\".",
+                rusqlite::version()
+            )
+        }
+
         let result = Connection::open(DATABASE_NAME);
         if let Err(e) = result {
             return Err(AppError::new(&e.to_string(), file!(), line!()));
@@ -647,9 +657,45 @@ impl DatabaseManager {
         Ok(())
     }
     /// Saves a new report to the database.
-    pub fn save_report(&self, game_report: GameReport) -> Result<(), AppError> {
-        let datetime = Local::now();
+    pub fn save_report(
+        &self,
+        game_report: GameReport,
+        attachments: Vec<ReportAttachment>,
+    ) -> Result<(), AppError> {
+        // Insert report attachments into the database.
+        let mut attachment_ids: Vec<u64> = Vec::new();
+        for attachment in attachments {
+            let data_size_in_bytes = attachment.data.len();
+            let result: Result<u64> = self.connection.query_row(
+                &format!(
+                    "INSERT INTO {} 
+                    (
+                        file_name,
+                        data, 
+                        size_in_bytes 
+                    ) 
+                    VALUES 
+                    (?1, ?2, ?3) 
+                    RETURNING id",
+                    ATTACHMENT_TABLE_NAME
+                ),
+                params![attachment.file_name, attachment.data, data_size_in_bytes],
+                |row| row.get(0),
+            );
+            if let Err(e) = result {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            attachment_ids.push(result.unwrap());
+        }
 
+        let mut attachments_string = String::new();
+        for id in attachment_ids {
+            attachments_string += &id.to_string();
+            attachments_string += " ";
+        }
+
+        // Insert report into the database.
+        let datetime = Local::now();
         if let Err(e) = self.connection.execute(
             &format!(
                 "INSERT INTO {} 
@@ -662,10 +708,11 @@ impl DatabaseManager {
                 game_version, 
                 os_info, 
                 date_created_at, 
-                time_created_at
+                time_created_at,
+                attachments
             ) 
             VALUES 
-            (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 REPORT_TABLE_NAME
             ),
             params![
@@ -677,7 +724,8 @@ impl DatabaseManager {
                 game_report.game_version,
                 game_report.client_os_info.to_string(),
                 datetime.date().naive_local().to_string(),
-                datetime.time().format("%H:%M:%S").to_string()
+                datetime.time().format("%H:%M:%S").to_string(),
+                attachments_string
             ],
         ) {
             return Err(AppError::new(&e.to_string(), file!(), line!()));
@@ -1217,8 +1265,8 @@ impl DatabaseManager {
         let table_structure = format!(
             "CREATE TABLE {}(
                     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    file_name            TEXT NOT NULL,
                     data                 BLOB NOT NULL,
-                    file_extension       TEXT NOT NULL,
                     size_in_bytes        INTEGER NUL NULL
                 )",
             ATTACHMENT_TABLE_NAME

@@ -10,13 +10,18 @@ use super::logger_service::LOG_FILE_NAME;
 use shared::error::AppError;
 
 const RANDOM_PORT_RANGE: Range<u16> = 7000..65535;
+
 const DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS: u32 = 3;
 const DEFAULT_BAN_TIME_DURATION_IN_MIN: i64 = 5;
+const DEFAULT_MAX_ATTACHMENT_SIZE_IN_MB: u64 = 5;
+
 const CONFIG_FILE_NAME: &str = "server_config.ini";
+
 // --------------- server section start ---------------
 const CONFIG_SERVER_SECTION_NAME: &str = "server";
 const CONFIG_PORT_REPORTER_PARAM: &str = "port_for_reporters";
 const CONFIG_PORT_CLIENT_PARAM: &str = "port_for_clients";
+const CONFIG_MAX_ATTACHMENT_SIZE_IN_MB_PARAM: &str = "max_total_attachment_size_in_mb";
 // --------------- server section end ---------------
 // --------------- login section start ---------------
 const CONFIG_LOGIN_SECTION_NAME: &str = "login";
@@ -28,6 +33,7 @@ const CONFIG_BAN_TIME_DURATION_IN_MIN: &str = "ban_time_duration_in_min";
 pub struct ServerConfig {
     pub port_for_reporters: u16,
     pub port_for_clients: u16,
+    pub max_attachment_size_in_mb: u64,
     pub max_allowed_login_attempts: u32,
     pub ban_time_duration_in_min: i64,
     pub config_file_path: String,
@@ -79,6 +85,7 @@ impl ServerConfig {
         Self {
             port_for_reporters,
             port_for_clients,
+            max_attachment_size_in_mb: DEFAULT_MAX_ATTACHMENT_SIZE_IN_MB,
             max_allowed_login_attempts: DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS,
             ban_time_duration_in_min: DEFAULT_BAN_TIME_DURATION_IN_MIN,
             config_file_path: ServerConfig::get_config_file_path(),
@@ -88,6 +95,8 @@ impl ServerConfig {
     /// Saves the current configuration to a file.
     fn save_config(&self) -> Result<(), AppError> {
         let mut config = Ini::new();
+
+        // Server section started.
 
         // Port for reporters.
         config.set(
@@ -102,6 +111,15 @@ impl ServerConfig {
             CONFIG_PORT_CLIENT_PARAM,
             Some(self.port_for_clients.to_string()),
         );
+
+        // Max attachment size.
+        config.set(
+            CONFIG_SERVER_SECTION_NAME,
+            CONFIG_MAX_ATTACHMENT_SIZE_IN_MB_PARAM,
+            Some(self.max_attachment_size_in_mb.to_string()),
+        );
+
+        // Login section started.
 
         // Max allowed login attempts until ban.
         config.set(
@@ -131,6 +149,8 @@ impl ServerConfig {
     fn read_config(&mut self, config: &Ini) -> bool {
         let mut some_values_were_empty = false;
 
+        // Server section started.
+
         // Read port for reporters.
         if ServerConfig::read_value(
             config,
@@ -152,6 +172,19 @@ impl ServerConfig {
         ) {
             some_values_were_empty = true;
         }
+
+        // Read max allowed attachment size.
+        if ServerConfig::read_value(
+            config,
+            CONFIG_SERVER_SECTION_NAME,
+            CONFIG_MAX_ATTACHMENT_SIZE_IN_MB_PARAM,
+            &mut self.max_attachment_size_in_mb,
+            DEFAULT_MAX_ATTACHMENT_SIZE_IN_MB,
+        ) {
+            some_values_were_empty = true;
+        }
+
+        // Login section started.
 
         // Read max allowed login attempts until ban.
         if ServerConfig::read_value(

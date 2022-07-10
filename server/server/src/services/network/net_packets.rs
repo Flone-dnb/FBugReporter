@@ -2,9 +2,7 @@
 use serde::{Deserialize, Serialize};
 
 // Custom.
-use crate::misc::ReportResult;
-use shared::report::GameReport;
-use shared::report::ReportSummary;
+use shared::report::*;
 
 // --------------------------------------------------------
 
@@ -14,6 +12,7 @@ pub enum InReporterPacket {
     ReportPacket {
         reporter_net_protocol: u16,
         game_report: GameReport,
+        attachments: Vec<ReportAttachment>,
     },
 }
 

@@ -7,15 +7,23 @@ var game_version: String = "v1.0.0"; # put your game version here, make sure tha
 var report_text_limit: int = 10;
 
 func _ready():
-	reporter.set_server(127, 0, 0, 1, 50123); # should be according to your server's info
+	reporter.set_server(127, 0, 0, 1, 21580); # should be according to your server's info
 	initial_report_text = get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text;
 	
 	# set length limits
-	# get_field_limit() values are from reporter/src/misc.rs
+	# get_field_limit() values are from server/shared/src/report.rs
 	get_node("VBoxContainer/ReportNameHBoxContainer/ReportNameLineEdit").max_length = reporter.get_field_limit(0);
 	get_node("VBoxContainer/SenderNameHBoxContainer/SenderNameLineEdit").max_length = reporter.get_field_limit(2);
 	get_node("VBoxContainer/SenderEMailHBoxContainer/SenderEMailLineEdit").max_length = reporter.get_field_limit(3);
 	report_text_limit = reporter.get_field_limit(1);
+	
+# specify array of strings that contain paths to the files
+# it's safer to specify absolute paths
+# ! note that after you call reporter.send_report() you need to specify attachments again !
+func set_next_report_attachments(paths):
+	# specify attachments that you need to send with the report
+	# those can be log files or some other developer info
+	reporter.set_attachments(paths);
 
 func send_report(
 		report_name: String, report_text: String,
@@ -25,7 +33,7 @@ func send_report(
 	if result_code != 0: # if result_code == 0 then everything is OK and the server received your report, otherwise:
 		# (it's up to you whether you want to handle all error codes or not, you could ignore the result code or just check if it's equal to 0)
 		# (by handling all possible result codes you can provide more information to your user)
-		# error code names are taken from /reporter/src/misc.rs
+		# error code names are taken from server/shared/src/report.rs
 		if result_code == 1:
 			# you forgot to call reporter.set_server()
 			var error_message: String = "An error occurred: set_server() should be called first.";
@@ -40,7 +48,7 @@ func send_report(
 			# 3 - sender email (limit 50 characters)
 			# 4 - game name (limit 50 characters)
 			# 5 - game version (limit 50 characters)
-			# field ids and limits are taken from /reporter/src/misc.rs
+			# field ids and limits are taken from server/shared/src/report.rs
 			var error_message: String = "The field \"";
 			match int(reporter.get_last_error()):
 				0:
@@ -105,6 +113,22 @@ func send_report(
 			error_message += "Try again.";
 			get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = error_message;
 			return;
+		elif result_code == 8:
+			# the specified attachment(s) do not exist
+			# check that all path to the attachments are valid
+			var error_message: String = "An error occurred: the specified attachment(s) do not exist.\n";
+			error_message += "Make sure that all specified attached file paths are valid.\n";
+			error_message += "If you're not the developer of this game, please, contact the developers and tell them about this issue!\n";
+			error_message += "Make sure to include the file \"reporter.log\" which is located at ";
+			error_message += reporter.get_log_file_path();
+			get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = error_message;
+		else:
+			# adding this just in case
+			var error_message: String = "An error occurred: reporter returned unknown error code \"" + String(result_code) + "\".\n";
+			error_message += "If you're not the developer of this game, please, contact the developers and tell them about this issue!\n";
+			error_message += "Make sure to include the file \"reporter.log\" which is located at ";
+			error_message += reporter.get_log_file_path();
+			get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = error_message;
 	else:
 		# clear all fields, with this
 		# you can't send the same report again with just another button press

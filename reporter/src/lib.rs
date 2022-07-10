@@ -1,23 +1,26 @@
 // Std.
 use backtrace::Backtrace;
+use std::fs::File;
+use std::io::Read;
 use std::net::{Ipv4Addr, SocketAddrV4};
+use std::path::Path;
 
 // External.
 use gdnative::prelude::*;
 
 // Custom.
 mod logger_service;
-mod misc;
 mod net_packets;
 mod reporter_service;
 use logger_service::*;
-use misc::*;
 use reporter_service::*;
+use shared::report::*;
 
 #[derive(NativeClass)]
 #[inherit(Node)]
 struct Reporter {
     server_addr: Option<SocketAddrV4>,
+    attachments: Vec<String>,
     last_report: Option<GameReport>,
     last_error: String,
 }
@@ -29,6 +32,7 @@ impl Reporter {
             server_addr: None,
             last_report: None,
             last_error: String::new(),
+            attachments: Vec::new(),
         }
     }
 
@@ -73,6 +77,11 @@ impl Reporter {
     }
 
     #[export]
+    fn set_attachments(&mut self, _owner: &Node, attachments: Vec<String>) {
+        self.attachments = attachments;
+    }
+
+    #[export]
     fn send_report(
         &mut self,
         _owner: &Node,
@@ -98,6 +107,28 @@ impl Reporter {
             client_os_info: os_info::get(),
         };
 
+        // Prepare logging.
+        let mut logger = Logger::new();
+        logger.log(&format!("Received a report: {:?}", report));
+
+        // Generate report attachments (if needed).
+        let mut report_attachments: Vec<ReportAttachment> = Vec::new();
+        if !self.attachments.is_empty() {
+            // Check that the specified paths exist.
+            for path in self.attachments.iter() {
+                if !Path::new(&path).exists() {
+                    return ReportResult::AttachmentDoesNotExist.value();
+                }
+            }
+
+            let result = Self::generate_attachments_from_paths(self.attachments.clone());
+            if let Err(e) = result {
+                logger.log(&e);
+                return ReportResult::InternalError.value();
+            }
+            report_attachments = result.unwrap();
+        }
+
         // Check input length.
         let invalid_field = self.is_input_valid(&report);
         if invalid_field.is_some() {
@@ -105,17 +136,18 @@ impl Reporter {
             return ReportResult::InvalidInput.value();
         }
 
-        // Prepare logging.
-        let mut logger = Logger::new();
-        logger.log(&format!("Received a report: {:?}", report));
-
         let mut reporter = ReporterService::new();
-        let (result_code, error_message) =
-            reporter.send_report(self.server_addr.unwrap(), report.clone(), &mut logger);
+        let (result_code, error_message) = reporter.send_report(
+            self.server_addr.unwrap(),
+            report.clone(),
+            &mut logger,
+            report_attachments,
+        );
 
         if result_code == ReportResult::Ok {
             // Save report.
             self.last_report = Some(report);
+            self.attachments.clear();
         } else {
             if error_message.is_none() {
                 self.last_error = String::from("Error message is None.");
@@ -125,6 +157,73 @@ impl Reporter {
         }
 
         return result_code.value();
+    }
+
+    /// Generates ReportAttachment from file paths.
+    ///
+    /// Expects file path to exist.
+    fn generate_attachments_from_paths(
+        paths: Vec<String>,
+    ) -> Result<Vec<ReportAttachment>, String> {
+        let mut attachments: Vec<ReportAttachment> = Vec::new();
+        let mut total_attachment_size: usize = 0;
+        for path in paths {
+            let file_path = Path::new(&path);
+
+            // Check file name.
+            let file_name = file_path.file_name();
+            if file_name.is_none() {
+                return Err(format!(
+                    "An error occurred at [{}, {}]: file name is empty ({})",
+                    file!(),
+                    line!(),
+                    path
+                ));
+            }
+            let file_name = file_name.unwrap().to_str();
+            if file_name.is_none() {
+                return Err(format!(
+                    "An error occurred at [{}, {}]: failed to get file name ({})",
+                    file!(),
+                    line!(),
+                    path
+                ));
+            }
+            let file_name = String::from(file_name.unwrap());
+            total_attachment_size += file_name.len();
+
+            // Read file into vec.
+            let mut data: Vec<u8> = Vec::new();
+
+            let file = File::open(path);
+            if let Err(e) = file {
+                return Err(format!(
+                    "An error occurred at [{}, {}]: {}",
+                    file!(),
+                    line!(),
+                    e
+                ));
+            }
+            let mut file = file.unwrap();
+            let result = file.read_to_end(&mut data);
+            if let Err(e) = result {
+                return Err(format!(
+                    "An error occurred at [{}, {}]: {}",
+                    file!(),
+                    line!(),
+                    e
+                ));
+            }
+            let file_size = result.unwrap();
+            total_attachment_size += file_size;
+
+            let attachment = ReportAttachment { file_name, data };
+            attachments.push(attachment);
+        }
+
+        // TODO: check total_attachment_size with allowed limit
+
+        return Ok(attachments);
     }
 
     /// Returns the id of the invalid field.

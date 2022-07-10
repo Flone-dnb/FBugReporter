@@ -106,12 +106,14 @@ impl NetService {
         let logger_copy = self.logger.clone();
         let connected_clone = self.connected_socket_count.clone();
         let database_clone = self.database.clone();
+        let config_clone = self.server_config.clone();
         let reporter_handle = thread::spawn(move || {
             NetService::process_reporter_connections(
                 listener_socker_reporters,
                 logger_copy,
                 connected_clone,
                 database_clone,
+                config_clone,
             );
         });
 
@@ -141,6 +143,7 @@ impl NetService {
         logger: Arc<Mutex<Logger>>,
         connected_count: Arc<Mutex<usize>>,
         database_manager: Arc<Mutex<DatabaseManager>>,
+        server_config: Arc<ServerConfig>,
     ) {
         loop {
             // Wait for connection.
@@ -185,6 +188,7 @@ impl NetService {
             let logger_copy = logger.clone();
             let connected_count_clone = connected_count.clone();
             let database_clone = database_manager.clone();
+            let max_attachment_size_in_mb = server_config.max_attachment_size_in_mb;
 
             let handle = thread::Builder::new()
                 .name(format!("reporter socket {}:{}", addr.ip(), addr.port()))
@@ -195,6 +199,7 @@ impl NetService {
                         addr,
                         connected_count_clone,
                         database_clone,
+                        max_attachment_size_in_mb,
                     );
                     user_service.process_reporter();
                 });

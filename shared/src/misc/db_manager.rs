@@ -5,8 +5,8 @@ use rusqlite::{params, Connection, Result};
 use sha2::{Digest, Sha512};
 
 // Custom.
-use crate::error::AppError;
-use crate::report::*;
+use super::report::*;
+use crate::misc::error::AppError;
 
 pub const DATABASE_NAME: &str = "database.db3";
 

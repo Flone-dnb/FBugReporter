@@ -4,7 +4,7 @@ use druid::widget::prelude::*;
 use druid::{Color, Lens};
 
 // Custom.
-use crate::misc::app_error::AppError;
+use shared::misc::error::AppError;
 
 const CONFIG_THEME_FILE_NAME: &str = "theme.ini";
 const CONFIG_THEME_SECTION_NAME: &str = "theme";

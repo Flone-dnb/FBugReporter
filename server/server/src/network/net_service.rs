@@ -9,8 +9,8 @@ use crate::{
     io::log_manager::*,
     network::{ban_manager::BanManager, user_service::UserService},
 };
-use shared::db_manager::*;
-use shared::error::AppError;
+use shared::misc::db_manager::*;
+use shared::misc::error::AppError;
 
 pub struct NetService {
     pub logger: Arc<Mutex<LogManager>>,

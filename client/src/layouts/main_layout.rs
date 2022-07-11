@@ -10,7 +10,7 @@ use druid::WidgetExt;
 // Custom.
 use crate::widgets::report::ReportWidget;
 use crate::{ApplicationState, Layout};
-use shared::report::ReportSummary;
+use shared::misc::report::ReportSummary;
 
 // Layout customization.
 const TEXT_SIZE: f64 = 18.0;
@@ -192,12 +192,12 @@ impl MainLayout {
             .query_reports(last_page, REPORT_COUNT_PER_PAGE);
 
         if let Err(app_error) = result {
-            if app_error.message.contains("FIN") {
+            if app_error.get_message().contains("FIN") {
                 data.current_layout = Layout::Connect;
                 data.connect_layout.connect_error = format!(
                     "{}\nMost likely the server \
                     closed connection due to your inactivity.",
-                    app_error.message
+                    app_error.get_message()
                 );
             } else {
                 data.logger_service
@@ -222,12 +222,12 @@ impl MainLayout {
             .query_reports(1, REPORT_COUNT_PER_PAGE);
 
         if let Err(app_error) = result {
-            if app_error.message.contains("FIN") {
+            if app_error.get_message().contains("FIN") {
                 data.current_layout = Layout::Connect;
                 data.connect_layout.connect_error = format!(
                     "{}\nMost likely the server \
                     closed connection due to your inactivity.",
-                    app_error.message
+                    app_error.get_message()
                 );
             } else {
                 data.logger_service
@@ -252,12 +252,12 @@ impl MainLayout {
             .query_reports(data.main_layout.current_page - 1, REPORT_COUNT_PER_PAGE);
 
         if let Err(app_error) = result {
-            if app_error.message.contains("FIN") {
+            if app_error.get_message().contains("FIN") {
                 data.current_layout = Layout::Connect;
                 data.connect_layout.connect_error = format!(
                     "{}\nMost likely the server \
                     closed connection due to your inactivity.",
-                    app_error.message
+                    app_error.get_message()
                 );
             } else {
                 data.logger_service
@@ -282,12 +282,12 @@ impl MainLayout {
             .query_reports(data.main_layout.current_page + 1, REPORT_COUNT_PER_PAGE);
 
         if let Err(app_error) = result {
-            if app_error.message.contains("FIN") {
+            if app_error.get_message().contains("FIN") {
                 data.current_layout = Layout::Connect;
                 data.connect_layout.connect_error = format!(
                     "{}\nMost likely the server \
                     closed connection due to your inactivity.",
-                    app_error.message
+                    app_error.get_message()
                 );
             } else {
                 data.logger_service

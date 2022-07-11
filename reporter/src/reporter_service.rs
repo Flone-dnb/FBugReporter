@@ -15,10 +15,10 @@ type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
 // Custom.
-use crate::logger_service::Logger;
-use shared::net_params::*;
-use shared::report::*;
-use shared::reporter_packets::*;
+use crate::log_manager::LogManager;
+use shared::misc::report::*;
+use shared::network::net_params::*;
+use shared::network::reporter_packets::*;
 
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 
@@ -40,7 +40,7 @@ impl ReporterService {
         &mut self,
         server_addr: SocketAddrV4,
         report: GameReport,
-        logger: &mut Logger,
+        logger: &mut LogManager,
         attachments: Vec<ReportAttachment>,
     ) -> (ReportResult, Option<String>) {
         let tcp_socket = TcpStream::connect(server_addr);

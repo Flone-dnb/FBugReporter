@@ -20,10 +20,10 @@ const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 // Custom.
 use crate::io::config_manager::ConfigManager;
 use crate::layouts::report_layout::ReportData;
-use crate::misc::app_error::AppError;
-use shared::client_packets::*;
-use shared::net_params::*;
-use shared::report::ReportSummary;
+use shared::misc::error::AppError;
+use shared::misc::report::ReportSummary;
+use shared::network::client_packets::*;
+use shared::network::net_params::*;
 
 pub enum ConnectResult {
     Connected(bool),

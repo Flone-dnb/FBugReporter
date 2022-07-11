@@ -22,6 +22,9 @@ impl AppError {
         self.stack.push(ErrorEntry { file, line });
         self
     }
+    pub fn get_message(&self) -> String {
+        self.message.clone()
+    }
 }
 
 impl Display for AppError {

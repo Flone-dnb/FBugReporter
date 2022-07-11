@@ -24,12 +24,12 @@ const TOTP_ALGORITHM: Algorithm = Algorithm::SHA1; // if changed, change protoco
 // Custom.
 use super::ban_manager::*;
 use crate::io::log_manager::*;
-use shared::client_packets::*;
-use shared::db_manager::DatabaseManager;
-use shared::error::AppError;
-use shared::net_params::*;
-use shared::report::*;
-use shared::reporter_packets::*;
+use shared::misc::db_manager::DatabaseManager;
+use shared::misc::error::AppError;
+use shared::misc::report::*;
+use shared::network::client_packets::*;
+use shared::network::net_params::*;
+use shared::network::reporter_packets::*;
 
 const MAX_PACKET_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS: u64 = 131_072; // 128 kB
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 25;
@@ -301,7 +301,7 @@ impl UserService {
             let result_code = ReportResult::WrongProtocol;
 
             // Notify reporter.
-            if let Err(err) = UserService::send_packet(
+            if let Some(err) = UserService::send_message(
                 &mut self.socket,
                 &self.secret_key,
                 ReporterAnswer::ReportRequestResult { result_code },
@@ -320,7 +320,7 @@ impl UserService {
             let result_code = ReportResult::ServerRejected;
 
             // Notify reporter.
-            if let Err(err) = UserService::send_packet(
+            if let Some(err) = UserService::send_message(
                 &mut self.socket,
                 &self.secret_key,
                 ReporterAnswer::ReportRequestResult { result_code },
@@ -355,7 +355,7 @@ impl UserService {
                 let result_code = ReportResult::InternalError;
 
                 // Notify reporter of our failure.
-                if let Err(err) = UserService::send_packet(
+                if let Some(err) = UserService::send_message(
                     &mut self.socket,
                     &self.secret_key,
                     ReporterAnswer::ReportRequestResult { result_code },
@@ -383,7 +383,7 @@ impl UserService {
         );
 
         // Answer "OK".
-        if let Err(err) = UserService::send_packet(
+        if let Some(err) = UserService::send_message(
             &mut self.socket,
             &self.secret_key,
             ReporterAnswer::ReportRequestResult {
@@ -409,7 +409,7 @@ impl UserService {
     /// (bug).
     fn handle_attachment_size_query_packet(&mut self) -> Result<Option<String>, AppError> {
         // Answer "OK".
-        if let Err(err) = UserService::send_packet(
+        if let Some(err) = UserService::send_message(
             &mut self.socket,
             &self.secret_key,
             ReporterAnswer::ReportRequestResult {
@@ -523,8 +523,8 @@ impl UserService {
                     server_protocol: NETWORK_PROTOCOL_VERSION,
                 }),
             };
-            if let Err(app_error) =
-                UserService::send_packet(&mut self.socket, &self.secret_key, answer)
+            if let Some(app_error) =
+                UserService::send_message(&mut self.socket, &self.secret_key, answer)
             {
                 return Err(app_error.add_entry(file!(), line!()));
             }
@@ -604,7 +604,8 @@ impl UserService {
                 is_admin: false,
                 fail_reason: Some(ClientLoginFailReason::NeedFirstPassword),
             };
-            if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, answer) {
+            if let Some(err) = UserService::send_message(&mut self.socket, &self.secret_key, answer)
+            {
                 return Err(err.add_entry(file!(), line!()));
             }
 
@@ -690,8 +691,8 @@ impl UserService {
                     is_admin: false,
                     fail_reason: Some(ClientLoginFailReason::SetupOTP { qr_code }),
                 };
-                if let Err(err) =
-                    UserService::send_packet(&mut self.socket, &self.secret_key, answer)
+                if let Some(err) =
+                    UserService::send_message(&mut self.socket, &self.secret_key, answer)
                 {
                     return Err(err.add_entry(file!(), line!()));
                 }
@@ -705,8 +706,8 @@ impl UserService {
                         is_admin: false,
                         fail_reason: Some(ClientLoginFailReason::NeedOTP),
                     };
-                    if let Err(err) =
-                        UserService::send_packet(&mut self.socket, &self.secret_key, answer)
+                    if let Some(err) =
+                        UserService::send_message(&mut self.socket, &self.secret_key, answer)
                     {
                         return Err(err.add_entry(file!(), line!()));
                     }
@@ -805,7 +806,7 @@ impl UserService {
             is_admin: _is_admin,
             fail_reason: None,
         };
-        if let Err(err) = UserService::send_packet(&mut self.socket, &self.secret_key, answer) {
+        if let Some(err) = UserService::send_message(&mut self.socket, &self.secret_key, answer) {
             return Err(err.add_entry(file!(), line!()));
         }
 
@@ -840,8 +841,8 @@ impl UserService {
         };
 
         // Send reports.
-        let result = UserService::send_packet(&mut self.socket, &self.secret_key, packet);
-        if let Err(app_error) = result {
+        let result = UserService::send_message(&mut self.socket, &self.secret_key, packet);
+        if let Some(app_error) = result {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
@@ -913,8 +914,8 @@ impl UserService {
         };
 
         // Send reports.
-        let result = UserService::send_packet(&mut self.socket, &self.secret_key, packet);
-        if let Err(app_error) = result {
+        let result = UserService::send_message(&mut self.socket, &self.secret_key, packet);
+        if let Some(app_error) = result {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
@@ -966,8 +967,8 @@ impl UserService {
         };
 
         // Send reports.
-        let result = UserService::send_packet(&mut self.socket, &self.secret_key, packet);
-        if let Err(app_error) = result {
+        let result = UserService::send_message(&mut self.socket, &self.secret_key, packet);
+        if let Some(app_error) = result {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
@@ -1012,8 +1013,8 @@ impl UserService {
                         },
                     }),
                 };
-                if let Err(err) =
-                    UserService::send_packet(&mut self.socket, &self.secret_key, _answer)
+                if let Some(err) =
+                    UserService::send_message(&mut self.socket, &self.secret_key, _answer)
                 {
                     return Err(err.add_entry(file!(), line!()));
                 }
@@ -1035,8 +1036,8 @@ impl UserService {
                         },
                     }),
                 };
-                if let Err(err) =
-                    UserService::send_packet(&mut self.socket, &self.secret_key, _answer)
+                if let Some(err) =
+                    UserService::send_message(&mut self.socket, &self.secret_key, _answer)
                 {
                     return Err(err.add_entry(file!(), line!()));
                 }
@@ -1312,20 +1313,19 @@ impl UserService {
 
         Ok(())
     }
-    /// Encrypts and sends a packet.
+    /// Encrypts and sends a message.
     ///
-    /// Usually packet is `OutClientPacket` or `OutReporterPacket`,
-    /// see `net_packets.rs`.
-    fn send_packet<T>(
+    /// Returns `None` if successful, `Some` otherwise.
+    fn send_message<T>(
         socket: &mut TcpStream,
         secret_key: &[u8; SECRET_KEY_SIZE],
-        packet: T,
-    ) -> Result<(), AppError>
+        message: T,
+    ) -> Option<AppError>
     where
         T: Serialize,
     {
         if secret_key.is_empty() {
-            return Err(AppError::new(
+            return Some(AppError::new(
                 "can't send packet - secure connected is not established",
                 file!(),
                 line!(),
@@ -1333,15 +1333,15 @@ impl UserService {
         }
 
         // Serialize.
-        let mut binary_packet = bincode::serialize(&packet).unwrap();
+        let mut binary_message = bincode::serialize(&message).unwrap();
 
         // CMAC.
         let mut mac = Cmac::<Aes256>::new_from_slice(secret_key).unwrap();
-        mac.update(&binary_packet);
+        mac.update(&binary_message);
         let result = mac.finalize();
         let mut tag_bytes = result.into_bytes().to_vec();
         if tag_bytes.len() != CMAC_TAG_LENGTH {
-            return Err(AppError::new(
+            return Some(AppError::new(
                 &format!(
                     "unexpected tag length: {} != {}",
                     tag_bytes.len(),
@@ -1352,19 +1352,19 @@ impl UserService {
             ));
         }
 
-        binary_packet.append(&mut tag_bytes);
+        binary_message.append(&mut tag_bytes);
 
         // Encrypt packet.
         let mut rng = rand::thread_rng();
         let mut iv = [0u8; IV_LENGTH];
         rng.fill_bytes(&mut iv);
         let mut encrypted_packet = Aes256CbcEnc::new(secret_key.into(), &iv.into())
-            .encrypt_padded_vec_mut::<Pkcs7>(&binary_packet);
+            .encrypt_padded_vec_mut::<Pkcs7>(&binary_message);
 
         // Prepare encrypted packet len buffer.
         if encrypted_packet.len() + IV_LENGTH > std::u32::MAX as usize {
             // should never happen
-            return Err(AppError::new(
+            return Some(AppError::new(
                 &format!(
                     "resulting packet is too big ({} > {})",
                     encrypted_packet.len() + IV_LENGTH,
@@ -1377,7 +1377,7 @@ impl UserService {
         let encrypted_len = (encrypted_packet.len() + IV_LENGTH) as u32;
         let encrypted_len_buf = bincode::serialize(&encrypted_len);
         if let Err(e) = encrypted_len_buf {
-            return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
+            return Some(AppError::new(&format!("{:?}", e), file!(), line!()));
         }
         let mut send_buffer = encrypted_len_buf.unwrap();
 
@@ -1388,13 +1388,13 @@ impl UserService {
         // Send.
         match UserService::write_to_socket(socket, &mut send_buffer, true) {
             IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received", file!(), line!()));
+                return Some(AppError::new("unexpected FIN received", file!(), line!()));
             }
-            IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
+            IoResult::Err(err) => return Some(err.add_entry(file!(), line!())),
             IoResult::Ok(_) => {}
         }
 
-        Ok(())
+        None
     }
     /// Waits for next packet to arrive.
     ///

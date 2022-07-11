@@ -7,7 +7,7 @@ use rand::Rng;
 
 // Custom.
 use super::log_manager::LOG_FILE_NAME;
-use shared::error::AppError;
+use shared::misc::error::AppError;
 
 const RANDOM_PORT_RANGE: Range<u16> = 7000..65535;
 

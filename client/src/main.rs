@@ -173,12 +173,12 @@ impl AppDelegate<ApplicationState> for MyDelegate {
                 .unwrap()
                 .query_report(button_data.report_id);
             if let Err(app_error) = report {
-                if app_error.message.contains("FIN") {
+                if app_error.get_message().contains("FIN") {
                     data.current_layout = Layout::Connect;
                     data.connect_layout.connect_error = format!(
                         "{}\nMost likely the server \
                     closed connection due to your inactivity.",
-                        app_error.message
+                        app_error.get_message()
                     );
                 } else {
                     println!("ERROR: {}", app_error.to_string());

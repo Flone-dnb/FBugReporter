@@ -196,12 +196,12 @@ impl ReportLayout {
             .query_reports(data.main_layout.current_page, REPORT_COUNT_PER_PAGE);
 
         if let Err(app_error) = result {
-            if app_error.message.contains("FIN") {
+            if app_error.get_message().contains("FIN") {
                 data.current_layout = Layout::Connect;
                 data.connect_layout.connect_error = format!(
                     "{}\nMost likely the server \
                     closed connection due to your inactivity.",
-                    app_error.message
+                    app_error.get_message()
                 );
             } else {
                 data.logger_service
@@ -238,12 +238,12 @@ impl ReportLayout {
             .unwrap()
             .delete_report(data.report_layout.report.id);
         if let Err(app_error) = result {
-            if app_error.message.contains("FIN") {
+            if app_error.get_message().contains("FIN") {
                 data.current_layout = Layout::Connect;
                 data.connect_layout.connect_error = format!(
                     "{}\nMost likely the server \
                     closed connection due to your inactivity.",
-                    app_error.message
+                    app_error.get_message()
                 );
             } else {
                 println!(

@@ -9,11 +9,11 @@ use std::path::Path;
 use gdnative::prelude::*;
 
 // Custom.
-mod logger_service;
+mod log_manager;
 mod reporter_service;
-use logger_service::*;
+use log_manager::*;
 use reporter_service::*;
-use shared::report::*;
+use shared::misc::report::*;
 
 #[derive(NativeClass)]
 #[inherit(Node)]
@@ -40,7 +40,7 @@ impl Reporter {
 
     #[export]
     fn get_log_file_path(&self, _owner: &Node) -> String {
-        Logger::get_log_file_path()
+        LogManager::get_log_file_path()
     }
 
     #[export]
@@ -107,7 +107,7 @@ impl Reporter {
         };
 
         // Prepare logging.
-        let mut logger = Logger::new();
+        let mut logger = LogManager::new();
         logger.log(&format!("Received a report: {:?}", report));
 
         // Generate report attachments (if needed).

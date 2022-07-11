@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 
 // Custom.
-use crate::report::ReportSummary;
+use crate::misc::report::ReportSummary;
 
 /// Client's request to the server.
 /// If made changes, change protocol version.

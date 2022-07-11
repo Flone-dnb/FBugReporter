@@ -4,7 +4,7 @@ use druid::widget::{Button, Flex, Label, LineBreaking, MainAxisAlignment, TextBo
 use druid::{Lens, LensExt, TextAlignment, WidgetExt};
 
 // Custom.
-use crate::services::net_service::ConnectResult;
+use crate::network::net_service::ConnectResult;
 use crate::{ApplicationState, Layout};
 
 // Layout customization.

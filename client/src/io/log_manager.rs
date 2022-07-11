@@ -12,15 +12,15 @@ const LOG_FILE_NAME: &str = "client.log";
 #[cfg(target_os = "windows")]
 const LOG_FILE_DIR: &str = "FBugReporter";
 
-pub struct LoggerService {  
+pub struct LogManager {
     log_file_path: String,
 }
 
-impl LoggerService {
+impl LogManager {
     /// Removes old log file and creates an empty one.
     pub fn new() -> Self {
         Self {
-            log_file_path: LoggerService::recreate_log_file(),
+            log_file_path: LogManager::recreate_log_file(),
         }
     }
     pub fn get_log_file_path() -> String {
@@ -95,7 +95,7 @@ impl LoggerService {
     }
     /// Returns new log file path.
     fn recreate_log_file() -> String {
-        let log_path = LoggerService::get_log_file_path();
+        let log_path = LogManager::get_log_file_path();
 
         // Remove log file if exists.
         if Path::new(&log_path).exists() {

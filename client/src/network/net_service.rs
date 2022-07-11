@@ -18,7 +18,7 @@ type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 
 // Custom.
-use super::config_service::ConfigService;
+use crate::io::config_manager::ConfigManager;
 use crate::layouts::report_layout::ReportData;
 use crate::misc::app_error::AppError;
 use shared::client_packets::*;
@@ -214,7 +214,7 @@ impl NetService {
         }
 
         // Connected.
-        let mut config = ConfigService::new();
+        let mut config = ConfigManager::new();
         config.server = server;
         config.port = port.to_string();
         config.username = username;

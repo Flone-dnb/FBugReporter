@@ -13,20 +13,20 @@ use druid::{
 use rdev::display_size;
 
 // Custom.
+use io::log_manager::LogManager;
 use layouts::{
     change_password_layout::ChangePasswordLayout, connect_layout::ConnectLayout,
     main_layout::MainLayout, otp_layout::OtpLayout, report_layout::ReportLayout,
     settings_layout::SettingsLayout,
 };
 use misc::custom_data_button_controller::CUSTOM_DATA_BUTTON_CLICKED;
-use services::logger_service::LoggerService;
-use services::net_service::NetService;
-use theme::*;
+use misc::theme::*;
+use network::net_service::NetService;
 
+mod io;
 mod layouts;
 mod misc;
-mod services;
-mod theme;
+mod network;
 mod widgets;
 
 #[derive(Clone, Copy, Data, PartialEq)]
@@ -55,7 +55,7 @@ pub struct ApplicationState {
     #[data(ignore)]
     net_service: Arc<Mutex<NetService>>, // Using `Arc<Mutex>` because need `Clone` and need to modify.
     #[data(ignore)]
-    logger_service: Arc<Mutex<LoggerService>>, // Using `Arc<Mutex>` because need `Clone` and need to modify.
+    logger_service: Arc<Mutex<LogManager>>, // Using `Arc<Mutex>` because need `Clone` and need to modify.
 
     // misc
     theme: ApplicationTheme,
@@ -88,7 +88,7 @@ pub fn main() {
         otp_layout: OtpLayout::new(),
         report_layout: ReportLayout::new(),
         net_service: Arc::new(Mutex::new(NetService::new())),
-        logger_service: Arc::new(Mutex::new(LoggerService::new())),
+        logger_service: Arc::new(Mutex::new(LogManager::new())),
         theme: ApplicationTheme::new(),
     };
 

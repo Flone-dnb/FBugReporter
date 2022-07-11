@@ -18,20 +18,20 @@ const CONFIG_SERVER_PARAM: &str = "server";
 const CONFIG_PORT_PARAM: &str = "port";
 const CONFIG_USERNAME_PARAM: &str = "username";
 
-pub struct ConfigService {
+pub struct ConfigManager {
     pub server: String,
     pub port: String,
     pub username: String,
 }
 
-impl ConfigService {
+impl ConfigManager {
     /// Attempts to read existing config file.
     /// Otherwise, returns an empty configuration.
     pub fn new() -> Self {
-        let mut config = ConfigService::default();
+        let mut config = ConfigManager::default();
 
         let mut config_file = Ini::new();
-        let map = config_file.load(ConfigService::get_config_file_path());
+        let map = config_file.load(ConfigManager::get_config_file_path());
 
         if map.is_err() {
             return config;
@@ -52,7 +52,7 @@ impl ConfigService {
             Some(&self.username),
         );
 
-        let config_path = ConfigService::get_config_file_path();
+        let config_path = ConfigManager::get_config_file_path();
         if let Err(e) = config_file.write(&config_path) {
             println!(
                 "WARNING: failed to save configuration to the file \"{}\" (error: {}).",
@@ -132,7 +132,7 @@ impl ConfigService {
     }
 }
 
-impl Default for ConfigService {
+impl Default for ConfigManager {
     fn default() -> Self {
         Self {
             server: String::new(),

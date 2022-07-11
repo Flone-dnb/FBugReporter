@@ -4,7 +4,7 @@ use druid::widget::{Button, Flex, Label, LineBreaking, MainAxisAlignment, TextBo
 use druid::{Lens, LensExt, TextAlignment, WidgetExt};
 
 // Custom.
-use crate::services::{config_service::ConfigService, net_service::ConnectResult};
+use crate::{io::config_manager::ConfigManager, network::net_service::ConnectResult};
 use crate::{ApplicationState, Layout};
 
 // Layout customization.
@@ -29,7 +29,7 @@ pub struct ConnectLayout {
 
 impl ConnectLayout {
     pub fn new() -> Self {
-        let config_file = ConfigService::new();
+        let config_file = ConfigManager::new();
 
         Self {
             server: config_file.server,

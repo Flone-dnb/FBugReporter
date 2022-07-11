@@ -5,7 +5,7 @@ use std::io;
 use std::io::*;
 
 // Custom.
-use shared::db_manager::*;
+use shared::misc::db_manager::*;
 
 /// Looks if there is a database file in the current directory.
 /// Returns `true` if a database was found, `false` if not.

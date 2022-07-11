@@ -867,8 +867,12 @@ dependencies = [
 name = "shared"
 version = "1.0.0"
 dependencies = [
+ "aes",
  "bincode",
+ "cbc",
  "chrono",
+ "cmac",
+ "num-bigint",
  "os_info",
  "rand",
  "rusqlite",

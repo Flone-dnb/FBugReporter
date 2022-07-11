@@ -248,20 +248,15 @@ dependencies = [
 name = "client"
 version = "1.0.1"
 dependencies = [
- "aes",
  "base64",
  "bincode",
- "cbc",
  "chrono",
- "cmac",
  "configparser",
  "druid",
  "image",
  "native-dialog",
- "num-bigint",
  "opener",
  "platform-dirs",
- "rand",
  "rdev",
  "serde",
  "sha2",
@@ -1946,8 +1941,12 @@ dependencies = [
 name = "shared"
 version = "1.0.0"
 dependencies = [
+ "aes",
  "bincode",
+ "cbc",
  "chrono",
+ "cmac",
+ "num-bigint",
  "os_info",
  "rand",
  "rusqlite",

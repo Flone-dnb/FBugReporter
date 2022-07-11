@@ -25,7 +25,7 @@ const TOTP_ALGORITHM: Algorithm = Algorithm::SHA1; // if changed, change protoco
 // Custom.
 use super::ban_manager::*;
 use super::net_packets::*;
-use crate::services::logger_service::*;
+use crate::services::io::logger_service::*;
 use shared::db_manager::DatabaseManager;
 use shared::error::AppError;
 use shared::report::*;
@@ -46,6 +46,7 @@ enum IoResult {
     Err(AppError),
 }
 
+// TODO: split reporter/client logic into different files: reporter_service, client_service
 pub struct UserService {
     logger: Arc<Mutex<Logger>>,
     database: Arc<Mutex<DatabaseManager>>,

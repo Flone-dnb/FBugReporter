@@ -8,7 +8,7 @@ use chrono::{DateTime, Local};
 use configparser::ini::Ini;
 
 // Custom.
-use crate::services::{config_service::ServerConfig, logger_service::*};
+use crate::services::io::{config_service::ServerConfig, logger_service::*};
 
 const BAN_FILE_NAME: &str = "banned_ips.ini";
 const BAN_SECTION_NAME: &str = "ban";

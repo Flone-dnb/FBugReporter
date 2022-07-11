@@ -1,30 +1,13 @@
 // External.
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
-pub enum ClientLoginFailResult {
-    FailedAttempt {
-        failed_attempts_made: u32,
-        max_failed_attempts: u32,
-    },
-    Banned {
-        ban_time_in_min: i64,
-    },
-}
+// Custom.
+use crate::report::ReportSummary;
 
+/// Client's request to the server.
+/// If made changes, change protocol version.
 #[derive(Serialize, Deserialize)]
-pub enum ClientLoginFailReason {
-    // should be exactly the same as server's enum
-    WrongProtocol { server_protocol: u16 },
-    WrongCredentials { result: ClientLoginFailResult },
-    NeedFirstPassword, // user just registered, the server is waiting for a new password to set
-    NeedOTP,
-    SetupOTP { qr_code: String },
-}
-
-#[derive(Serialize, Deserialize)]
-pub enum OutClientPacket {
-    // should be exactly the same as server's enum
+pub enum ClientRequest {
     Login {
         client_net_protocol: u16,
         username: String,
@@ -49,19 +32,10 @@ pub enum OutClientPacket {
     },
 }
 
-// should be exactly the same as server's struct
+/// Server's answer to the client.
+/// If made changes, change protocol version.
 #[derive(Serialize, Deserialize)]
-pub struct ReportSummary {
-    pub id: u64,
-    pub title: String,
-    pub game: String,
-    pub date: String,
-    pub time: String,
-}
-
-#[derive(Serialize, Deserialize)]
-pub enum InClientPacket {
-    // should be exactly the same as server's enum
+pub enum ClientAnswer {
     LoginAnswer {
         is_ok: bool,
         is_admin: bool,
@@ -86,4 +60,26 @@ pub enum InClientPacket {
     DeleteReportResult {
         is_found_and_removed: bool,
     },
+}
+
+/// If made changes, change protocol version.
+#[derive(Serialize, Deserialize)]
+pub enum ClientLoginFailResult {
+    FailedAttempt {
+        failed_attempts_made: u32,
+        max_failed_attempts: u32,
+    },
+    Banned {
+        ban_time_in_min: i64,
+    },
+}
+
+/// If made changes, change protocol version.
+#[derive(Serialize, Deserialize)]
+pub enum ClientLoginFailReason {
+    WrongProtocol { server_protocol: u16 },
+    WrongCredentials { result: ClientLoginFailResult },
+    NeedFirstPassword, // user just registered, we are waiting for a new password to set
+    NeedOTP,
+    SetupOTP { qr_code: String },
 }

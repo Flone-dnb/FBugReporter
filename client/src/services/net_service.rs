@@ -14,20 +14,16 @@ use sha2::{Digest, Sha512};
 
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
-const SECRET_KEY_SIZE: usize = 32; // if changed, change protocol version
+
+const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
 
 // Custom.
 use super::config_service::ConfigService;
-use super::net_packets::*;
 use crate::layouts::report_layout::ReportData;
 use crate::misc::app_error::AppError;
-
-const A_B_BITS: u64 = 2048; // if changed, change protocol version
-const IV_LENGTH: usize = 16; // if changed, change protocol version
-const CMAC_TAG_LENGTH: usize = 16; // if changed, change protocol version
-const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
-
-pub const NETWORK_PROTOCOL_VERSION: u16 = 1;
+use shared::client_packets::*;
+use shared::net_params::*;
+use shared::report::ReportSummary;
 
 pub enum ConnectResult {
     Connected(bool),
@@ -113,7 +109,7 @@ impl NetService {
         let password = hasher.finalize().to_vec();
 
         // Prepare packet to send.
-        let mut packet = OutClientPacket::Login {
+        let mut packet = ClientRequest::Login {
             client_net_protocol: NETWORK_PROTOCOL_VERSION,
             username: username.clone(),
             password: password.clone(),
@@ -127,7 +123,7 @@ impl NetService {
             let new_password = hasher.finalize().to_vec();
 
             // Update packet to send.
-            packet = OutClientPacket::SetFirstPassword {
+            packet = ClientRequest::SetFirstPassword {
                 client_net_protocol: NETWORK_PROTOCOL_VERSION,
                 username: username.clone(),
                 old_password: password,
@@ -147,7 +143,7 @@ impl NetService {
         let packet = packet.unwrap();
 
         // Deserialize.
-        let packet = bincode::deserialize::<InClientPacket>(&packet);
+        let packet = bincode::deserialize::<ClientAnswer>(&packet);
         if let Err(e) = packet {
             return ConnectResult::InternalError(AppError::new(&e.to_string(), file!(), line!()));
         }
@@ -155,7 +151,7 @@ impl NetService {
 
         let mut _is_admin = false;
         match packet {
-            InClientPacket::LoginAnswer {
+            ClientAnswer::LoginAnswer {
                 is_ok,
                 is_admin,
                 fail_reason,
@@ -240,7 +236,7 @@ impl NetService {
         }
 
         // Prepare packet to send.
-        let packet = OutClientPacket::QueryReportsSummary { page, amount };
+        let packet = ClientRequest::QueryReportsSummary { page, amount };
 
         let result = self.send_packet(packet);
         if let Err(app_error) = result {
@@ -254,14 +250,14 @@ impl NetService {
         let serialized_packet = result.unwrap();
 
         // Deserialize.
-        let packet = bincode::deserialize::<InClientPacket>(&serialized_packet);
+        let packet = bincode::deserialize::<ClientAnswer>(&serialized_packet);
         if let Err(e) = packet {
             return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
         let packet = packet.unwrap();
 
         match packet {
-            InClientPacket::ReportsSummary {
+            ClientAnswer::ReportsSummary {
                 reports,
                 total_reports,
             } => {
@@ -282,7 +278,7 @@ impl NetService {
         }
 
         // Prepare packet to send.
-        let packet = OutClientPacket::QueryReport { report_id };
+        let packet = ClientRequest::QueryReport { report_id };
 
         let result = self.send_packet(packet);
         if let Err(app_error) = result {
@@ -296,14 +292,14 @@ impl NetService {
         let serialized_packet = result.unwrap();
 
         // Deserialize.
-        let packet = bincode::deserialize::<InClientPacket>(&serialized_packet);
+        let packet = bincode::deserialize::<ClientAnswer>(&serialized_packet);
         if let Err(e) = packet {
             return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
         let packet = packet.unwrap();
 
         match packet {
-            InClientPacket::Report {
+            ClientAnswer::Report {
                 id,
                 title,
                 game_name,
@@ -343,7 +339,7 @@ impl NetService {
         }
 
         // Prepare packet to send.
-        let packet = OutClientPacket::DeleteReport { report_id };
+        let packet = ClientRequest::DeleteReport { report_id };
 
         let result = self.send_packet(packet);
         if let Err(app_error) = result {
@@ -357,14 +353,14 @@ impl NetService {
         let serialized_packet = result.unwrap();
 
         // Deserialize.
-        let packet = bincode::deserialize::<InClientPacket>(&serialized_packet);
+        let packet = bincode::deserialize::<ClientAnswer>(&serialized_packet);
         if let Err(e) = packet {
             return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
         let packet = packet.unwrap();
 
         match packet {
-            InClientPacket::DeleteReportResult {
+            ClientAnswer::DeleteReportResult {
                 is_found_and_removed,
             } => {
                 return Ok(is_found_and_removed);
@@ -760,7 +756,7 @@ impl NetService {
 
         Ok(Vec::from(&secret_key_str[0..SECRET_KEY_SIZE]))
     }
-    fn send_packet(&mut self, packet: OutClientPacket) -> Result<(), AppError> {
+    fn send_packet(&mut self, packet: ClientRequest) -> Result<(), AppError> {
         if self.secret_key.is_empty() {
             return Err(AppError::new(
                 "can't send packet - secure connected is not established",

@@ -18,7 +18,6 @@ use totp_rs::{Algorithm, TOTP};
 
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
-const SECRET_KEY_SIZE: usize = 32; // if changed, change protocol version
 
 const TOTP_ALGORITHM: Algorithm = Algorithm::SHA1; // if changed, change protocol version
 
@@ -28,15 +27,12 @@ use super::net_packets::*;
 use crate::io::log_manager::*;
 use shared::db_manager::DatabaseManager;
 use shared::error::AppError;
+use shared::net_params::*;
 use shared::report::*;
 
-const A_B_BITS: u64 = 2048; // if changed, change protocol version
-const IV_LENGTH: usize = 16; // if changed, change protocol version
-const CMAC_TAG_LENGTH: usize = 16; // if changed, change protocol version
-const NETWORK_PROTOCOL_VERSION: u16 = 1;
 const MAX_PACKET_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS: u64 = 131_072; // 128 kB
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 25;
-const MAX_WAIT_TIME_IN_READ_WRITE_MS: u64 = 5000;
+const MAX_WAIT_TIME_IN_READ_WRITE_MS: u64 = 5000; // 5 minutes
 const KEEP_ALIVE_CHECK_INTERVAL_MS: u64 = 60000; // 1 minute
 const DISCONNECT_IF_INACTIVE_IN_SEC: u64 = 1800; // 30 minutes
 

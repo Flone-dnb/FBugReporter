@@ -8,9 +8,9 @@ use druid::widget::{Button, Flex, Label, MainAxisAlignment, Padding};
 use druid::WidgetExt;
 
 // Custom.
-use crate::services::net_packets::ReportSummary;
 use crate::widgets::report::ReportWidget;
 use crate::{ApplicationState, Layout};
+use shared::report::ReportSummary;
 
 // Layout customization.
 const TEXT_SIZE: f64 = 18.0;

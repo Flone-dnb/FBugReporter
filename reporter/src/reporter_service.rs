@@ -13,20 +13,14 @@ use rand::{Rng, RngCore};
 
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
-const SECRET_KEY_SIZE: usize = 32; // if changed, change protocol version
 
 // Custom.
 use crate::logger_service::Logger;
-use crate::net_packets::InPacket;
-use crate::net_packets::OutPacket;
+use shared::net_params::*;
 use shared::report::*;
+use shared::reporter_packets::*;
 
-const A_B_BITS: u64 = 2048; // if changed, change protocol version
-const IV_LENGTH: usize = 16; // if changed, change protocol version
-const CMAC_TAG_LENGTH: usize = 16; // if changed, change protocol version
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 10;
-
-pub const NETWORK_PROTOCOL_VERSION: u16 = 1;
 
 enum IoResult {
     Ok(usize),
@@ -105,7 +99,7 @@ impl ReporterService {
         let secret_key: [u8; SECRET_KEY_SIZE] = result.unwrap();
 
         // Prepare packet.
-        let packet = OutPacket::ReportPacket {
+        let packet = ReporterRequest::ReportPacket {
             reporter_net_protocol: NETWORK_PROTOCOL_VERSION,
             game_report: report,
             attachments,
@@ -351,7 +345,7 @@ impl ReporterService {
         }
 
         // Deserialize.
-        let packet = bincode::deserialize::<InPacket>(&decrypted_packet);
+        let packet = bincode::deserialize::<ReporterAnswer>(&decrypted_packet);
         if let Err(e) = packet {
             return Err(format!(
                 "An error occurred at [{}, {}]: {:?}\n\n",
@@ -363,7 +357,7 @@ impl ReporterService {
 
         let packet = packet.unwrap();
         match packet {
-            InPacket::ReportAnswer { result_code } => Ok(result_code),
+            ReporterAnswer::ReportRequestResult { result_code } => Ok(result_code),
         }
     }
     fn establish_secure_connection(&mut self) -> Result<Vec<u8>, String> {

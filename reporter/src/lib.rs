@@ -10,7 +10,6 @@ use gdnative::prelude::*;
 
 // Custom.
 mod logger_service;
-mod net_packets;
 mod reporter_service;
 use logger_service::*;
 use reporter_service::*;

@@ -23,12 +23,13 @@ const TOTP_ALGORITHM: Algorithm = Algorithm::SHA1; // if changed, change protoco
 
 // Custom.
 use super::ban_manager::*;
-use super::net_packets::*;
 use crate::io::log_manager::*;
+use shared::client_packets::*;
 use shared::db_manager::DatabaseManager;
 use shared::error::AppError;
 use shared::net_params::*;
 use shared::report::*;
+use shared::reporter_packets::*;
 
 const MAX_PACKET_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS: u64 = 131_072; // 128 kB
 const WOULD_BLOCK_RETRY_AFTER_MS: u64 = 25;
@@ -168,7 +169,7 @@ impl UserService {
         let packet = packet.unwrap();
 
         // Deserialize.
-        let packet = bincode::deserialize::<InReporterPacket>(&packet);
+        let packet = bincode::deserialize::<ReporterRequest>(&packet);
         if let Err(e) = packet {
             self.exit_error = Some(Err(AppError::new(&e.to_string(), file!(), line!())));
             return;
@@ -220,7 +221,7 @@ impl UserService {
         let packet = packet.unwrap();
 
         // Deserialize.
-        let packet = bincode::deserialize::<InClientPacket>(&packet);
+        let packet = bincode::deserialize::<ClientRequest>(&packet);
         if let Err(e) = packet {
             self.exit_error = Some(Err(AppError::new(&e.to_string(), file!(), line!())));
             return;
@@ -265,10 +266,10 @@ impl UserService {
     /// (bug).
     fn handle_reporter_packet(
         &mut self,
-        packet: InReporterPacket,
+        packet: ReporterRequest,
     ) -> Result<Option<String>, AppError> {
         match packet {
-            InReporterPacket::ReportPacket {
+            ReporterRequest::ReportPacket {
                 reporter_net_protocol,
                 game_report,
                 attachments,
@@ -303,7 +304,7 @@ impl UserService {
             if let Err(err) = UserService::send_packet(
                 &mut self.socket,
                 &self.secret_key,
-                OutReporterPacket::ReportAnswer { result_code },
+                ReporterAnswer::ReportRequestResult { result_code },
             ) {
                 return Err(err.add_entry(file!(), line!()));
             }
@@ -322,7 +323,7 @@ impl UserService {
             if let Err(err) = UserService::send_packet(
                 &mut self.socket,
                 &self.secret_key,
-                OutReporterPacket::ReportAnswer { result_code },
+                ReporterAnswer::ReportRequestResult { result_code },
             ) {
                 return Err(err.add_entry(file!(), line!()));
             }
@@ -357,7 +358,7 @@ impl UserService {
                 if let Err(err) = UserService::send_packet(
                     &mut self.socket,
                     &self.secret_key,
-                    OutReporterPacket::ReportAnswer { result_code },
+                    ReporterAnswer::ReportRequestResult { result_code },
                 ) {
                     return Err(err.add_entry(file!(), line!()));
                 }
@@ -385,7 +386,7 @@ impl UserService {
         if let Err(err) = UserService::send_packet(
             &mut self.socket,
             &self.secret_key,
-            OutReporterPacket::ReportAnswer {
+            ReporterAnswer::ReportRequestResult {
                 result_code: ReportResult::Ok,
             },
         ) {
@@ -411,7 +412,7 @@ impl UserService {
         if let Err(err) = UserService::send_packet(
             &mut self.socket,
             &self.secret_key,
-            OutReporterPacket::ReportAnswer {
+            ReporterAnswer::ReportRequestResult {
                 result_code: ReportResult::Ok,
             },
         ) {
@@ -432,9 +433,9 @@ impl UserService {
     ///
     /// Returns `AppError` as `Err` if there was an internal error
     /// (bug).
-    fn handle_client_packet(&mut self, packet: InClientPacket) -> Result<Option<String>, AppError> {
+    fn handle_client_packet(&mut self, packet: ClientRequest) -> Result<Option<String>, AppError> {
         match packet {
-            InClientPacket::Login {
+            ClientRequest::Login {
                 client_net_protocol,
                 username,
                 password,
@@ -448,7 +449,7 @@ impl UserService {
 
                 Ok(result.unwrap())
             }
-            InClientPacket::SetFirstPassword {
+            ClientRequest::SetFirstPassword {
                 client_net_protocol,
                 username,
                 old_password,
@@ -467,7 +468,7 @@ impl UserService {
 
                 Ok(result.unwrap())
             }
-            InClientPacket::QueryReportsSummary { page, amount } => {
+            ClientRequest::QueryReportsSummary { page, amount } => {
                 let result = self.handle_client_reports_request(page, amount);
                 if let Err(app_error) = result {
                     return Err(app_error.add_entry(file!(), line!()));
@@ -475,7 +476,7 @@ impl UserService {
 
                 Ok(None)
             }
-            InClientPacket::QueryReport { report_id } => {
+            ClientRequest::QueryReport { report_id } => {
                 let result = self.handle_client_report_request(report_id);
                 if let Err(app_error) = result {
                     return Err(app_error.add_entry(file!(), line!()));
@@ -483,7 +484,7 @@ impl UserService {
 
                 Ok(None)
             }
-            InClientPacket::DeleteReport { report_id } => {
+            ClientRequest::DeleteReport { report_id } => {
                 let result = self.handle_client_delete_report_request(report_id);
                 if let Err(app_error) = result {
                     return Err(app_error.add_entry(file!(), line!()));
@@ -515,7 +516,7 @@ impl UserService {
     ) -> Result<Option<String>, AppError> {
         // Check protocol version.
         if client_net_protocol != NETWORK_PROTOCOL_VERSION {
-            let answer = OutClientPacket::LoginAnswer {
+            let answer = ClientAnswer::LoginAnswer {
                 is_ok: false,
                 is_admin: false,
                 fail_reason: Some(ClientLoginFailReason::WrongProtocol {
@@ -598,7 +599,7 @@ impl UserService {
                 ),
             );
 
-            let answer = OutClientPacket::LoginAnswer {
+            let answer = ClientAnswer::LoginAnswer {
                 is_ok: false,
                 is_admin: false,
                 fail_reason: Some(ClientLoginFailReason::NeedFirstPassword),
@@ -684,7 +685,7 @@ impl UserService {
                 );
 
                 // Send QR code.
-                let answer = OutClientPacket::LoginAnswer {
+                let answer = ClientAnswer::LoginAnswer {
                     is_ok: false,
                     is_admin: false,
                     fail_reason: Some(ClientLoginFailReason::SetupOTP { qr_code }),
@@ -699,7 +700,7 @@ impl UserService {
             } else {
                 if otp.is_empty() {
                     // Need OTP.
-                    let answer = OutClientPacket::LoginAnswer {
+                    let answer = ClientAnswer::LoginAnswer {
                         is_ok: false,
                         is_admin: false,
                         fail_reason: Some(ClientLoginFailReason::NeedOTP),
@@ -799,7 +800,7 @@ impl UserService {
         self.username = Some(username);
 
         // Answer "connected".
-        let answer = OutClientPacket::LoginAnswer {
+        let answer = ClientAnswer::LoginAnswer {
             is_ok: true,
             is_admin: _is_admin,
             fail_reason: None,
@@ -833,7 +834,7 @@ impl UserService {
         let report_count = report_count.unwrap();
 
         // Prepare packet to send.
-        let packet = OutClientPacket::ReportsSummary {
+        let packet = ClientAnswer::ReportsSummary {
             reports,
             total_reports: report_count,
         };
@@ -907,7 +908,7 @@ impl UserService {
         }
 
         // Prepare packet to send.
-        let packet = OutClientPacket::DeleteReportResult {
+        let packet = ClientAnswer::DeleteReportResult {
             is_found_and_removed: found,
         };
 
@@ -951,7 +952,7 @@ impl UserService {
         let report = result.unwrap();
 
         // Prepare packet to send.
-        let packet = OutClientPacket::Report {
+        let packet = ClientAnswer::Report {
             id: report.id,
             title: report.title,
             game_name: report.game_name,
@@ -994,7 +995,7 @@ impl UserService {
 
         match _result {
             AttemptResult::Fail { attempts_made } => {
-                let _answer = OutClientPacket::LoginAnswer {
+                let _answer = ClientAnswer::LoginAnswer {
                     is_ok: false,
                     is_admin: false,
                     fail_reason: Some(ClientLoginFailReason::WrongCredentials {
@@ -1018,7 +1019,7 @@ impl UserService {
                 }
             }
             AttemptResult::Ban => {
-                let _answer = OutClientPacket::LoginAnswer {
+                let _answer = ClientAnswer::LoginAnswer {
                     is_ok: false,
                     is_admin: false,
                     fail_reason: Some(ClientLoginFailReason::WrongCredentials {
@@ -1082,7 +1083,7 @@ impl UserService {
             }
 
             // Deserialize.
-            let packet = bincode::deserialize::<InClientPacket>(&packet);
+            let packet = bincode::deserialize::<ClientRequest>(&packet);
             if let Err(e) = packet {
                 return Err(AppError::new(&e.to_string(), file!(), line!()));
             }

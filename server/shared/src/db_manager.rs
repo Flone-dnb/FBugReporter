@@ -515,54 +515,46 @@ impl DatabaseManager {
         }
 
         // Get report attachments string.
-        let mut stmt = self
-            .connection
-            .prepare(&format!(
+        let attachments: Result<String> = self.connection.query_row(
+            &format!(
                 "SELECT attachments FROM {}
                 WHERE id == {}",
                 REPORT_TABLE_NAME, report_id
-            ))
-            .unwrap();
-        let result = stmt.query([]);
-        if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
-        }
-        let mut rows = result.unwrap();
-        let row = rows.next();
-        if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
-        }
-        if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
-        }
-        let row = row.unwrap();
-        if row.is_some() {
-            // Process attachments.
-            let row = row.unwrap();
-            let attachments: Result<String> = row.get(0);
-            if let Err(e) = attachments {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
-            }
-            let attachments = attachments.unwrap();
-            let attachment_ids: Vec<&str> = attachments.split_ascii_whitespace().collect();
-            for attachment_id in attachment_ids {
-                let attach_id = attachment_id.parse::<u64>();
-                if let Err(e) = attach_id {
-                    return Err(AppError::new(&e.to_string(), file!(), line!()));
-                }
-                let attach_id: u64 = attach_id.unwrap();
+            ),
+            [],
+            |row| row.get(0),
+        );
+        match attachments {
+            Ok(attachments) => {
+                if !attachments.is_empty() {
+                    // Process attachments.
+                    let attachment_ids: Vec<&str> = attachments.split_ascii_whitespace().collect();
+                    for attachment_id in attachment_ids {
+                        let attach_id = attachment_id.parse::<u64>();
+                        if let Err(e) = attach_id {
+                            return Err(AppError::new(&e.to_string(), file!(), line!()));
+                        }
+                        let attach_id: u64 = attach_id.unwrap();
 
-                // Remove attachment.
-                if let Err(e) = self.connection.execute(
-                    &format!(
-                        "DELETE FROM {}
-                        WHERE id == {}",
-                        ATTACHMENT_TABLE_NAME, attach_id
-                    ),
-                    params![],
-                ) {
-                    return Err(AppError::new(&e.to_string(), file!(), line!()));
+                        // Remove attachment.
+                        if let Err(e) = self.connection.execute(
+                            &format!(
+                                "DELETE FROM {}
+                            WHERE id == {}",
+                                ATTACHMENT_TABLE_NAME, attach_id
+                            ),
+                            params![],
+                        ) {
+                            return Err(AppError::new(&e.to_string(), file!(), line!()));
+                        }
+                    }
                 }
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                // Do nothing. No attachments to remove.
+            }
+            Err(e) => {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
             }
         }
 
@@ -1399,7 +1391,7 @@ impl DatabaseManager {
     fn upgrade_database_to_version_2(connection: &mut Connection) -> Result<(), AppError> {
         if let Err(e) = connection.execute(
             &format!(
-                "ALTER TABLE {} ADD COLUMN attachments TEXT",
+                "ALTER TABLE {} ADD COLUMN attachments TEXT NOT NULL DEFAULT ''",
                 REPORT_TABLE_NAME
             ),
             params![],

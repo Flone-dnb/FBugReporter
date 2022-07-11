@@ -47,6 +47,7 @@ enum IoResult {
 }
 
 // TODO: split reporter/client logic into different files: reporter_service, client_service
+// TODO: rename word 'packet' with 'message' everywhere
 pub struct UserService {
     logger: Arc<Mutex<LogManager>>,
     database: Arc<Mutex<DatabaseManager>>,
@@ -101,6 +102,7 @@ impl UserService {
             time_of_last_received_packet: Local::now(),
         }
     }
+
     /// Creates a new reporter service to process reporter requests.
     pub fn new_reporter(
         logger: Arc<Mutex<LogManager>>,
@@ -140,6 +142,7 @@ impl UserService {
             max_total_attachment_size_in_mb: max_attachment_size_in_mb,
         }
     }
+
     /// Processes reporter requests.
     ///
     /// After this function is finished the object should be destroyed.
@@ -187,6 +190,7 @@ impl UserService {
             return;
         }
     }
+
     /// Processes client requests.
     ///
     /// After this function is finished the object should be destroyed.
@@ -251,6 +255,7 @@ impl UserService {
             return;
         }
     }
+
     /// Processes the client packet.
     ///
     /// Returns `Option<String>` as `Ok`:
@@ -272,107 +277,154 @@ impl UserService {
                 game_report,
                 attachments,
             } => {
-                // Check protocol version.
-                if reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
-                    let result_code = ReportResult::WrongProtocol;
+                return self.handle_report_packet(reporter_net_protocol, game_report, attachments);
+            }
+        }
+    }
 
-                    // Notify reporter.
-                    if let Err(err) = UserService::send_packet(
-                        &mut self.socket,
-                        &self.secret_key,
-                        OutReporterPacket::ReportAnswer { result_code },
-                    ) {
-                        return Err(err.add_entry(file!(), line!()));
-                    }
+    /// Processes reporter's report packet.
+    ///
+    /// Returns `Option<String>` as `Ok`:
+    /// - if `Some(String)` then there was a "soft" error
+    /// (typically means that there was an error in client
+    /// data (wrong credentials, protocol version, etc...))
+    /// and we don't need to consider this as a bug,
+    /// - if `None` then the operation finished successfully.
+    ///
+    /// Returns `AppError` as `Err` if there was an internal error
+    /// (bug).
+    fn handle_report_packet(
+        &mut self,
+        reporter_net_protocol: u16,
+        game_report: GameReport,
+        attachments: Vec<ReportAttachment>,
+    ) -> Result<Option<String>, AppError> {
+        // Check protocol version.
+        if reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
+            let result_code = ReportResult::WrongProtocol;
 
-                    return Ok(Some(format!(
-                        "wrong protocol version (reporter: {}, our: {})",
-                        reporter_net_protocol, NETWORK_PROTOCOL_VERSION
-                    )));
-                }
+            // Notify reporter.
+            if let Err(err) = UserService::send_packet(
+                &mut self.socket,
+                &self.secret_key,
+                OutReporterPacket::ReportAnswer { result_code },
+            ) {
+                return Err(err.add_entry(file!(), line!()));
+            }
 
-                // Check field limits.
-                if let Err((field, length)) = UserService::check_report_field_limits(&game_report) {
-                    let result_code = ReportResult::ServerRejected;
+            return Ok(Some(format!(
+                "wrong protocol version (reporter: {}, our: {})",
+                reporter_net_protocol, NETWORK_PROTOCOL_VERSION
+            )));
+        }
 
-                    // Notify reporter.
-                    if let Err(err) = UserService::send_packet(
-                        &mut self.socket,
-                        &self.secret_key,
-                        OutReporterPacket::ReportAnswer { result_code },
-                    ) {
-                        return Err(err.add_entry(file!(), line!()));
-                    }
+        // Check field limits.
+        if let Err((field, length)) = UserService::check_report_field_limits(&game_report) {
+            let result_code = ReportResult::ServerRejected;
 
-                    return Ok(Some(format!(
-                        "report exceeds report field limits ({:?} has length of {} characters \
+            // Notify reporter.
+            if let Err(err) = UserService::send_packet(
+                &mut self.socket,
+                &self.secret_key,
+                OutReporterPacket::ReportAnswer { result_code },
+            ) {
+                return Err(err.add_entry(file!(), line!()));
+            }
+
+            return Ok(Some(format!(
+                "report exceeds report field limits ({:?} has length of {} characters \
                     while the limit is {})",
-                        field,
-                        length,
-                        field.max_length()
-                    )));
-                }
+                field,
+                length,
+                field.max_length()
+            )));
+        }
 
-                self.logger.lock().unwrap().print_and_log(
-                    LogCategory::Info,
-                    &format!(
-                        "Received a report from socket {}",
-                        self.socket_addr.unwrap()
-                    ),
-                );
+        self.logger.lock().unwrap().print_and_log(
+            LogCategory::Info,
+            &format!(
+                "Received a report from socket {}",
+                self.socket_addr.unwrap()
+            ),
+        );
 
-                {
-                    if let Err(err) = self
-                        .database
-                        .lock()
-                        .unwrap()
-                        .save_report(game_report, attachments)
-                    {
-                        let result_code = ReportResult::InternalError;
+        {
+            if let Err(err) = self
+                .database
+                .lock()
+                .unwrap()
+                .save_report(game_report, attachments)
+            {
+                let result_code = ReportResult::InternalError;
 
-                        // Notify reporter of our failure.
-                        if let Err(err) = UserService::send_packet(
-                            &mut self.socket,
-                            &self.secret_key,
-                            OutReporterPacket::ReportAnswer { result_code },
-                        ) {
-                            return Err(err.add_entry(file!(), line!()));
-                        }
-
-                        return Err(err.add_entry(file!(), line!()));
-                    }
-                }
-
-                self.logger.lock().unwrap().print_and_log(
-                    LogCategory::Info,
-                    &format!(
-                        "Saved a report from socket {}",
-                        match self.socket_addr {
-                            Some(addr) => {
-                                addr.to_string()
-                            }
-                            None => {
-                                String::new()
-                            }
-                        }
-                    ),
-                );
-
-                // Answer "OK".
+                // Notify reporter of our failure.
                 if let Err(err) = UserService::send_packet(
                     &mut self.socket,
                     &self.secret_key,
-                    OutReporterPacket::ReportAnswer {
-                        result_code: ReportResult::Ok,
-                    },
+                    OutReporterPacket::ReportAnswer { result_code },
                 ) {
                     return Err(err.add_entry(file!(), line!()));
                 }
+
+                return Err(err.add_entry(file!(), line!()));
             }
         }
 
-        Ok(None)
+        self.logger.lock().unwrap().print_and_log(
+            LogCategory::Info,
+            &format!(
+                "Saved a report from socket {}",
+                match self.socket_addr {
+                    Some(addr) => {
+                        addr.to_string()
+                    }
+                    None => {
+                        String::new()
+                    }
+                }
+            ),
+        );
+
+        // Answer "OK".
+        if let Err(err) = UserService::send_packet(
+            &mut self.socket,
+            &self.secret_key,
+            OutReporterPacket::ReportAnswer {
+                result_code: ReportResult::Ok,
+            },
+        ) {
+            return Err(err.add_entry(file!(), line!()));
+        }
+
+        return Ok(None);
     }
+
+    /// Processes reporter's attachment query packet.
+    ///
+    /// Returns `Option<String>` as `Ok`:
+    /// - if `Some(String)` then there was a "soft" error
+    /// (typically means that there was an error in client
+    /// data (wrong credentials, protocol version, etc...))
+    /// and we don't need to consider this as a bug,
+    /// - if `None` then the operation finished successfully.
+    ///
+    /// Returns `AppError` as `Err` if there was an internal error
+    /// (bug).
+    fn handle_attachment_size_query_packet(&mut self) -> Result<Option<String>, AppError> {
+        // Answer "OK".
+        if let Err(err) = UserService::send_packet(
+            &mut self.socket,
+            &self.secret_key,
+            OutReporterPacket::ReportAnswer {
+                result_code: ReportResult::Ok,
+            },
+        ) {
+            return Err(err.add_entry(file!(), line!()));
+        }
+
+        return Ok(None);
+    }
+
     /// Processes the client packet.
     ///
     /// Returns `Option<String>` as `Ok`:
@@ -445,6 +497,7 @@ impl UserService {
             }
         }
     }
+
     /// Processes the client login packet.
     ///
     /// Returns `Option<String>` as `Ok`:

@@ -19,7 +19,7 @@ rusqlite = "0.26.3"
 sha2 = "0.10.2"
 configparser = "3.0.0"
 totp-rs = {version = "2.0.0", features = ["qr"]}
-shared = {path = "../shared"}
+shared = {path = "../../shared"}
 
 [target.'cfg(windows)'.dependencies]
 platform-dirs = "0.3.0"

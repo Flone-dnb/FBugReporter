@@ -25,7 +25,7 @@ const TOTP_ALGORITHM: Algorithm = Algorithm::SHA1; // if changed, change protoco
 // Custom.
 use super::ban_manager::*;
 use super::net_packets::*;
-use crate::services::io::logger_service::*;
+use crate::io::log_manager::*;
 use shared::db_manager::DatabaseManager;
 use shared::error::AppError;
 use shared::report::*;
@@ -48,7 +48,7 @@ enum IoResult {
 
 // TODO: split reporter/client logic into different files: reporter_service, client_service
 pub struct UserService {
-    logger: Arc<Mutex<Logger>>,
+    logger: Arc<Mutex<LogManager>>,
     database: Arc<Mutex<DatabaseManager>>,
     socket: TcpStream,
     socket_addr: Option<SocketAddr>,
@@ -64,7 +64,7 @@ pub struct UserService {
 impl UserService {
     /// Creates a new client service to process client requests.
     pub fn new_client(
-        logger: Arc<Mutex<Logger>>,
+        logger: Arc<Mutex<LogManager>>,
         socket: TcpStream,
         addr: SocketAddr,
         connected_users_count: Arc<Mutex<usize>>,
@@ -103,7 +103,7 @@ impl UserService {
     }
     /// Creates a new reporter service to process reporter requests.
     pub fn new_reporter(
-        logger: Arc<Mutex<Logger>>,
+        logger: Arc<Mutex<LogManager>>,
         socket: TcpStream,
         addr: SocketAddr,
         connected_users_count: Arc<Mutex<usize>>,

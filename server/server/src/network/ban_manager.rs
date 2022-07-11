@@ -8,7 +8,7 @@ use chrono::{DateTime, Local};
 use configparser::ini::Ini;
 
 // Custom.
-use crate::services::io::{config_service::ServerConfig, logger_service::*};
+use crate::io::{config_manager::ConfigManager, log_manager::*};
 
 const BAN_FILE_NAME: &str = "banned_ips.ini";
 const BAN_SECTION_NAME: &str = "ban";
@@ -37,15 +37,15 @@ pub struct BannedIP {
     pub ban_start_time: DateTime<Local>,
 }
 pub struct BanManager {
-    pub config: Arc<ServerConfig>,
+    pub config: Arc<ConfigManager>,
     failed_ip_list: Mutex<Vec<FailedIP>>,
     banned_ip_list: Mutex<Vec<BannedIP>>,
-    logger: Arc<Mutex<Logger>>,
+    logger: Arc<Mutex<LogManager>>,
 }
 
 impl BanManager {
     /// Creates a new ban manager.
-    pub fn new(logger: Arc<Mutex<Logger>>, config: Arc<ServerConfig>) -> Self {
+    pub fn new(logger: Arc<Mutex<LogManager>>, config: Arc<ConfigManager>) -> Self {
         if config.max_allowed_login_attempts == 0 {
             panic!("max_allowed_login_attempts should not be zero or negative.");
         }
@@ -317,7 +317,7 @@ impl BanManager {
         count_ip
     }
     /// Saves the banned IP address to the disk.
-    fn store_banned_ip(ip: &BannedIP, logger: &Arc<Mutex<Logger>>) {
+    fn store_banned_ip(ip: &BannedIP, logger: &Arc<Mutex<LogManager>>) {
         let mut config = Ini::new();
         let _map = config.load(BAN_FILE_NAME);
 
@@ -338,7 +338,7 @@ impl BanManager {
         }
     }
     /// Removes the banned IP from the .ini file.
-    fn remove_banned_ip_from_disk(ip: &BannedIP, logger: &Arc<Mutex<Logger>>) {
+    fn remove_banned_ip_from_disk(ip: &BannedIP, logger: &Arc<Mutex<LogManager>>) {
         let mut config = Ini::new();
         let map = config.load(BAN_FILE_NAME);
         if map.is_err() {

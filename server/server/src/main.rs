@@ -1,19 +1,19 @@
 // Std.
 use std::env;
-use std::io;
-use std::io::*;
+use std::io::Write;
 
 // Custom.
-use services::io::logger_service::Logger;
-use services::network::net_service::NetService;
+use crate::io::log_manager::LogManager;
+use crate::network::net_service::NetService;
 
-mod services;
+mod io;
+mod network;
 
 fn main() {
     println!("FBugReporter (server) (v{}).", env!("CARGO_PKG_VERSION"));
     println!("Type 'help' to see commands...\n");
 
-    let net_service = NetService::new(Logger::new());
+    let net_service = NetService::new(LogManager::new());
     if let Err(err) = net_service {
         let error = err.add_entry(file!(), line!());
         panic!("{}", error);
@@ -39,7 +39,7 @@ fn main() {
     }
 
     loop {
-        if let Err(e) = io::stdout().flush() {
+        if let Err(e) = std::io::stdout().flush() {
             println!("could not flush stdout (error: {}), continuing...", e);
             continue;
         }
@@ -52,7 +52,7 @@ fn main() {
             }
             args.clear();
         } else {
-            if let Err(e) = io::stdin().read_line(&mut input) {
+            if let Err(e) = std::io::stdin().read_line(&mut input) {
                 println!("unable to read input (error: {}), continuing...", e);
                 continue;
             }

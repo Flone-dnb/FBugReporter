@@ -16,15 +16,15 @@ pub enum LogCategory {
     Error,
 }
 
-pub struct Logger {
+pub struct LogManager {
     current_log_file: String,
 }
 
-impl Logger {
+impl LogManager {
     /// Removes old log file and creates an empty one.
     pub fn new() -> Self {
         Self {
-            current_log_file: Logger::recreate_log_file(),
+            current_log_file: LogManager::recreate_log_file(),
         }
     }
     /// Prints text on the screen and writes it to log file.
@@ -100,7 +100,7 @@ impl Logger {
                 panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
             }
         } else {
-            Logger::remove_oldest_log_if_needed(&log_path);
+            LogManager::remove_oldest_log_if_needed(&log_path);
         }
 
         let local = Local::now();

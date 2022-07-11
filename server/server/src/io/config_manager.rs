@@ -6,7 +6,7 @@ use configparser::ini::Ini;
 use rand::Rng;
 
 // Custom.
-use super::logger_service::LOG_FILE_NAME;
+use super::log_manager::LOG_FILE_NAME;
 use shared::error::AppError;
 
 const RANDOM_PORT_RANGE: Range<u16> = 7000..65535;
@@ -30,7 +30,7 @@ const CONFIG_BAN_TIME_DURATION_IN_MIN: &str = "ban_time_duration_in_min";
 // --------------- login section end ---------------
 
 #[derive(Debug)]
-pub struct ServerConfig {
+pub struct ConfigManager {
     pub port_for_reporters: u16,
     pub port_for_clients: u16,
     pub max_attachment_size_in_mb: u64,
@@ -40,11 +40,11 @@ pub struct ServerConfig {
     pub log_file_path: String,
 }
 
-impl ServerConfig {
+impl ConfigManager {
     /// Reads config values from .ini file if it exists,
     /// otherwise using default values and creating a new config .ini file.
     pub fn new() -> Self {
-        let mut server_config = ServerConfig::default();
+        let mut server_config = ConfigManager::default();
 
         // Try reading config from .ini file.
         let mut config = Ini::new();
@@ -80,16 +80,16 @@ impl ServerConfig {
         server_config
     }
     fn default() -> Self {
-        let port_for_reporters = ServerConfig::generate_random_port(0);
-        let port_for_clients = ServerConfig::generate_random_port(port_for_reporters);
+        let port_for_reporters = ConfigManager::generate_random_port(0);
+        let port_for_clients = ConfigManager::generate_random_port(port_for_reporters);
         Self {
             port_for_reporters,
             port_for_clients,
             max_attachment_size_in_mb: DEFAULT_MAX_ATTACHMENT_SIZE_IN_MB,
             max_allowed_login_attempts: DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS,
             ban_time_duration_in_min: DEFAULT_BAN_TIME_DURATION_IN_MIN,
-            config_file_path: ServerConfig::get_config_file_path(),
-            log_file_path: ServerConfig::get_log_file_path(),
+            config_file_path: ConfigManager::get_config_file_path(),
+            log_file_path: ConfigManager::get_log_file_path(),
         }
     }
     /// Saves the current configuration to a file.
@@ -152,29 +152,29 @@ impl ServerConfig {
         // Server section started.
 
         // Read port for reporters.
-        if ServerConfig::read_value(
+        if ConfigManager::read_value(
             config,
             CONFIG_SERVER_SECTION_NAME,
             CONFIG_PORT_REPORTER_PARAM,
             &mut self.port_for_reporters,
-            ServerConfig::generate_random_port(0),
+            ConfigManager::generate_random_port(0),
         ) {
             some_values_were_empty = true;
         }
 
         // Read port for clients.
-        if ServerConfig::read_value(
+        if ConfigManager::read_value(
             config,
             CONFIG_SERVER_SECTION_NAME,
             CONFIG_PORT_CLIENT_PARAM,
             &mut self.port_for_clients,
-            ServerConfig::generate_random_port(self.port_for_reporters),
+            ConfigManager::generate_random_port(self.port_for_reporters),
         ) {
             some_values_were_empty = true;
         }
 
         // Read max allowed attachment size.
-        if ServerConfig::read_value(
+        if ConfigManager::read_value(
             config,
             CONFIG_SERVER_SECTION_NAME,
             CONFIG_MAX_ATTACHMENT_SIZE_IN_MB_PARAM,
@@ -187,7 +187,7 @@ impl ServerConfig {
         // Login section started.
 
         // Read max allowed login attempts until ban.
-        if ServerConfig::read_value(
+        if ConfigManager::read_value(
             config,
             CONFIG_LOGIN_SECTION_NAME,
             CONFIG_MAX_ALLOWED_LOGIN_ATTEMPTS_PARAM,
@@ -198,7 +198,7 @@ impl ServerConfig {
         }
 
         // Read ban time duration.
-        if ServerConfig::read_value(
+        if ConfigManager::read_value(
             config,
             CONFIG_LOGIN_SECTION_NAME,
             CONFIG_BAN_TIME_DURATION_IN_MIN,

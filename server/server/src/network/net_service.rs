@@ -4,17 +4,17 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 // Custom.
-use crate::services::{
-    io::config_service::ServerConfig,
-    io::logger_service::*,
+use crate::{
+    io::config_manager::ConfigManager,
+    io::log_manager::*,
     network::{ban_manager::BanManager, user_service::UserService},
 };
 use shared::db_manager::*;
 use shared::error::AppError;
 
 pub struct NetService {
-    pub logger: Arc<Mutex<Logger>>,
-    pub server_config: Arc<ServerConfig>,
+    pub logger: Arc<Mutex<LogManager>>,
+    pub server_config: Arc<ConfigManager>,
     connected_socket_count: Arc<Mutex<usize>>,
     database: Arc<Mutex<DatabaseManager>>,
     ban_manager: Arc<Mutex<BanManager>>,
@@ -25,8 +25,8 @@ impl NetService {
     ///
     /// Returns `AppError` if something went wrong
     /// when initializing/connecting to the database.
-    pub fn new(logger: Logger) -> Result<Self, AppError> {
-        let config = Arc::new(ServerConfig::new());
+    pub fn new(logger: LogManager) -> Result<Self, AppError> {
+        let config = Arc::new(ConfigManager::new());
 
         let db = DatabaseManager::new();
         if let Err(err) = db {
@@ -140,10 +140,10 @@ impl NetService {
     /// Waits for reporter connections.
     fn process_reporter_connections(
         listener_socket: TcpListener,
-        logger: Arc<Mutex<Logger>>,
+        logger: Arc<Mutex<LogManager>>,
         connected_count: Arc<Mutex<usize>>,
         database_manager: Arc<Mutex<DatabaseManager>>,
-        server_config: Arc<ServerConfig>,
+        server_config: Arc<ConfigManager>,
     ) {
         loop {
             // Wait for connection.
@@ -219,7 +219,7 @@ impl NetService {
     /// Waits for client connections.
     fn process_client_connections(
         listener_socket: TcpListener,
-        logger: Arc<Mutex<Logger>>,
+        logger: Arc<Mutex<LogManager>>,
         connected_count: Arc<Mutex<usize>>,
         database_manager: Arc<Mutex<DatabaseManager>>,
         ban_manager: Arc<Mutex<BanManager>>,

@@ -273,11 +273,19 @@ impl DatabaseManager {
         }
         let row = row.unwrap();
         if row.is_none() {
-            return Err(AppError::new(
-                &format!("report with id '{}' was not found", report_id),
-                file!(),
-                line!(),
-            ));
+            // Report not found, maybe it was just removed.
+            return Ok(ReportData {
+                id: report_id,
+                title: String::from("This report was removed by an administrator."),
+                game_name: String::new(),
+                game_version: String::new(),
+                text: String::new(),
+                date: String::new(),
+                time: String::new(),
+                sender_name: String::new(),
+                sender_email: String::new(),
+                os_info: String::new(),
+            });
         }
 
         let row = row.unwrap();
@@ -488,8 +496,6 @@ impl DatabaseManager {
 
         // Remove user.
         if let Err(e) = self.connection.execute(
-            // TODO: handle non existent user here
-            // password = hash(salt + hash(password))
             &format!(
                 "DELETE FROM {}
                 WHERE username == '{}'",
@@ -508,15 +514,6 @@ impl DatabaseManager {
     /// `Ok(false)` if the report was not found.
     /// On failure returns error description via `AppError`.
     pub fn remove_report(&self, report_id: u64) -> Result<bool, AppError> {
-        let result = self.is_report_exists(report_id);
-        if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
-        }
-        let exists = result.unwrap();
-        if exists == false {
-            return Ok(false);
-        }
-
         // Remove report.
         if let Err(e) = self.connection.execute(
             // TODO: handle non existent report here

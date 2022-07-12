@@ -28,13 +28,13 @@ const USER_TABLE_HASH: &[u8] = &[
     161, 64,
 ];
 const ATTACHMENT_TABLE_HASH: &[u8] = &[
-    186, 212, 252, 66, 200, 99, 177, 168, 109, 87, 220, 64, 41, 251, 213, 41, 206, 12, 178, 120,
-    152, 92, 212, 83, 112, 103, 76, 142, 67, 29, 177, 189, 95, 247, 73, 91, 42, 39, 13, 206, 93,
-    120, 251, 158, 121, 124, 159, 24, 235, 194, 75, 171, 29, 171, 90, 35, 253, 14, 114, 247, 192,
-    158, 164, 108,
+    93, 157, 12, 163, 145, 37, 18, 255, 0, 224, 239, 160, 43, 13, 61, 12, 238, 220, 239, 125, 195,
+    173, 133, 252, 189, 49, 48, 195, 211, 138, 4, 122, 22, 114, 178, 251, 159, 196, 114, 234, 5,
+    206, 193, 119, 119, 140, 106, 6, 44, 56, 184, 114, 190, 215, 142, 70, 38, 27, 98, 115, 88, 138,
+    125, 139,
 ];
 
-const SUPPORTED_DATABASE_VERSION: u64 = 2;
+const SUPPORTED_DATABASE_VERSION: u64 = 1;
 
 const SALT_LENGTH: u64 = 32;
 const OTP_SECRET_LENGTH: u64 = 256;
@@ -94,31 +94,33 @@ impl DatabaseManager {
 
         let mut connection = result.unwrap();
 
+        // Enable foreign keys.
+        if let Some(app_error) = Self::enable_foreign_keys(&mut connection) {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
         // Check 'version' table.
-        if let Err(app_error) = DatabaseManager::create_version_table_if_not_found(&mut connection)
-        {
+        if let Err(app_error) = Self::create_version_table_if_not_found(&mut connection) {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
         // Check 'report' table.
-        if let Err(app_error) = DatabaseManager::create_report_table_if_not_found(&mut connection) {
+        if let Err(app_error) = Self::create_report_table_if_not_found(&mut connection) {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
         // Check 'user' table.
-        if let Err(app_error) = DatabaseManager::create_user_table_if_not_found(&mut connection) {
+        if let Err(app_error) = Self::create_user_table_if_not_found(&mut connection) {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
         // Check 'attachment' table.
-        if let Err(app_error) =
-            DatabaseManager::create_attachment_table_if_not_found(&mut connection)
-        {
+        if let Err(app_error) = Self::create_attachment_table_if_not_found(&mut connection) {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
         // Handle old database version.
-        if let Err(app_error) = DatabaseManager::handle_old_database_version(&mut connection) {
+        if let Err(app_error) = Self::handle_old_database_version(&mut connection) {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
@@ -486,6 +488,7 @@ impl DatabaseManager {
 
         // Remove user.
         if let Err(e) = self.connection.execute(
+            // TODO: handle non existent user here
             // password = hash(salt + hash(password))
             &format!(
                 "DELETE FROM {}
@@ -514,52 +517,9 @@ impl DatabaseManager {
             return Ok(false);
         }
 
-        // Get report attachments string.
-        let attachments: Result<String> = self.connection.query_row(
-            &format!(
-                "SELECT attachments FROM {}
-                WHERE id == {}",
-                REPORT_TABLE_NAME, report_id
-            ),
-            [],
-            |row| row.get(0),
-        );
-        match attachments {
-            Ok(attachments) => {
-                if !attachments.is_empty() {
-                    // Process attachments.
-                    let attachment_ids: Vec<&str> = attachments.split_ascii_whitespace().collect();
-                    for attachment_id in attachment_ids {
-                        let attach_id = attachment_id.parse::<u64>();
-                        if let Err(e) = attach_id {
-                            return Err(AppError::new(&e.to_string(), file!(), line!()));
-                        }
-                        let attach_id: u64 = attach_id.unwrap();
-
-                        // Remove attachment.
-                        if let Err(e) = self.connection.execute(
-                            &format!(
-                                "DELETE FROM {}
-                            WHERE id == {}",
-                                ATTACHMENT_TABLE_NAME, attach_id
-                            ),
-                            params![],
-                        ) {
-                            return Err(AppError::new(&e.to_string(), file!(), line!()));
-                        }
-                    }
-                }
-            }
-            Err(rusqlite::Error::QueryReturnedNoRows) => {
-                // Do nothing. No attachments to remove.
-            }
-            Err(e) => {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
-            }
-        }
-
         // Remove report.
         if let Err(e) = self.connection.execute(
+            // TODO: handle non existent report here
             &format!(
                 "DELETE FROM {}
                 WHERE id == {}",
@@ -654,41 +614,9 @@ impl DatabaseManager {
         game_report: GameReport,
         attachments: Vec<ReportAttachment>,
     ) -> Result<(), AppError> {
-        // Insert report attachments into the database.
-        let mut attachment_ids: Vec<u64> = Vec::new();
-        for attachment in attachments {
-            let data_size_in_bytes = attachment.data.len();
-            let result: Result<u64> = self.connection.query_row(
-                &format!(
-                    "INSERT INTO {} 
-                    (
-                        file_name,
-                        data, 
-                        size_in_bytes 
-                    ) 
-                    VALUES 
-                    (?1, ?2, ?3) 
-                    RETURNING id",
-                    ATTACHMENT_TABLE_NAME
-                ),
-                params![attachment.file_name, attachment.data, data_size_in_bytes],
-                |row| row.get(0),
-            );
-            if let Err(e) = result {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
-            }
-            attachment_ids.push(result.unwrap());
-        }
-
-        let mut attachments_string = String::new();
-        for id in attachment_ids {
-            attachments_string += &id.to_string();
-            attachments_string += " ";
-        }
-
         // Insert report into the database.
         let datetime = Local::now();
-        if let Err(e) = self.connection.execute(
+        let result: Result<u64> = self.connection.query_row(
             &format!(
                 "INSERT INTO {} 
             (
@@ -700,11 +628,11 @@ impl DatabaseManager {
                 game_version, 
                 os_info, 
                 date_created_at, 
-                time_created_at,
-                attachments
+                time_created_at
             ) 
             VALUES 
-            (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) 
+            RETURNING id",
                 REPORT_TABLE_NAME
             ),
             params![
@@ -717,10 +645,41 @@ impl DatabaseManager {
                 game_report.client_os_info.to_string(),
                 datetime.date().naive_local().to_string(),
                 datetime.time().format("%H:%M:%S").to_string(),
-                attachments_string
             ],
-        ) {
+            |row| row.get(0),
+        );
+        if let Err(e) = result {
             return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let report_id = result.unwrap();
+
+        // Insert report attachments into the database.
+        for attachment in attachments {
+            let data_size_in_bytes = attachment.data.len();
+            let result = self.connection.execute(
+                &format!(
+                    "INSERT INTO {} 
+                    (
+                        file_name,
+                        data, 
+                        size_in_bytes,
+                        fk_report_id
+                    ) 
+                    VALUES 
+                    (?1, ?2, ?3, ?4)",
+                    ATTACHMENT_TABLE_NAME
+                ),
+                params![
+                    attachment.file_name,
+                    attachment.data,
+                    data_size_in_bytes,
+                    report_id
+                ],
+            );
+            if let Err(e) = result {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
         }
 
         Ok(())
@@ -1033,6 +992,16 @@ impl DatabaseManager {
 
         Ok(true)
     }
+    /// Enabling foreign keys protects us from violating foreign key constraints
+    /// and also enables ON DELETE CASCADE logic.
+    fn enable_foreign_keys(connection: &mut Connection) -> Option<AppError> {
+        let result = connection.execute("PRAGMA foreign_keys=on;", []);
+        if let Err(e) = result {
+            return Some(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        None
+    }
     /// Check if a given report exists in the database.
     ///
     /// Returns `Ok(true)` if the report exists, `Ok(false)` if not.
@@ -1259,7 +1228,9 @@ impl DatabaseManager {
                     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
                     file_name            TEXT NOT NULL,
                     data                 BLOB NOT NULL,
-                    size_in_bytes        INTEGER NUL NULL
+                    size_in_bytes        INTEGER NUL NULL,
+                    fk_report_id         INTEGER NOT NULL,
+                    FOREIGN KEY (fk_report_id) REFERENCES report (id) ON DELETE CASCADE
                 )",
             ATTACHMENT_TABLE_NAME
         );
@@ -1340,13 +1311,6 @@ impl DatabaseManager {
             }
         }
 
-        if version == 1 {
-            // Upgrade to version 2.
-            if let Err(app_error) = DatabaseManager::upgrade_database_to_version_2(connection) {
-                return Err(app_error.add_entry(file!(), line!()));
-            }
-        }
-
         // Handle old version here.
         // Upgrade old database to the new format here.
         //
@@ -1379,20 +1343,6 @@ impl DatabaseManager {
             &format!(
                 "ALTER TABLE {} ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0",
                 USER_TABLE_NAME
-            ),
-            params![],
-        ) {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
-        }
-
-        Ok(())
-    }
-    /// Upgrades the database from version `0` to version `2`.
-    fn upgrade_database_to_version_2(connection: &mut Connection) -> Result<(), AppError> {
-        if let Err(e) = connection.execute(
-            &format!(
-                "ALTER TABLE {} ADD COLUMN attachments TEXT NOT NULL DEFAULT ''",
-                REPORT_TABLE_NAME
             ),
             params![],
         ) {

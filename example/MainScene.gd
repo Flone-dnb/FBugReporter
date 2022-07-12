@@ -16,20 +16,15 @@ func _ready():
 	get_node("VBoxContainer/SenderNameHBoxContainer/SenderNameLineEdit").max_length = reporter.get_field_limit(2);
 	get_node("VBoxContainer/SenderEMailHBoxContainer/SenderEMailLineEdit").max_length = reporter.get_field_limit(3);
 	report_text_limit = reporter.get_field_limit(1);
-	
-# specify array of strings that contain paths to the files
-# it's safer to specify absolute paths
-# ! note that after you call reporter.send_report() you need to specify attachments again !
-func set_next_report_attachments(paths):
-	# specify attachments that you need to send with the report
-	# those can be log files or some other developer info
-	reporter.set_attachments(paths);
 
 func send_report(
-		report_name: String, report_text: String,
-		sender_name: String, sender_email: String):
+		report_name: String, # report name
+		report_text: String, # report text
+		sender_name: String, # optional sender name
+		sender_email: String, # optional sender email
+		report_attachments): # an array of strings that contain paths to the files to attach to report, it's safer to specify absolute paths
 	var result_code: int = reporter.send_report(
-		report_name, report_text, sender_name, sender_email, game_name, game_version);
+		report_name, report_text, sender_name, sender_email, game_name, game_version, report_attachments);
 	if result_code != 0: # if result_code == 0 then everything is OK and the server received your report, otherwise:
 		# (it's up to you whether you want to handle all error codes or not, you could ignore the result code or just check if it's equal to 0)
 		# (by handling all possible result codes you can provide more information to your user)
@@ -160,7 +155,8 @@ func _on_SendReportButton_pressed():
 		get_node("VBoxContainer/ReportNameHBoxContainer/ReportNameLineEdit").text,
 		get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text,
 		get_node("VBoxContainer/SenderNameHBoxContainer/SenderNameLineEdit").text,
-		get_node("VBoxContainer/SenderEMailHBoxContainer/SenderEMailLineEdit").text);
+		get_node("VBoxContainer/SenderEMailHBoxContainer/SenderEMailLineEdit").text,
+		[]); # developer specified attachments
 
 # text edit character limit
 var current_text = ''

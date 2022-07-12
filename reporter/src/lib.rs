@@ -19,7 +19,6 @@ use shared::misc::report::*;
 #[inherit(Node)]
 struct Reporter {
     server_addr: Option<SocketAddrV4>,
-    attachments: Vec<String>,
     last_report: Option<GameReport>,
     last_error: String,
 }
@@ -31,7 +30,6 @@ impl Reporter {
             server_addr: None,
             last_report: None,
             last_error: String::new(),
-            attachments: Vec::new(),
         }
     }
 
@@ -76,11 +74,6 @@ impl Reporter {
     }
 
     #[export]
-    fn set_attachments(&mut self, _owner: &Node, attachments: Vec<String>) {
-        self.attachments = attachments;
-    }
-
-    #[export]
     fn send_report(
         &mut self,
         _owner: &Node,
@@ -90,6 +83,7 @@ impl Reporter {
         sender_email: String,
         game_name: String,
         game_version: String,
+        attachments: Vec<String>,
     ) -> i32 {
         if self.server_addr.is_none() {
             return ReportResult::ServerNotSet.value();
@@ -112,20 +106,24 @@ impl Reporter {
 
         // Generate report attachments (if needed).
         let mut report_attachments: Vec<ReportAttachment> = Vec::new();
-        if !self.attachments.is_empty() {
+        if !attachments.is_empty() {
             // Check that the specified paths exist.
-            for path in self.attachments.iter() {
+            for path in attachments.iter() {
                 if !Path::new(&path).exists() {
                     return ReportResult::AttachmentDoesNotExist.value();
                 }
             }
 
-            let result = Self::generate_attachments_from_paths(self.attachments.clone());
+            let result = Self::generate_attachments_from_paths(attachments);
             if let Err(e) = result {
                 logger.log(&e);
                 return ReportResult::InternalError.value();
             }
             report_attachments = result.unwrap();
+
+            for attachment in report_attachments.iter() {
+                logger.log(&format!("Report attachment: {}", attachment.file_name));
+            }
         }
 
         // Check input length.
@@ -146,13 +144,14 @@ impl Reporter {
         if result_code == ReportResult::Ok {
             // Save report.
             self.last_report = Some(report);
-            self.attachments.clear();
+            logger.log("Successfully sent the report.");
         } else {
             if error_message.is_none() {
                 self.last_error = String::from("Error message is None.");
             } else {
-                self.last_error = error_message.unwrap();
+                self.last_error = error_message.unwrap().to_string();
             }
+            logger.log(&self.last_error);
         }
 
         return result_code.value();

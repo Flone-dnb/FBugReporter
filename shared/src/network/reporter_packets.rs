@@ -8,7 +8,7 @@ use crate::misc::report::*;
 /// If made changes, change protocol version.
 #[derive(Serialize, Deserialize)]
 pub enum ReporterRequest {
-    ReportPacket {
+    Report {
         reporter_net_protocol: u16,
         game_report: GameReport,
         attachments: Vec<ReportAttachment>,

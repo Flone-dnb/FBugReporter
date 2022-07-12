@@ -7,13 +7,9 @@ license = "MIT"
 
 [dependencies]
 gdnative = "0.10.0"
-aes = "0.8.1"
-cbc = {version = "0.1.2", features = ["alloc"]}
 rand = "0.8.5"
-num-bigint = {version = "0.4.3", features = ["serde", "rand"]}
 serde = {version = "1.0.137", features = ["derive"]}
 bincode = "1.3.3"
-cmac = "0.7.1"
 chrono = "0.4.19"
 os_info = "3.4.0"
 backtrace = "0.3.65"

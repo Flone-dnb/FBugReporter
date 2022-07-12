@@ -266,7 +266,7 @@ impl UserService {
         packet: ReporterRequest,
     ) -> Result<Option<String>, AppError> {
         match packet {
-            ReporterRequest::ReportPacket {
+            ReporterRequest::Report {
                 reporter_net_protocol,
                 game_report,
                 attachments,

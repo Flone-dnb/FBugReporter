@@ -57,7 +57,7 @@ impl UserService {
             logger.lock().unwrap().print_and_log(
                 LogCategory::Info,
                 &format!(
-                    "Accepted connection with {}:{}\n--- [connected: {}] ---",
+                    "Accepted connection with {}:{}\n------------------------- [connected: {}] -------------------------",
                     addr.ip(),
                     addr.port(),
                     guard
@@ -97,7 +97,7 @@ impl UserService {
             logger.lock().unwrap().print_and_log(
                 LogCategory::Info,
                 &format!(
-                    "Accepted connection with {}:{}\n--- [connected: {}] ---",
+                    "Accepted connection with {}:{}\n------------------------- [connected: {}] -------------------------",
                     addr.ip(),
                     addr.port(),
                     guard
@@ -1194,7 +1194,10 @@ impl Drop for UserService {
 
         let mut guard = self.connected_users_count.lock().unwrap();
         *guard -= 1;
-        _message += &format!("--- [connected: {}] ---", guard);
+        _message += &format!(
+            "------------------------- [connected: {}] -------------------------",
+            guard
+        );
 
         self.logger
             .lock()

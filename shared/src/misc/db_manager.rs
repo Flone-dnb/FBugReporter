@@ -516,7 +516,6 @@ impl DatabaseManager {
     pub fn remove_report(&self, report_id: u64) -> Result<bool, AppError> {
         // Remove report.
         if let Err(e) = self.connection.execute(
-            // TODO: handle non existent report here
             &format!(
                 "DELETE FROM {}
                 WHERE id == {}",
@@ -998,36 +997,6 @@ impl DatabaseManager {
         }
 
         None
-    }
-    /// Check if a given report exists in the database.
-    ///
-    /// Returns `Ok(true)` if the report exists, `Ok(false)` if not.
-    /// On failure returns `AppError`.
-    fn is_report_exists(&self, report_id: u64) -> Result<bool, AppError> {
-        let mut stmt = self
-            .connection
-            .prepare(&format!(
-                "SELECT id FROM {} WHERE id='{}'",
-                REPORT_TABLE_NAME, report_id
-            ))
-            .unwrap();
-        let result = stmt.query([]);
-        if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
-        }
-
-        let mut rows = result.unwrap();
-
-        let row = rows.next();
-        if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
-        }
-        let row = row.unwrap();
-        if row.is_none() {
-            return Ok(false);
-        }
-
-        Ok(true)
     }
     /// Creates the `report` table if it was not found in the database.
     fn create_report_table_if_not_found(connection: &mut Connection) -> Result<(), AppError> {

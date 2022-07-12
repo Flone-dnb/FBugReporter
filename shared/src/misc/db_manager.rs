@@ -171,15 +171,16 @@ impl DatabaseManager {
             page = 1;
         }
 
-        let start_id: u64 = (page - 1) * amount;
+        let start_row: u64 = (page - 1) * amount;
 
         let mut stmt = self
             .connection
             .prepare(&format!(
                 "SELECT id, report_name, game_name, date_created_at, time_created_at \
-                 FROM {} WHERE id > {} \
-                 ORDER BY id LIMIT {}",
-                REPORT_TABLE_NAME, start_id, amount
+                 FROM {} \
+                 ORDER BY id LIMIT {} \
+                 OFFSET {}",
+                REPORT_TABLE_NAME, amount, start_row
             ))
             .unwrap();
         let result = stmt.query([]);

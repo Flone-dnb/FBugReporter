@@ -41,7 +41,7 @@ impl MainLayout {
     }
     pub fn build_ui() -> impl Widget<ApplicationState> {
         ViewSwitcher::new(
-            // repaint UI when current page changed
+            // repaint UI when the current page is changed
             |data: &ApplicationState, _env| data.main_layout.current_page,
             |selector, data, _env| match selector {
                 _ => Box::new(MainLayout::build_ui_internal(data)),
@@ -62,7 +62,7 @@ impl MainLayout {
             .with_child(ReportWidget::build_title_ui())
             .with_default_spacer();
 
-        if data.main_layout.reports.borrow().len() == 0 {
+        if data.main_layout.reports.borrow().len() == 0 && data.main_layout.current_page == 1 {
             reports_column
                 .add_child(Label::new("No reports were received yet!").with_text_size(TEXT_SIZE))
         } else {
@@ -128,7 +128,7 @@ impl MainLayout {
                                             )
                                             .disabled_if(|data: &ApplicationState, _env| {
                                                 data.main_layout.current_page
-                                                    == MainLayout::calculate_last_page(
+                                                    >= MainLayout::calculate_last_page(
                                                         data.main_layout.total_reports.get(),
                                                     )
                                             })
@@ -154,7 +154,7 @@ impl MainLayout {
                             )
                             .disabled_if(|data: &ApplicationState, _env| {
                                 data.main_layout.current_page
-                                    == MainLayout::calculate_last_page(
+                                    >= MainLayout::calculate_last_page(
                                         data.main_layout.total_reports.get(),
                                     )
                             })
@@ -245,41 +245,25 @@ impl MainLayout {
         data.main_layout.current_page = 1;
     }
     fn on_prev_page_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
-        let result = data
-            .net_service
-            .lock()
-            .unwrap()
-            .query_reports(data.main_layout.current_page - 1, REPORT_COUNT_PER_PAGE);
-
-        if let Err(app_error) = result {
-            if app_error.get_message().contains("FIN") {
-                data.current_layout = Layout::Connect;
-                data.connect_layout.connect_error = format!(
-                    "{}\nMost likely the server \
-                    closed connection due to your inactivity.",
-                    app_error.get_message()
-                );
-            } else {
-                data.logger_service
-                    .lock()
-                    .unwrap()
-                    .log(&app_error.to_string());
-            }
-            return;
-        }
-
-        let (reports, total_count) = result.unwrap();
-        *data.main_layout.reports.borrow_mut() = reports;
-        data.main_layout.total_reports.set(total_count);
-
-        data.main_layout.current_page -= 1;
+        Self::load_page(data, false);
     }
     fn on_next_page_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
+        Self::load_page(data, true);
+    }
+    /// Loads a new page of reports.
+    ///
+    /// Parameters:
+    /// - `data`: application data.
+    /// - `is_next`: specify `true` to load the next page, `false` to load the previous page.
+    fn load_page(data: &mut ApplicationState, is_next: bool) {
+        let page_diff: i64 = if is_next { 1 } else { -1 };
+        let new_page = (data.main_layout.current_page as i64 + page_diff) as u64;
+
         let result = data
             .net_service
             .lock()
             .unwrap()
-            .query_reports(data.main_layout.current_page + 1, REPORT_COUNT_PER_PAGE);
+            .query_reports(new_page, REPORT_COUNT_PER_PAGE);
 
         if let Err(app_error) = result {
             if app_error.get_message().contains("FIN") {
@@ -302,7 +286,7 @@ impl MainLayout {
         *data.main_layout.reports.borrow_mut() = reports;
         data.main_layout.total_reports.set(total_count);
 
-        data.main_layout.current_page += 1;
+        data.main_layout.current_page = new_page;
     }
     fn calculate_last_page(total_reports: u64) -> u64 {
         if total_reports <= REPORT_COUNT_PER_PAGE {

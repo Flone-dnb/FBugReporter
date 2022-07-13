@@ -157,9 +157,9 @@ impl DatabaseManager {
     }
     /// Returns summary of reports from the database.
     ///
-    /// Parameters:
-    /// - `page`: a "page" to query reports from
-    /// - `amount`: amount of reports to query
+    /// ## Arguments:
+    /// * `page`: a "page" to query reports from
+    /// * `amount`: amount of reports to query
     ///
     /// In the database reports exist as a "list"
     /// to implement "paging" in client application we use 2 values:
@@ -376,9 +376,9 @@ impl DatabaseManager {
     }
     /// Adds a new user to the database.
     ///
-    /// Parameters:
-    /// - `username` login of the new user
-    /// - `is_admin` whether the user should have admin privileges or not
+    /// ## Arguments:
+    /// * `username` login of the new user
+    /// * `is_admin` whether the user should have admin privileges or not
     /// (be able to delete reports using the client application).
     pub fn add_user(&self, username: &str, is_admin: bool) -> AddUserResult {
         // Check if username contains forbidden characters.

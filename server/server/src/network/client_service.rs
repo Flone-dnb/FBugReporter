@@ -12,52 +12,55 @@ const TOTP_ALGORITHM: Algorithm = Algorithm::SHA1; // if changed, change protoco
 
 // Custom.
 use super::ban_manager::*;
+use super::net_service::MAX_MESSAGE_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS;
 use crate::io::log_manager::*;
 use shared::misc::db_manager::DatabaseManager;
 use shared::misc::error::AppError;
-use shared::misc::report::*;
 use shared::network::client_packets::*;
 use shared::network::messaging::*;
 use shared::network::net_params::*;
-use shared::network::reporter_packets::*;
 
-const MAX_PACKET_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS: u64 = 131_072; // 128 kB
 const KEEP_ALIVE_CHECK_INTERVAL_MS: u64 = 60000; // 1 minute
 const DISCONNECT_IF_INACTIVE_IN_SEC: u64 = 1800; // 30 minutes
 
-// TODO: split reporter/client logic into different files: reporter_service, client_service
-// TODO: rename word 'packet' with 'message' everywhere
-pub struct UserService {
+pub struct ClientService {
     logger: Arc<Mutex<LogManager>>,
     database: Arc<Mutex<DatabaseManager>>,
     socket: TcpStream,
-    socket_addr: Option<SocketAddr>,
+    socket_addr: SocketAddr,
     secret_key: [u8; SECRET_KEY_SIZE],
-    connected_users_count: Arc<Mutex<usize>>,
+    connected_count: Arc<Mutex<usize>>,
     exit_error: Option<Result<String, AppError>>,
     ban_manager: Option<Arc<Mutex<BanManager>>>,
     username: Option<String>,
-    time_of_last_received_packet: DateTime<Local>, // only for clients
-    max_total_attachment_size_in_mb: u64,          // only for reporters
+    time_of_last_received_message: DateTime<Local>,
 }
 
-impl UserService {
+impl ClientService {
     /// Creates a new client service to process client requests.
-    pub fn new_client(
+    ///
+    /// ## Arguments
+    /// * `logger`: log manager for logging.
+    /// * `socket`: connected client socket.
+    /// * `addr`: client socket address.
+    /// * `connected_users_count`: shared variable that stores total connections.
+    /// * `database`: database manager that handles the database.
+    /// * `ban_manager`: ban manager for banning clients.
+    pub fn new(
         logger: Arc<Mutex<LogManager>>,
         socket: TcpStream,
         addr: SocketAddr,
-        connected_users_count: Arc<Mutex<usize>>,
+        connected_count: Arc<Mutex<usize>>,
         database: Arc<Mutex<DatabaseManager>>,
         ban_manager: Option<Arc<Mutex<BanManager>>>,
     ) -> Self {
         {
-            let mut guard = connected_users_count.lock().unwrap();
+            let mut guard = connected_count.lock().unwrap();
             *guard += 1;
             logger.lock().unwrap().print_and_log(
                 LogCategory::Info,
                 &format!(
-                    "Accepted connection with {}:{}\n------------------------- [connected: {}] -------------------------",
+                    "Accepted connection with client {}:{}\n------------------------- [connected: {}] -------------------------",
                     addr.ip(),
                     addr.port(),
                     guard
@@ -67,126 +70,28 @@ impl UserService {
 
         let socket_addr = socket.peer_addr().unwrap();
 
-        UserService {
+        ClientService {
             logger,
             socket,
-            connected_users_count,
+            connected_count,
             exit_error: None,
             secret_key: [0; SECRET_KEY_SIZE],
             database,
             ban_manager,
-            max_total_attachment_size_in_mb: 0,
             username: None,
-            socket_addr: Some(socket_addr),
-            time_of_last_received_packet: Local::now(),
+            socket_addr,
+            time_of_last_received_message: Local::now(),
         }
     }
 
-    /// Creates a new reporter service to process reporter requests.
-    pub fn new_reporter(
-        logger: Arc<Mutex<LogManager>>,
-        socket: TcpStream,
-        addr: SocketAddr,
-        connected_users_count: Arc<Mutex<usize>>,
-        database: Arc<Mutex<DatabaseManager>>,
-        max_attachment_size_in_mb: u64,
-    ) -> Self {
-        {
-            let mut guard = connected_users_count.lock().unwrap();
-            *guard += 1;
-            logger.lock().unwrap().print_and_log(
-                LogCategory::Info,
-                &format!(
-                    "Accepted connection with {}:{}\n------------------------- [connected: {}] -------------------------",
-                    addr.ip(),
-                    addr.port(),
-                    guard
-                ),
-            );
-        }
-
-        let socket_addr = socket.peer_addr().unwrap();
-
-        UserService {
-            logger,
-            socket,
-            connected_users_count,
-            exit_error: None,
-            secret_key: [0; SECRET_KEY_SIZE],
-            database,
-            ban_manager: None,
-            socket_addr: Some(socket_addr),
-            username: None,
-            time_of_last_received_packet: Local::now(),
-            max_total_attachment_size_in_mb: max_attachment_size_in_mb,
-        }
-    }
-
-    /// Processes reporter requests.
-    ///
-    /// After this function is finished the object should be destroyed.
-    pub fn process_reporter(&mut self) {
-        let secret_key = start_establishing_secure_connection(&mut self.socket);
-        if let Err(app_error) = secret_key {
-            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
-            return;
-        }
-        let result = secret_key.unwrap().try_into();
-        if result.is_err() {
-            self.exit_error = Some(Err(AppError::new(
-                "failed to convert Vec<u8> to generic array",
-                file!(),
-                line!(),
-            )));
-            return;
-        }
-        self.secret_key = result.unwrap();
-
-        let max_allowed_message_size = MAX_PACKET_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS
-            + (self.max_total_attachment_size_in_mb * 1024 * 1024);
-
-        let mut is_fin = false; // don't check, react to FIN as error
-        let packet = receive_message(
-            &mut self.socket,
-            &self.secret_key,
-            Some(MAX_WAIT_TIME_IN_READ_WRITE_MS),
-            max_allowed_message_size,
-            &mut is_fin,
-        );
-        if let Err(app_error) = packet {
-            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
-            return;
-        }
-        let packet = packet.unwrap();
-
-        // Deserialize.
-        let packet = bincode::deserialize::<ReporterRequest>(&packet);
-        if let Err(e) = packet {
-            self.exit_error = Some(Err(AppError::new(&e.to_string(), file!(), line!())));
-            return;
-        }
-        let packet = packet.unwrap();
-
-        let result = self.handle_reporter_packet(packet);
-        if let Err(app_error) = result {
-            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
-            return;
-        }
-        let result = result.unwrap();
-        if result.is_some() {
-            self.exit_error = Some(Ok(result.unwrap()));
-            return;
-        }
-    }
-
-    /// Processes client requests.
+    /// Processes client requests until finished communication.
     ///
     /// After this function is finished the object should be destroyed.
     ///
-    /// # Warning
+    /// ## Warning
     /// Only not banned clients should be processed here.
     /// This function assumes the client is not banned.
-    pub fn process_client(&mut self) {
+    pub fn process(mut self) {
         let secret_key = start_establishing_secure_connection(&mut self.socket);
         if let Err(app_error) = secret_key {
             self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
@@ -204,29 +109,29 @@ impl UserService {
         self.secret_key = result.unwrap();
 
         let mut is_fin = false; // don't check, react to FIN as error
-        let packet = receive_message(
+        let message = receive_message(
             &mut self.socket,
             &self.secret_key,
             Some(MAX_WAIT_TIME_IN_READ_WRITE_MS),
-            MAX_PACKET_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS,
+            MAX_MESSAGE_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS,
             &mut is_fin,
         );
-        if let Err(e) = packet {
+        if let Err(e) = message {
             self.exit_error = Some(Err(e.add_entry(file!(), line!())));
             return;
         }
-        let packet = packet.unwrap();
+        let message = message.unwrap();
 
         // Deserialize.
-        let packet = bincode::deserialize::<ClientRequest>(&packet);
-        if let Err(e) = packet {
+        let message = bincode::deserialize::<ClientRequest>(&message);
+        if let Err(e) = message {
             self.exit_error = Some(Err(AppError::new(&e.to_string(), file!(), line!())));
             return;
         }
-        let packet = packet.unwrap();
+        let message = message.unwrap();
 
-        // Handle packet.
-        let result = self.handle_client_packet(packet);
+        // Handle message.
+        let result = self.handle_client_message(message);
         if let Err(app_error) = result {
             self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
             return;
@@ -250,187 +155,35 @@ impl UserService {
         }
     }
 
-    /// Processes the client packet.
+    /// Processes the client message.
     ///
     /// Returns `Option<String>` as `Ok`:
     /// - if `Some(String)` then there was a "soft" error
     /// (typically means that there was an error in client
-    /// data (wrong credentials, protocol version, etc...)
+    /// data (wrong credentials, protocol version, etc...))
     /// and we don't need to consider this as a bug,
     /// - if `None` then the operation finished successfully.
     ///
     /// Returns `AppError` as `Err` if there was an internal error
     /// (bug).
-    fn handle_reporter_packet(
+    fn handle_client_message(
         &mut self,
-        packet: ReporterRequest,
+        message: ClientRequest,
     ) -> Result<Option<String>, AppError> {
-        match packet {
-            ReporterRequest::Report {
-                reporter_net_protocol,
-                game_report,
-                attachments,
-            } => {
-                return self.handle_report_packet(reporter_net_protocol, game_report, attachments);
-            }
-        }
-    }
-
-    /// Processes reporter's report packet.
-    ///
-    /// Returns `Option<String>` as `Ok`:
-    /// - if `Some(String)` then there was a "soft" error
-    /// (typically means that there was an error in client
-    /// data (wrong credentials, protocol version, etc...))
-    /// and we don't need to consider this as a bug,
-    /// - if `None` then the operation finished successfully.
-    ///
-    /// Returns `AppError` as `Err` if there was an internal error
-    /// (bug).
-    fn handle_report_packet(
-        &mut self,
-        reporter_net_protocol: u16,
-        game_report: GameReport,
-        attachments: Vec<ReportAttachment>,
-    ) -> Result<Option<String>, AppError> {
-        // Check protocol version.
-        if reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
-            let result_code = ReportResult::WrongProtocol;
-
-            // Notify reporter.
-            if let Some(err) = send_message(
-                &mut self.socket,
-                &self.secret_key,
-                ReporterAnswer::ReportRequestResult { result_code },
-            ) {
-                return Err(err.add_entry(file!(), line!()));
-            }
-
-            return Ok(Some(format!(
-                "wrong protocol version (reporter: {}, our: {})",
-                reporter_net_protocol, NETWORK_PROTOCOL_VERSION
-            )));
-        }
-
-        // Check field limits.
-        if let Err((field, length)) = UserService::check_report_field_limits(&game_report) {
-            let result_code = ReportResult::ServerRejected;
-
-            // Notify reporter.
-            if let Some(err) = send_message(
-                &mut self.socket,
-                &self.secret_key,
-                ReporterAnswer::ReportRequestResult { result_code },
-            ) {
-                return Err(err.add_entry(file!(), line!()));
-            }
-
-            return Ok(Some(format!(
-                "report exceeds report field limits ({:?} has length of {} characters \
-                    while the limit is {})",
-                field,
-                length,
-                field.max_length()
-            )));
-        }
-
-        self.logger.lock().unwrap().print_and_log(
-            LogCategory::Info,
-            &format!(
-                "Received a report from socket {}",
-                self.socket_addr.unwrap()
-            ),
-        );
-
-        {
-            if let Err(err) = self
-                .database
-                .lock()
-                .unwrap()
-                .save_report(game_report, attachments)
-            {
-                let result_code = ReportResult::InternalError;
-
-                // Notify reporter of our failure.
-                if let Some(err) = send_message(
-                    &mut self.socket,
-                    &self.secret_key,
-                    ReporterAnswer::ReportRequestResult { result_code },
-                ) {
-                    return Err(err.add_entry(file!(), line!()));
-                }
-
-                return Err(err.add_entry(file!(), line!()));
-            }
-        }
-
-        self.logger.lock().unwrap().print_and_log(
-            LogCategory::Info,
-            &format!(
-                "Saved a report from socket {}",
-                match self.socket_addr {
-                    Some(addr) => {
-                        addr.to_string()
-                    }
-                    None => {
-                        String::new()
-                    }
-                }
-            ),
-        );
-
-        // Answer "OK".
-        if let Some(err) = send_message(
-            &mut self.socket,
-            &self.secret_key,
-            ReporterAnswer::ReportRequestResult {
-                result_code: ReportResult::Ok,
-            },
-        ) {
-            return Err(err.add_entry(file!(), line!()));
-        }
-
-        return Ok(None);
-    }
-
-    /// Processes reporter's attachment query packet.
-    ///
-    /// Returns `Option<String>` as `Ok`:
-    /// - if `Some(String)` then there was a "soft" error
-    /// (typically means that there was an error in client
-    /// data (wrong credentials, protocol version, etc...))
-    /// and we don't need to consider this as a bug,
-    /// - if `None` then the operation finished successfully.
-    ///
-    /// Returns `AppError` as `Err` if there was an internal error
-    /// (bug).
-    fn handle_attachment_size_query_packet(&mut self) -> Result<Option<String>, AppError> {
-        // TODO
-
-        return Ok(None);
-    }
-
-    /// Processes the client packet.
-    ///
-    /// Returns `Option<String>` as `Ok`:
-    /// - if `Some(String)` then there was a "soft" error
-    /// (typically means that there was an error in client
-    /// data (wrong credentials, protocol version, etc...))
-    /// and we don't need to consider this as a bug,
-    /// - if `None` then the operation finished successfully.
-    ///
-    /// Returns `AppError` as `Err` if there was an internal error
-    /// (bug).
-    fn handle_client_packet(&mut self, packet: ClientRequest) -> Result<Option<String>, AppError> {
-        match packet {
+        match message {
             ClientRequest::Login {
                 client_net_protocol,
                 username,
                 password,
                 otp,
             } => {
-                let result =
-                    self.handle_client_login(client_net_protocol, username, password, otp, None);
+                let result = self.handle_client_login_request(
+                    client_net_protocol,
+                    username,
+                    password,
+                    otp,
+                    None,
+                );
                 if let Err(app_error) = result {
                     return Err(app_error.add_entry(file!(), line!()));
                 }
@@ -443,7 +196,7 @@ impl UserService {
                 old_password,
                 new_password,
             } => {
-                let result = self.handle_client_login(
+                let result = self.handle_client_login_request(
                     client_net_protocol,
                     username,
                     old_password,
@@ -483,7 +236,7 @@ impl UserService {
         }
     }
 
-    /// Processes the client login packet.
+    /// Processes the client login request.
     ///
     /// Returns `Option<String>` as `Ok`:
     /// - if `Some(String)` then there was a "soft" error
@@ -494,7 +247,7 @@ impl UserService {
     ///
     /// Returns `AppError` as `Err` if there was an internal error
     /// (bug).
-    fn handle_client_login(
+    fn handle_client_login_request(
         &mut self,
         client_net_protocol: u16,
         username: String,
@@ -793,6 +546,7 @@ impl UserService {
 
         Ok(None)
     }
+
     /// Handles client's "query reports" request.
     ///
     /// Will query reports and send them to the client.
@@ -815,20 +569,21 @@ impl UserService {
         }
         let report_count = report_count.unwrap();
 
-        // Prepare packet to send.
-        let packet = ClientAnswer::ReportsSummary {
+        // Prepare message to send.
+        let message = ClientAnswer::ReportsSummary {
             reports,
             total_reports: report_count,
         };
 
         // Send reports.
-        let result = send_message(&mut self.socket, &self.secret_key, packet);
+        let result = send_message(&mut self.socket, &self.secret_key, message);
         if let Some(app_error) = result {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
         Ok(())
     }
+
     /// Handles client's "delete report" request.
     ///
     /// Looks if the client has admin privileges and removes a report
@@ -889,19 +644,20 @@ impl UserService {
             );
         }
 
-        // Prepare packet to send.
-        let packet = ClientAnswer::DeleteReportResult {
+        // Prepare message to send.
+        let message = ClientAnswer::DeleteReportResult {
             is_found_and_removed: found,
         };
 
         // Send reports.
-        let result = send_message(&mut self.socket, &self.secret_key, packet);
+        let result = send_message(&mut self.socket, &self.secret_key, message);
         if let Some(app_error) = result {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
         Ok(())
     }
+
     /// Handles client's "query report" request.
     ///
     /// Queries the specified report from the database and returns
@@ -933,8 +689,8 @@ impl UserService {
         }
         let report = result.unwrap();
 
-        // Prepare packet to send.
-        let packet = ClientAnswer::Report {
+        // Prepare message to send.
+        let message = ClientAnswer::Report {
             id: report.id,
             title: report.title,
             game_name: report.game_name,
@@ -948,14 +704,15 @@ impl UserService {
         };
 
         // Send reports.
-        let result = send_message(&mut self.socket, &self.secret_key, packet);
+        let result = send_message(&mut self.socket, &self.secret_key, message);
         if let Some(app_error) = result {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
         Ok(())
     }
-    /// Sends `ClientLoginAnswer` with `WrongCredentials` packet
+
+    /// Sends `ClientLoginAnswer` with `WrongCredentials` message
     /// to the client.
     ///
     /// Returns `String` as `Ok` with message to show
@@ -1037,14 +794,14 @@ impl UserService {
     fn wait_for_client_requests(&mut self) -> Result<Option<String>, AppError> {
         let mut is_fin = false;
 
-        self.time_of_last_received_packet = Local::now();
+        self.time_of_last_received_message = Local::now();
 
         loop {
             let result = receive_message(
                 &mut self.socket,
                 &self.secret_key,
                 Some(KEEP_ALIVE_CHECK_INTERVAL_MS),
-                MAX_PACKET_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS,
+                MAX_MESSAGE_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS,
                 &mut is_fin,
             );
             if is_fin {
@@ -1053,9 +810,9 @@ impl UserService {
             if let Err(app_error) = result {
                 return Err(app_error.add_entry(file!(), line!()));
             }
-            let packet = result.unwrap();
+            let message = result.unwrap();
 
-            if packet.is_empty() {
+            if message.is_empty() {
                 // Timeout.
                 let result = self.check_client_keep_alive();
                 if let Err(message) = result {
@@ -1063,18 +820,18 @@ impl UserService {
                 }
                 continue;
             } else {
-                self.time_of_last_received_packet = Local::now();
+                self.time_of_last_received_message = Local::now();
             }
 
             // Deserialize.
-            let packet = bincode::deserialize::<ClientRequest>(&packet);
-            if let Err(e) = packet {
+            let message = bincode::deserialize::<ClientRequest>(&message);
+            if let Err(e) = message {
                 return Err(AppError::new(&e.to_string(), file!(), line!()));
             }
-            let packet = packet.unwrap();
+            let message = message.unwrap();
 
-            // Handle packet.
-            let result = self.handle_client_packet(packet);
+            // Handle message.
+            let result = self.handle_client_message(message);
             if let Err(app_error) = result {
                 return Err(app_error.add_entry(file!(), line!()));
             }
@@ -1090,7 +847,7 @@ impl UserService {
     /// returns `Err(String)` if the connection was lost
     /// (contains connection lost message).
     fn check_client_keep_alive(&mut self) -> Result<(), String> {
-        let time_diff = Local::now() - self.time_of_last_received_packet;
+        let time_diff = Local::now() - self.time_of_last_received_message;
 
         if time_diff.num_seconds() >= DISCONNECT_IF_INACTIVE_IN_SEC as i64 {
             // Disconnect.
@@ -1103,59 +860,16 @@ impl UserService {
             } else {
                 return Err(format!(
                     "disconnecting socket {} due to inactivity for {} second(-s)",
-                    match self.socket_addr {
-                        Some(addr) => {
-                            addr.to_string()
-                        }
-                        None => {
-                            String::new()
-                        }
-                    },
-                    DISCONNECT_IF_INACTIVE_IN_SEC
+                    self.socket_addr, DISCONNECT_IF_INACTIVE_IN_SEC
                 ));
             }
         }
 
         Ok(())
     }
-    /// Returns [`Ok`] if the fields have the correct length (amount of characters, not byte count),
-    /// otherwise returns the field type and its received length (not the limit, actual length).
-    fn check_report_field_limits(report: &GameReport) -> Result<(), (ReportLimits, usize)> {
-        if report.report_name.chars().count() > ReportLimits::ReportName.max_length() {
-            return Err((ReportLimits::ReportName, report.report_name.chars().count()));
-        }
-
-        if report.report_text.chars().count() > ReportLimits::ReportText.max_length() {
-            return Err((ReportLimits::ReportText, report.report_text.chars().count()));
-        }
-
-        if report.sender_name.chars().count() > ReportLimits::SenderName.max_length() {
-            return Err((ReportLimits::SenderName, report.sender_name.chars().count()));
-        }
-
-        if report.sender_email.chars().count() > ReportLimits::SenderEMail.max_length() {
-            return Err((
-                ReportLimits::SenderEMail,
-                report.sender_email.chars().count(),
-            ));
-        }
-
-        if report.game_name.chars().count() > ReportLimits::GameName.max_length() {
-            return Err((ReportLimits::GameName, report.game_name.chars().count()));
-        }
-
-        if report.game_version.chars().count() > ReportLimits::GameVersion.max_length() {
-            return Err((
-                ReportLimits::GameVersion,
-                report.game_version.chars().count(),
-            ));
-        }
-
-        Ok(())
-    }
 }
 
-impl Drop for UserService {
+impl Drop for ClientService {
     /// Logs information about connection being closed.
     fn drop(&mut self) {
         let mut _message = String::new();
@@ -1163,17 +877,7 @@ impl Drop for UserService {
         if self.username.is_some() {
             _message = format!("{} logged out", self.username.as_ref().unwrap());
         } else {
-            _message = format!(
-                "Closing connection with {}",
-                match self.socket_addr {
-                    Some(addr) => {
-                        addr.to_string()
-                    }
-                    None => {
-                        String::new()
-                    }
-                }
-            );
+            _message = format!("Closing connection with client {}", self.socket_addr);
         }
 
         if self.exit_error.is_some() {
@@ -1192,7 +896,7 @@ impl Drop for UserService {
 
         _message += "\n";
 
-        let mut guard = self.connected_users_count.lock().unwrap();
+        let mut guard = self.connected_count.lock().unwrap();
         *guard -= 1;
         _message += &format!(
             "------------------------- [connected: {}] -------------------------",

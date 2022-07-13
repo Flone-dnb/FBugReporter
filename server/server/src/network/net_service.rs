@@ -7,10 +7,14 @@ use std::thread;
 use crate::{
     io::config_manager::ConfigManager,
     io::log_manager::*,
-    network::{ban_manager::BanManager, user_service::UserService},
+    network::{
+        ban_manager::BanManager, client_service::ClientService, reporter_service::ReporterService,
+    },
 };
 use shared::misc::db_manager::*;
 use shared::misc::error::AppError;
+
+pub const MAX_MESSAGE_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS: u64 = 131_072; // 128 kB
 
 pub struct NetService {
     pub logger: Arc<Mutex<LogManager>>,
@@ -193,7 +197,7 @@ impl NetService {
             let handle = thread::Builder::new()
                 .name(format!("reporter socket {}:{}", addr.ip(), addr.port()))
                 .spawn(move || {
-                    let mut user_service = UserService::new_reporter(
+                    let reporter_service = ReporterService::new(
                         logger_copy,
                         socket,
                         addr,
@@ -201,7 +205,7 @@ impl NetService {
                         database_clone,
                         max_attachment_size_in_mb,
                     );
-                    user_service.process_reporter();
+                    reporter_service.process();
                 });
             if let Err(ref e) = handle {
                 logger.lock().unwrap().print_and_log(
@@ -283,7 +287,7 @@ impl NetService {
             let handle = thread::Builder::new()
                 .name(format!("client socket {}:{}", addr.ip(), addr.port()))
                 .spawn(move || {
-                    let mut user_service = UserService::new_client(
+                    let user_service = ClientService::new(
                         logger_clone,
                         socket,
                         addr,
@@ -291,7 +295,7 @@ impl NetService {
                         database_clone,
                         Some(ban_manager_clone),
                     );
-                    user_service.process_client();
+                    user_service.process();
                 });
             if let Err(ref e) = handle {
                 logger.lock().unwrap().print_and_log(

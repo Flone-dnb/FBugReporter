@@ -60,7 +60,7 @@ impl ClientService {
             logger.lock().unwrap().print_and_log(
                 LogCategory::Info,
                 &format!(
-                    "Accepted connection with client {}:{}\n------------------------- [connected: {}] -------------------------",
+                    "accepted connection with client {}:{}\n------------------------- [connected: {}] -------------------------",
                     addr.ip(),
                     addr.port(),
                     guard
@@ -605,13 +605,13 @@ impl ClientService {
                 self.logger.lock().unwrap().print_and_log(
                     LogCategory::Info,
                     &format!(
-                        "admin user '{}' requested to delete a report with id {}",
+                        "admin client \"{}\" requested to delete a report with id {}",
                         &username, report_id
                     ),
                 )
             } else {
                 let message = format!(
-                    "user '{}' tried to \
+                    "client \"{}\" tried to \
                     delete a report with id {} without admin privileges",
                     &username, is_admin
                 );
@@ -637,7 +637,7 @@ impl ClientService {
             self.logger.lock().unwrap().print_and_log(
                 LogCategory::Warning,
                 &format!(
-                    "admin user '{}' tried to \
+                    "admin client \"{}\" tried to \
                     delete a report with id {} while a report with this id does not exist",
                     &username, report_id
                 ),
@@ -672,7 +672,7 @@ impl ClientService {
             self.logger.lock().unwrap().print_and_log(
                 LogCategory::Info,
                 &format!(
-                    "user '{}' requested a report with id {}",
+                    "client \"{}\" requested a report with id {}",
                     username, report_id
                 ),
             )
@@ -853,7 +853,7 @@ impl ClientService {
             // Disconnect.
             if self.username.is_some() {
                 return Err(format!(
-                    "disconnecting user '{}' due to inactivity for {} second(-s)",
+                    "disconnecting user \"{}\" due to inactivity for {} second(-s)",
                     self.username.as_ref().unwrap(),
                     DISCONNECT_IF_INACTIVE_IN_SEC
                 ));
@@ -877,7 +877,7 @@ impl Drop for ClientService {
         if self.username.is_some() {
             _message = format!("{} logged out", self.username.as_ref().unwrap());
         } else {
-            _message = format!("Closing connection with client {}", self.socket_addr);
+            _message = format!("closing connection with client {}", self.socket_addr);
         }
 
         if self.exit_error.is_some() {
@@ -888,10 +888,6 @@ impl Drop for ClientService {
             } else {
                 _message += &format!(", reason: {}", error.as_ref().unwrap());
             }
-        }
-
-        if !_message.ends_with('.') {
-            _message += ".";
         }
 
         _message += "\n";

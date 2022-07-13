@@ -47,7 +47,7 @@ impl ReporterService {
             logger.lock().unwrap().print_and_log(
                 LogCategory::Info,
                 &format!(
-                    "Accepted connection with reporter {}:{}\n------------------------- \
+                    "accepted connection with reporter {}:{}\n------------------------- \
                     [connected: {}] -------------------------",
                     addr.ip(),
                     addr.port(),
@@ -213,7 +213,7 @@ impl ReporterService {
 
         self.logger.lock().unwrap().print_and_log(
             LogCategory::Info,
-            &format!("Received a report from socket {}", self.socket_addr),
+            &format!("received a report from socket {}", self.socket_addr),
         );
 
         {
@@ -240,7 +240,7 @@ impl ReporterService {
 
         self.logger.lock().unwrap().print_and_log(
             LogCategory::Info,
-            &format!("Saved a report from socket {}", self.socket_addr),
+            &format!("saved a report from socket {}", self.socket_addr),
         );
 
         // Answer "OK".
@@ -314,7 +314,7 @@ impl ReporterService {
 impl Drop for ReporterService {
     /// Logs information about connection being closed.
     fn drop(&mut self) {
-        let mut message = format!("Closing connection with reporter {}", self.socket_addr);
+        let mut message = format!("closing connection with reporter {}", self.socket_addr);
 
         if self.exit_error.is_some() {
             let error = self.exit_error.as_ref().unwrap();
@@ -324,10 +324,6 @@ impl Drop for ReporterService {
             } else {
                 message += &format!(", reason: {}", error.as_ref().unwrap());
             }
-        }
-
-        if !message.ends_with('.') {
-            message += ".";
         }
 
         message += "\n";

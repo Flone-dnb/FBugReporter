@@ -53,7 +53,7 @@ impl NetService {
             self.logger
                 .lock()
                 .unwrap()
-                .print_and_log(LogCategory::Info, "Starting...");
+                .print_and_log(LogCategory::Info, "starting");
         }
 
         // Create socket for reporters.
@@ -62,12 +62,7 @@ impl NetService {
         if let Err(ref e) = listener_socker_reporters {
             self.logger.lock().unwrap().print_and_log(
                 LogCategory::Error,
-                &format!(
-                    "An error occurred at [{}, {}]: {:?}\n\n",
-                    file!(),
-                    line!(),
-                    e
-                ),
+                &AppError::new(&e.to_string(), file!(), line!()).to_string(),
             );
         }
         let listener_socker_reporters = listener_socker_reporters.unwrap();
@@ -78,12 +73,7 @@ impl NetService {
         if let Err(ref e) = listener_socker_clients {
             self.logger.lock().unwrap().print_and_log(
                 LogCategory::Error,
-                &format!(
-                    "An error occurred at [{}, {}]: {:?}\n\n",
-                    file!(),
-                    line!(),
-                    e
-                ),
+                &AppError::new(&e.to_string(), file!(), line!()).to_string(),
             );
         }
         let listener_socker_clients = listener_socker_clients.unwrap();
@@ -93,14 +83,14 @@ impl NetService {
             logger_guard.print_and_log(
                 LogCategory::Info,
                 &format!(
-                    "Ready to accept client connections on port {}",
+                    "ready to accept client connections on port {}",
                     self.server_config.port_for_clients
                 ),
             );
             logger_guard.print_and_log(
                 LogCategory::Info,
                 &format!(
-                    "Ready to accept reporter connections on port {}",
+                    "ready to accept reporter connections on port {}",
                     self.server_config.port_for_reporters
                 ),
             );
@@ -155,12 +145,7 @@ impl NetService {
             if let Err(ref e) = accept_result {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &format!(
-                        "An error occurred at [{}, {}]: {:?}\n\n",
-                        file!(),
-                        line!(),
-                        e
-                    ),
+                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
             }
 
@@ -169,23 +154,13 @@ impl NetService {
             if let Err(e) = socket.set_nodelay(true) {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &format!(
-                        "An error occurred at [{}, {}]: {:?}\n\n",
-                        file!(),
-                        line!(),
-                        e
-                    ),
+                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
             }
             if let Err(e) = socket.set_nonblocking(true) {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &format!(
-                        "An error occurred at [{}, {}]: {:?}\n\n",
-                        file!(),
-                        line!(),
-                        e
-                    ),
+                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
             }
 
@@ -210,12 +185,7 @@ impl NetService {
             if let Err(ref e) = handle {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &format!(
-                        "An error occurred at [{}, {}]: {:?}\n\n",
-                        file!(),
-                        line!(),
-                        e
-                    ),
+                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
             }
         }
@@ -234,12 +204,7 @@ impl NetService {
             if let Err(ref e) = accept_result {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &format!(
-                        "An error occurred at [{}, {}]: {:?}\n\n",
-                        file!(),
-                        line!(),
-                        e
-                    ),
+                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
             }
 
@@ -248,23 +213,13 @@ impl NetService {
             if let Err(e) = socket.set_nodelay(true) {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &format!(
-                        "An error occurred at [{}, {}]: {:?}\n\n",
-                        file!(),
-                        line!(),
-                        e
-                    ),
+                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
             }
             if let Err(e) = socket.set_nonblocking(true) {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &format!(
-                        "An error occurred at [{}, {}]: {:?}\n\n",
-                        file!(),
-                        line!(),
-                        e
-                    ),
+                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
             }
 
@@ -300,12 +255,7 @@ impl NetService {
             if let Err(ref e) = handle {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &format!(
-                        "An error occurred at [{}, {}]: {:?}\n\n",
-                        file!(),
-                        line!(),
-                        e
-                    ),
+                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
             }
         }

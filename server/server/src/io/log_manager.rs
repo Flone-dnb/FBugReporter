@@ -29,27 +29,20 @@ impl LogManager {
     }
     /// Prints text on the screen and writes it to log file.
     pub fn print_and_log(&self, category: LogCategory, text: &str) {
-        let mut message = String::new();
-
-        match category {
-            LogCategory::Info => message += "INFO: ",
-            LogCategory::Warning => message += "WARNING: ",
-            LogCategory::Error => message += "ERROR: ",
-        }
-
+        let mut message = match category {
+            LogCategory::Info => String::from("INFO: "),
+            LogCategory::Warning => String::from("WARNING: "),
+            LogCategory::Error => String::from("ERROR: "),
+        };
         message += text;
-        if !message.ends_with('.') {
-            message += ".";
-        }
 
         let mut log_file = self.open_log_file();
+        let datetime = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
-        let datetime = Local::now();
-
-        if let Err(e) = writeln!(log_file, "[{}]: {}", datetime.naive_local(), message) {
+        if let Err(e) = writeln!(log_file, "[{}] {}", datetime, message) {
             panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
         } else {
-            println!("[{}]: {}", datetime.naive_local(), message);
+            println!("[{}] {}", datetime, message);
         }
     }
     /// Opens log file for writing.

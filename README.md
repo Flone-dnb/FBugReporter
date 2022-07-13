@@ -20,7 +20,7 @@ The usual workflow goes like this:
 - Run `client.exe` (`monitor.exe` needs to be running), in order to login you need to enter server's IP and port. For local usage put `localhost` as IP. For port look for `server_config.ini` (that will be generated once the `monitor.exe` is started), look at `port_for_clients` line that will contain the port you need to use. Now login using the specified earlier name and the password you received, after this you will change the password and setup OTP. After everything is done you will see received reports.
 - To generate new reports, open Godot project with FBugReporter integrated (build version from `releases` already has a project with FBugReporter integrated) and send a report (while `monitor.exe` is running). You can then see new reports in `client.exe` (restart `client.exe` in order to refresh report list, later when you will have some reports the report list will be refreshed after you return from viewing some report to the main page or when you switch pages).
 
-# Install
+# How to Install
 
 If you tried the built version from `releases` and now want to integrate FBugReporter into your Godot game follow this section.
 
@@ -34,7 +34,7 @@ In order to run these scripts you need to have [Go](https://go.dev/dl/) installe
 
 If you want to integrate FBugReporter into your Godot game, just clone/download this repository and run each script (the order does not matter), they will setup everything for you.
 
-# Update
+# How to Update
 
 If you want to update FBugReporter you need to update everything (reporter, client, server). For this just clone/download this repository with updated code and run each script again,
 they will ask you to overwrite the files. Make sure to specify the same parameters you specified when you were installing this for the first time.
@@ -51,7 +51,7 @@ The server processes reporters and clients on different ports (see your generate
 
 ### Logs
 
-The server will store logs in the `logs` directory. This directory is localed in the place where `server.exe` is located.
+The server will store logs in the `logs` directory. This directory is localed in the directory where `server.exe` is located.
 
 # Information: Client
 
@@ -63,10 +63,10 @@ On the first start, the client will create a theme file `theme.ini` next to the 
 
 # Build (Manual Installation)
 
-If you don't want or can't use scripts from the `Install` section above, you can build and integrate everything yourself.
+If you don't want or can't use scripts from the `How to Install` section above, you can build and integrate everything yourself.
 
 ## Build: Reporter
-**To build** the reporter you will need [Rust](https://www.rust-lang.org/tools/install) and [LLVM](https://github.com/llvm/llvm-project/releases/) installed (when installing LLVM pick "Add LLVM to the system PATH for all users"), then in the `reporter` folder run:
+**To build** the reporter you will need [Rust](https://www.rust-lang.org/tools/install) and [LLVM](https://github.com/llvm/llvm-project/releases/) installed (when installing LLVM pick "Add LLVM to the system PATH for all users"), then in the `reporter` directory run:
 
 ```
 cargo build --release
@@ -74,7 +74,7 @@ cargo build --release
 
 The compiled reporter library will be located at `/reporter/target/release/` (with the extension `.dll` for Windows and `.so` for Linux).
 
-**To integrate** the reporter you will need to create a `GDNativeLibrary` resource in your Godot project, you can call it `reporter`. Then navigate to your platform in the opened panel. Click on the folder icon (against number `64` for 64 bit systems, `32` for 32 bit systems) and select the compiled library. Save this resource with the `.gdnlib` extension.
+**To integrate** the reporter you will need to create a `GDNativeLibrary` resource in your Godot project, you can call it `reporter`. Then navigate to your platform in the opened panel. Click on the directory icon (against number `64` for 64 bit systems, `32` for 32 bit systems) and select the compiled library. Save this resource with the `.gdnlib` extension.
 
 Now create a new script with the following parameters:
 
@@ -85,7 +85,7 @@ Now create a new script with the following parameters:
 
 Then open this script and in the `Inspector` panel find a property with the name `Library`, click on it, then pick `Load` and select the `reporter.gdnlib` (GDNativeLibrary) file the we created.
 
-See the example project in the `example` folder and `example/MainScene.gd` for how to send reports. You could just copy-paste `MainScene.tscn` and `MainScene.gd` files to your project and customize them as you want.
+See the example project in the `example` directory and `example/MainScene.gd` for how to send reports. You could just copy-paste `MainScene.tscn` and `MainScene.gd` files to your project and customize them as you want.
 
 ## Build: Server
 **Requirements:**
@@ -103,7 +103,7 @@ The server consists of 3 applications:
 - `database_manager`: used to add/remove users (even when the server is running)
 - `monitor`: simple helper app that will restart the server if it crashed
 
-You need to build each application and put resulting executable files in the same folder (so that you will have `server`, `database_manager` and `monitor` all in the same folder).
+You need to build each application and put resulting executable files in the same directory (so that you will have `server`, `database_manager` and `monitor` all in the same directory).
 
 In order to build an app you need to enter its directory and run:
 
@@ -113,13 +113,13 @@ cargo build --release
 
 The compiled executable be located at `/target/release/`.
 
-Note that Windows users also need to have `sqlite3.dll` library next to the compiled programs, put compiled `server.exe`, `database_manager.exe` and `monitor.exe` to the same directory and copy `sqlite3.dll` from `server/sqlite3-windows` in this folder.
+Note that Windows users also need to have `sqlite3.dll` library next to the compiled programs, put compiled `server.exe`, `database_manager.exe` and `monitor.exe` to the same directory and copy `sqlite3.dll` from `server/sqlite3-windows` in this directory.
 
 ## Build: Client
 
 To build the client you will need [Rust](https://www.rust-lang.org/tools/install).
 
-Then in the `client` folder run:
+Then in the `client` directory run:
 
 ```
 cargo build --release

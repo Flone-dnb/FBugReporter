@@ -9,7 +9,7 @@ use crate::io::config_manager::ConfigManager;
 use crate::layouts::report_layout::ReportData;
 use shared::misc::error::AppError;
 use shared::misc::report::ReportSummary;
-use shared::network::client_packets::*;
+use shared::network::client_messages::*;
 use shared::network::messaging::*;
 use shared::network::net_params::*;
 

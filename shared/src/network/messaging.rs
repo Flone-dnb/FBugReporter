@@ -491,21 +491,21 @@ pub fn receive_message(
     }
     let socket_addr = peer_addr.unwrap();
 
-    // Read u32 (size of a packet)
-    let mut packet_size_buf = [0u8; std::mem::size_of::<u32>() as usize];
-    let mut _next_packet_size: u64 = 0;
+    // Read u32 (size of a message)
+    let mut message_size_buf = [0u8; std::mem::size_of::<u32>() as usize];
+    let mut _next_message_size: u64 = 0;
 
     let mut _result = IoResult::Fin;
     if timeout_in_ms.is_some() {
         let timeout_result =
-            read_from_socket_with_timeout(socket, &mut packet_size_buf, timeout_in_ms.unwrap());
+            read_from_socket_with_timeout(socket, &mut message_size_buf, timeout_in_ms.unwrap());
         if timeout_result.is_none() {
             return Ok(Vec::new());
         } else {
             _result = timeout_result.unwrap();
         }
     } else {
-        _result = read_from_socket(socket, &mut packet_size_buf);
+        _result = read_from_socket(socket, &mut message_size_buf);
     }
 
     match _result {
@@ -519,12 +519,12 @@ pub fn receive_message(
         }
         IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
         IoResult::Ok(byte_count) => {
-            if byte_count != packet_size_buf.len() {
+            if byte_count != message_size_buf.len() {
                 return Err(AppError::new(
                     &format!(
                         "not all data received (got: {}, expected: {}) (socket: {})",
                         byte_count,
-                        packet_size_buf.len(),
+                        message_size_buf.len(),
                         socket_addr
                     ),
                     file!(),
@@ -532,7 +532,7 @@ pub fn receive_message(
                 ));
             }
 
-            let res = bincode::deserialize::<u32>(&packet_size_buf);
+            let res = bincode::deserialize::<u32>(&message_size_buf);
             if let Err(e) = res {
                 return Err(AppError::new(
                     &format!("{:?} (socket: {})", e, socket_addr),
@@ -541,25 +541,25 @@ pub fn receive_message(
                 ));
             }
 
-            _next_packet_size = res.unwrap() as u64;
+            _next_message_size = res.unwrap() as u64;
         }
     }
 
-    // Check packet size.
-    if _next_packet_size > max_allowed_message_size_in_bytes {
+    // Check message size.
+    if _next_message_size > max_allowed_message_size_in_bytes {
         return Err(AppError::new(
             &format!(
                 "incoming message is too big to receive ({} > {} bytes) (socket: {})",
-                _next_packet_size, max_allowed_message_size_in_bytes, socket_addr
+                _next_message_size, max_allowed_message_size_in_bytes, socket_addr
             ),
             file!(),
             line!(),
         ));
     }
 
-    // Receive encrypted packet.
-    let mut encrypted_packet = vec![0u8; _next_packet_size as usize];
-    match read_from_socket(socket, &mut encrypted_packet) {
+    // Receive encrypted message.
+    let mut encrypted_message = vec![0u8; _next_message_size as usize];
+    match read_from_socket(socket, &mut encrypted_message) {
         IoResult::Fin => {
             *is_fin = true;
             return Err(AppError::new(
@@ -573,19 +573,19 @@ pub fn receive_message(
     };
 
     // Get IV.
-    if encrypted_packet.len() < IV_LENGTH {
+    if encrypted_message.len() < IV_LENGTH {
         return Err(AppError::new(
             &format!(
-                "unexpected packet length ({}) (socket: {})",
-                encrypted_packet.len(),
+                "unexpected message length ({}) (socket: {})",
+                encrypted_message.len(),
                 socket_addr
             ),
             file!(),
             line!(),
         ));
     }
-    let iv = encrypted_packet[..IV_LENGTH].to_vec();
-    encrypted_packet = encrypted_packet[IV_LENGTH..].to_vec();
+    let iv = encrypted_message[..IV_LENGTH].to_vec();
+    encrypted_message = encrypted_message[IV_LENGTH..].to_vec();
 
     // Convert IV.
     let iv = iv.try_into();
@@ -598,24 +598,24 @@ pub fn receive_message(
     }
     let iv: [u8; IV_LENGTH] = iv.unwrap();
 
-    // Decrypt packet.
-    let decrypted_packet = Aes256CbcDec::new(secret_key.into(), &iv.into())
-        .decrypt_padded_vec_mut::<Pkcs7>(&encrypted_packet);
-    if let Err(e) = decrypted_packet {
+    // Decrypt message.
+    let decrypted_message = Aes256CbcDec::new(secret_key.into(), &iv.into())
+        .decrypt_padded_vec_mut::<Pkcs7>(&encrypted_message);
+    if let Err(e) = decrypted_message {
         return Err(AppError::new(
             &format!("{:?} (socket: {})", e, socket_addr),
             file!(),
             line!(),
         ));
     }
-    let mut decrypted_packet = decrypted_packet.unwrap();
+    let mut decrypted_message = decrypted_message.unwrap();
 
     // CMAC
     let mut mac = Cmac::<Aes256>::new_from_slice(secret_key).unwrap();
-    let tag: Vec<u8> = decrypted_packet
-        .drain(decrypted_packet.len().saturating_sub(CMAC_TAG_LENGTH)..)
+    let tag: Vec<u8> = decrypted_message
+        .drain(decrypted_message.len().saturating_sub(CMAC_TAG_LENGTH)..)
         .collect();
-    mac.update(&decrypted_packet);
+    mac.update(&decrypted_message);
 
     // Convert tag.
     let tag = tag.try_into();
@@ -637,7 +637,7 @@ pub fn receive_message(
         ));
     }
 
-    Ok(decrypted_packet)
+    Ok(decrypted_message)
 }
 
 /// Writes the specified buffer to the socket.

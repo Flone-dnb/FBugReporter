@@ -16,7 +16,7 @@ use super::net_service::MAX_MESSAGE_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS;
 use crate::io::log_manager::*;
 use shared::misc::db_manager::DatabaseManager;
 use shared::misc::error::AppError;
-use shared::network::client_packets::*;
+use shared::network::client_messages::*;
 use shared::network::messaging::*;
 use shared::network::net_params::*;
 

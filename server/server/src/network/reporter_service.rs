@@ -10,7 +10,7 @@ use shared::misc::error::AppError;
 use shared::misc::report::*;
 use shared::network::messaging::*;
 use shared::network::net_params::*;
-use shared::network::reporter_packets::*;
+use shared::network::reporter_messages::*;
 
 pub struct ReporterService {
     logger: Arc<Mutex<LogManager>>,

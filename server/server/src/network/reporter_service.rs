@@ -312,6 +312,15 @@ impl ReporterService {
 
     /// Processes reporter's attachment size request.
     fn handle_attachment_size_query_request(&mut self) -> Option<AppError> {
+        // Log event.
+        self.logger.lock().unwrap().print_and_log(
+            LogCategory::Info,
+            &format!(
+                "received maximum attachment size request from reporter {}",
+                self.socket_addr
+            ),
+        );
+
         let answer = ReporterAnswer::MaxAttachmentSize {
             max_attachments_size_in_mb: self.max_total_attachment_size_in_mb,
         };

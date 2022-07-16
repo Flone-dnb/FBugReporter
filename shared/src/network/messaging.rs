@@ -32,6 +32,7 @@ enum IoResult {
     Ok(usize),
     Fin,
     Err(AppError),
+    Timeout,
 }
 
 /// Initiates secure connection establishment with remote
@@ -78,7 +79,7 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
     pg_send_buf.append(&mut g_buf);
 
     // Send p and g values.
-    match write_to_socket(socket, &mut pg_send_buf, true) {
+    match write_to_socket(socket, &mut pg_send_buf) {
         IoResult::Fin => {
             return Err(AppError::new("unexpected FIN received"));
         }
@@ -86,6 +87,9 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
             return Err(app_error);
         }
         IoResult::Ok(_) => {}
+        IoResult::Timeout => {
+            return Err(AppError::new("write timeout"));
+        }
     }
 
     // Generate secret key 'a'.
@@ -110,7 +114,7 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
     }
     let mut a_open_len_buf = a_open_len_buf.unwrap();
     a_open_len_buf.append(&mut a_open_buf);
-    match write_to_socket(socket, &mut a_open_len_buf, true) {
+    match write_to_socket(socket, &mut a_open_len_buf) {
         IoResult::Fin => {
             return Err(AppError::new("unexpected FIN received"));
         }
@@ -118,11 +122,14 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
             return Err(app_error);
         }
         IoResult::Ok(_) => {}
+        IoResult::Timeout => {
+            return Err(AppError::new("write timeout"));
+        }
     }
 
     // Receive open key 'B' size.
     let mut b_open_len_buf = vec![0u8; std::mem::size_of::<u64>()];
-    match read_from_socket(socket, &mut b_open_len_buf) {
+    match read_from_socket_fill_buf(socket, &mut b_open_len_buf, None) {
         IoResult::Fin => {
             return Err(AppError::new("unexpected FIN received"));
         }
@@ -130,6 +137,9 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
             return Err(app_error);
         }
         IoResult::Ok(_) => {}
+        IoResult::Timeout => {
+            return Err(AppError::new("read timeout"));
+        }
     }
 
     // Receive open key 'B'.
@@ -140,7 +150,7 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
     let b_open_len = b_open_len.unwrap();
     let mut b_open_buf = vec![0u8; b_open_len as usize];
 
-    match read_from_socket(socket, &mut b_open_buf) {
+    match read_from_socket_fill_buf(socket, &mut b_open_buf, None) {
         IoResult::Fin => {
             return Err(AppError::new("unexpected FIN received"));
         }
@@ -148,6 +158,9 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
             return Err(app_error);
         }
         IoResult::Ok(_) => {}
+        IoResult::Timeout => {
+            return Err(AppError::new("read timeout"));
+        }
     }
 
     let b_open_big = bincode::deserialize::<BigUint>(&b_open_buf);
@@ -192,7 +205,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     // Get 'p' len.
     let mut p_len_buf = vec![0u8; std::mem::size_of::<u64>()];
     loop {
-        match read_from_socket(socket, &mut p_len_buf) {
+        match read_from_socket_fill_buf(socket, &mut p_len_buf, None) {
             IoResult::Fin => {
                 return Err(AppError::new("unexpected FIN received"));
             }
@@ -201,6 +214,9 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
             }
             IoResult::Ok(_) => {
                 break;
+            }
+            IoResult::Timeout => {
+                return Err(AppError::new("read timeout"));
             }
         }
     }
@@ -213,7 +229,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     // Get 'p' value.
     let mut p_buf = vec![0u8; p_len as usize];
     loop {
-        match read_from_socket(socket, &mut p_buf) {
+        match read_from_socket_fill_buf(socket, &mut p_buf, None) {
             IoResult::Fin => {
                 return Err(AppError::new("unexpected FIN received"));
             }
@@ -222,6 +238,9 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
             }
             IoResult::Ok(_) => {
                 break;
+            }
+            IoResult::Timeout => {
+                return Err(AppError::new("read timeout"));
             }
         }
     }
@@ -234,7 +253,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     // Get 'g' len.
     let mut g_len_buf = vec![0u8; std::mem::size_of::<u64>()];
     loop {
-        match read_from_socket(socket, &mut g_len_buf) {
+        match read_from_socket_fill_buf(socket, &mut g_len_buf, None) {
             IoResult::Fin => {
                 return Err(AppError::new("unexpected FIN received"));
             }
@@ -243,6 +262,9 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
             }
             IoResult::Ok(_) => {
                 break;
+            }
+            IoResult::Timeout => {
+                return Err(AppError::new("read timeout"));
             }
         }
     }
@@ -255,7 +277,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     // Get 'g' value.
     let mut g_buf = vec![0u8; g_len as usize];
     loop {
-        match read_from_socket(socket, &mut g_buf) {
+        match read_from_socket_fill_buf(socket, &mut g_buf, None) {
             IoResult::Fin => {
                 return Err(AppError::new("unexpected FIN received"));
             }
@@ -264,6 +286,9 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
             }
             IoResult::Ok(_) => {
                 break;
+            }
+            IoResult::Timeout => {
+                return Err(AppError::new("read timeout"));
             }
         }
     }
@@ -279,7 +304,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     // Receive the open key A size.
     let mut a_open_len_buf = vec![0u8; std::mem::size_of::<u64>()];
     loop {
-        match read_from_socket(socket, &mut a_open_len_buf) {
+        match read_from_socket_fill_buf(socket, &mut a_open_len_buf, None) {
             IoResult::Fin => {
                 return Err(AppError::new("unexpected FIN received"));
             }
@@ -288,6 +313,9 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
             }
             IoResult::Ok(_) => {
                 break;
+            }
+            IoResult::Timeout => {
+                return Err(AppError::new("read timeout"));
             }
         }
     }
@@ -301,7 +329,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     // Receive the open key A.
     let mut a_open_buf = vec![0u8; a_open_len as usize];
     loop {
-        match read_from_socket(socket, &mut a_open_buf) {
+        match read_from_socket_fill_buf(socket, &mut a_open_buf, None) {
             IoResult::Fin => {
                 return Err(AppError::new("unexpected FIN received"));
             }
@@ -310,6 +338,9 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
             }
             IoResult::Ok(_) => {
                 break;
+            }
+            IoResult::Timeout => {
+                return Err(AppError::new("read timeout"));
             }
         }
     }
@@ -332,7 +363,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     let mut b_open_len_buf = b_open_len_buf.unwrap();
     b_open_len_buf.append(&mut b_open_buf);
     loop {
-        match write_to_socket(socket, &mut b_open_len_buf, true) {
+        match write_to_socket(socket, &mut b_open_len_buf) {
             IoResult::Fin => {
                 return Err(AppError::new("unexpected FIN received"));
             }
@@ -341,6 +372,9 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
             }
             IoResult::Ok(_) => {
                 break;
+            }
+            IoResult::Timeout => {
+                return Err(AppError::new("write timeout"));
             }
         }
     }
@@ -387,6 +421,16 @@ where
             "can't send message - secure connected is not established yet",
         ));
     }
+
+    // Get socket remote address.
+    let peer_addr = socket.peer_addr();
+    if let Err(e) = peer_addr {
+        return Some(AppError::new(&format!(
+            "failed to get socket peer address (error: {})",
+            e
+        )));
+    }
+    let socket_addr = peer_addr.unwrap();
 
     // Serialize.
     let mut binary_message = bincode::serialize(&message).unwrap();
@@ -435,12 +479,18 @@ where
 
     if send_buffer.len() <= MAX_MESSAGE_SIZE_UNTIL_SPLITING_IN_BYTES {
         // Send.
-        match write_to_socket(socket, &mut send_buffer, false) {
+        match write_to_socket(socket, &mut send_buffer) {
             IoResult::Fin => {
                 return Some(AppError::new("unexpected FIN received"));
             }
             IoResult::Err(app_error) => return Some(app_error),
             IoResult::Ok(_) => {}
+            IoResult::Timeout => {
+                return Some(AppError::new(&format!(
+                    "write timeout (socket: {})",
+                    socket_addr
+                )));
+            }
         }
     } else {
         // Need to split the message in smaller chunks.
@@ -449,12 +499,18 @@ where
             .collect();
         for chunk in chunks.iter_mut() {
             // Send.
-            match write_to_socket(socket, chunk, false) {
+            match write_to_socket(socket, chunk) {
                 IoResult::Fin => {
                     return Some(AppError::new("unexpected FIN received"));
                 }
                 IoResult::Err(app_error) => return Some(app_error),
                 IoResult::Ok(_) => {}
+                IoResult::Timeout => {
+                    return Some(AppError::new(&format!(
+                        "write timeout (socket: {})",
+                        socket_addr
+                    )));
+                }
             }
         }
     }
@@ -464,15 +520,18 @@ where
 
 /// Waits for next message to arrive.
 ///
-/// Parameters:
+/// ## Arguments
 /// - `socket`: socket to use.
 /// - `secret_key`: secret key to decrypt message.
-/// - `timeout_in_ms`: if specified the operation will have a timeout.
+/// - `timeout_in_ms`: if specified the operation will have a custom timeout,
+/// if not, default timeout of `MAX_WAIT_TIME_IN_READ_WRITE_MS` will be used.
 /// - `max_allowed_message_size_in_bytes`: maximum size of allowed message, if
 /// the incoming message is bigger than this value an error will be returned.
 /// - `is_fin`: will be `true` if the remote socket closed connection.
-/// if we reached timeout and this parameter was not `None` will return `Ok` with
-/// zero length vector.
+///
+/// ## Return
+/// If custom timeout was specified and reached a timeout will return `Ok` with zero length vector,
+/// otherwise if custom timeout was not specified will return `AppError`.
 pub fn receive_message(
     socket: &mut TcpStream,
     secret_key: &[u8; SECRET_KEY_SIZE],
@@ -500,20 +559,8 @@ pub fn receive_message(
     let mut message_size_buf = vec![0u8; std::mem::size_of::<MessageLenType>()];
     let mut _next_message_size: usize = 0;
 
-    let mut _result = IoResult::Fin;
-    if timeout_in_ms.is_some() {
-        let timeout_result =
-            read_from_socket_with_timeout(socket, &mut message_size_buf, timeout_in_ms.unwrap());
-        if timeout_result.is_none() {
-            return Ok(Vec::new());
-        } else {
-            _result = timeout_result.unwrap();
-        }
-    } else {
-        _result = read_from_socket(socket, &mut message_size_buf);
-    }
-
-    match _result {
+    let result = read_from_socket_fill_buf(socket, &mut message_size_buf, timeout_in_ms);
+    match result {
         IoResult::Fin => {
             *is_fin = true;
             return Err(AppError::new(&format!(
@@ -539,6 +586,16 @@ pub fn receive_message(
 
             _next_message_size = res.unwrap() as usize;
         }
+        IoResult::Timeout => {
+            if timeout_in_ms.is_some() {
+                return Ok(Vec::new());
+            } else {
+                return Err(AppError::new(&format!(
+                    "read timeout (socket: {})",
+                    socket_addr
+                )));
+            }
+        }
     }
 
     // Check message size.
@@ -555,7 +612,7 @@ pub fn receive_message(
         <= MAX_MESSAGE_SIZE_UNTIL_SPLITING_IN_BYTES
     {
         encrypted_message = vec![0u8; _next_message_size as usize];
-        match read_from_socket(socket, &mut encrypted_message) {
+        match read_from_socket_fill_buf(socket, &mut encrypted_message, None) {
             IoResult::Fin => {
                 *is_fin = true;
                 return Err(AppError::new(&format!(
@@ -565,6 +622,12 @@ pub fn receive_message(
             }
             IoResult::Err(app_error) => return Err(app_error),
             IoResult::Ok(_) => {}
+            IoResult::Timeout => {
+                return Err(AppError::new(&format!(
+                    "read timeout (socket: {})",
+                    socket_addr
+                )));
+            }
         };
     } else {
         // The message is split into multiple chunks.
@@ -579,7 +642,7 @@ pub fn receive_message(
                 _chunk = vec![0u8; bytes_left_to_receive];
             }
 
-            match read_from_socket_fill_buf(socket, &mut _chunk) {
+            match read_from_socket_fill_buf(socket, &mut _chunk, None) {
                 IoResult::Fin => {
                     *is_fin = true;
                     return Err(AppError::new(&format!(
@@ -589,6 +652,12 @@ pub fn receive_message(
                 }
                 IoResult::Err(app_error) => return Err(app_error),
                 IoResult::Ok(_) => {}
+                IoResult::Timeout => {
+                    return Err(AppError::new(&format!(
+                        "read timeout (socket: {})",
+                        socket_addr
+                    )));
+                }
             };
 
             bytes_left_to_receive -= _chunk.len();
@@ -644,204 +713,39 @@ pub fn receive_message(
     Ok(decrypted_message)
 }
 
-/// Writes the specified buffer to the socket.
+/// Writes the specified buffer to the socket with a timeout.
+///
+/// The timeout is specified by `MAX_WAIT_TIME_IN_READ_WRITE_MS` constant.
 ///
 /// ## Arguments:
 /// - `socket`: socket to write this data to.
 /// - `buf`: buffer to write to the socket.
-/// - `enable_wait_limit`: if `false` will wait for write operation to finish
-/// infinitely, otherwise will wait for maximum `MAX_WAIT_TIME_IN_READ_WRITE_MS`
-/// for operation to finish and return error in case of a timeout.
-fn write_to_socket(socket: &mut TcpStream, buf: &mut [u8], enable_wait_limit: bool) -> IoResult {
+fn write_to_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
     if buf.is_empty() {
-        return IoResult::Err(AppError::new("passed 'buf' has 0 length"));
+        return IoResult::Err(AppError::new("the specified buffer has zero length"));
     }
 
     let mut total_wait_time_ms: u64 = 0;
-
-    loop {
-        if enable_wait_limit && total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
-            return IoResult::Err(AppError::new(&format!(
-                "reached maximum write wait time limit of {} ms for socket {}",
-                MAX_WAIT_TIME_IN_READ_WRITE_MS,
-                match socket.peer_addr() {
-                    Ok(addr) => {
-                        addr.to_string()
-                    }
-                    Err(_) => {
-                        String::new()
-                    }
-                },
-            )));
-        }
-
-        match socket.write(buf) {
-            Ok(0) => {
-                return IoResult::Fin;
-            }
-            Ok(n) => {
-                if n != buf.len() {
-                    return IoResult::Err(AppError::new(&format!(
-                        "failed to write (got: {}, expected: {}) (socket {})",
-                        n,
-                        buf.len(),
-                        match socket.peer_addr() {
-                            Ok(addr) => {
-                                addr.to_string()
-                            }
-                            Err(_) => {
-                                String::new()
-                            }
-                        },
-                    )));
-                }
-
-                return IoResult::Ok(n);
-            }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                thread::sleep(Duration::from_millis(WOULD_BLOCK_RETRY_AFTER_MS));
-                total_wait_time_ms += WOULD_BLOCK_RETRY_AFTER_MS;
-                continue;
-            }
-            Err(e) => {
-                return IoResult::Err(AppError::new(&format!(
-                    "{:?} (socket {})",
-                    e,
-                    match socket.peer_addr() {
-                        Ok(addr) => {
-                            addr.to_string()
-                        }
-                        Err(_) => {
-                            String::new()
-                        }
-                    }
-                )));
-            }
-        };
-    }
-}
-
-/// Reads data from the specified socket with custom timeout.
-/// Blocks the current thread until the data is received or the timeout is reached.
-///
-/// Arguments:
-/// - `socket`: socket to read the data from.
-/// - `buf`: buffer to write read data.
-/// - `timeout_in_ms`: custom timeout in ms.
-///
-/// Returns `None` if timeout reached.
-fn read_from_socket_with_timeout(
-    socket: &mut TcpStream,
-    buf: &mut [u8],
-    timeout_in_ms: u64,
-) -> Option<IoResult> {
-    if buf.is_empty() {
-        return Some(IoResult::Err(AppError::new("passed 'buf' has 0 length")));
-    }
-
-    let mut total_wait_time_ms: u64 = 0;
-
-    loop {
-        if total_wait_time_ms >= timeout_in_ms {
-            return None;
-        }
-
-        match socket.read(buf) {
-            Ok(0) => {
-                return Some(IoResult::Fin);
-            }
-            Ok(n) => {
-                if n != buf.len() {
-                    return Some(IoResult::Err(AppError::new(&format!(
-                        "failed to read (got: {}, expected: {}) (socket {})",
-                        n,
-                        buf.len(),
-                        match socket.peer_addr() {
-                            Ok(addr) => {
-                                addr.to_string()
-                            }
-                            Err(_) => {
-                                String::new()
-                            }
-                        },
-                    ))));
-                }
-
-                return Some(IoResult::Ok(n));
-            }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                thread::sleep(Duration::from_millis(WOULD_BLOCK_RETRY_AFTER_MS));
-                total_wait_time_ms += WOULD_BLOCK_RETRY_AFTER_MS;
-                continue;
-            }
-            Err(e) => {
-                return Some(IoResult::Err(AppError::new(&format!(
-                    "{:?} (socket {})",
-                    e,
-                    match socket.peer_addr() {
-                        Ok(addr) => {
-                            addr.to_string()
-                        }
-                        Err(_) => {
-                            String::new()
-                        }
-                    },
-                ))));
-            }
-        };
-    }
-}
-
-/// Reads data from the specified socket with a timeout.
-/// Blocks the current thread until the data is received or a timeout is reached.
-///
-/// The timeout is specified by `MAX_WAIT_TIME_IN_READ_WRITE_MS` constant.
-///
-/// ## Arguments
-/// - `socket`: socket to read the data from.
-/// - `buf`: buffer to write read data.
-fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
-    if buf.is_empty() {
-        return IoResult::Err(AppError::new("passed 'buf' has 0 length"));
-    }
-
-    let mut total_wait_time_ms: u64 = 0;
+    let mut filled_buf_count: usize = 0;
+    let initial_buf_len = buf.len();
+    let mut temp_buf: Vec<u8> = Vec::from(buf);
 
     loop {
         if total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
-            return IoResult::Err(AppError::new(&format!(
-                "reached maximum response wait time limit of {} ms for socket {}",
-                MAX_WAIT_TIME_IN_READ_WRITE_MS,
-                match socket.peer_addr() {
-                    Ok(addr) => {
-                        addr.to_string()
-                    }
-                    Err(_) => {
-                        String::new()
-                    }
-                },
-            )));
+            return IoResult::Timeout;
         }
 
-        match socket.read(buf) {
+        match socket.write(&mut temp_buf) {
             Ok(0) => {
                 return IoResult::Fin;
             }
             Ok(n) => {
-                if n != buf.len() {
-                    return IoResult::Err(AppError::new(&format!(
-                        "failed to read (got: {}, expected: {}) (socket {})",
-                        n,
-                        buf.len(),
-                        match socket.peer_addr() {
-                            Ok(addr) => {
-                                addr.to_string()
-                            }
-                            Err(_) => {
-                                String::new()
-                            }
-                        },
-                    )));
+                filled_buf_count += n;
+                total_wait_time_ms = 0;
+
+                if filled_buf_count != initial_buf_len {
+                    temp_buf = Vec::from(&temp_buf[filled_buf_count..]);
+                    continue;
                 }
 
                 return IoResult::Ok(n);
@@ -862,7 +766,7 @@ fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
                         Err(_) => {
                             String::new()
                         }
-                    },
+                    }
                 )));
             }
         };
@@ -872,14 +776,18 @@ fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
 /// Reads data from the specified socket until the specified buffer is filled with a timeout.
 /// Blocks the current thread until the buffer is filled or a timeout is reached.
 ///
-/// The timeout is specified by `MAX_WAIT_TIME_IN_READ_WRITE_MS` constant.
-///
 /// ## Arguments
 /// - `socket`: socket to read the data from.
 /// - `buf`: buffer to write read data.
-fn read_from_socket_fill_buf(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
+/// - `timeout_in_ms`: if specified the operation will have a custom timeout,
+/// if not, default timeout of `MAX_WAIT_TIME_IN_READ_WRITE_MS` will be used.
+fn read_from_socket_fill_buf(
+    socket: &mut TcpStream,
+    buf: &mut [u8],
+    timeout_in_ms: Option<u64>,
+) -> IoResult {
     if buf.is_empty() {
-        return IoResult::Err(AppError::new("passed 'buf' has 0 length"));
+        return IoResult::Err(AppError::new("the specified buffer has zero length"));
     }
 
     let mut total_wait_time_ms: u64 = 0;
@@ -887,19 +795,14 @@ fn read_from_socket_fill_buf(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult
     let mut temp_buf = vec![0u8; buf.len()];
 
     loop {
-        if total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
-            return IoResult::Err(AppError::new(&format!(
-                "reached maximum response wait time limit of {} ms for socket {}",
-                MAX_WAIT_TIME_IN_READ_WRITE_MS,
-                match socket.peer_addr() {
-                    Ok(addr) => {
-                        addr.to_string()
-                    }
-                    Err(_) => {
-                        String::new()
-                    }
-                },
-            )));
+        if timeout_in_ms.is_some() {
+            if total_wait_time_ms >= timeout_in_ms.unwrap() {
+                return IoResult::Timeout;
+            }
+        } else {
+            if total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
+                return IoResult::Timeout;
+            }
         }
 
         match socket.read(&mut temp_buf) {
@@ -929,7 +832,7 @@ fn read_from_socket_fill_buf(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult
             }
             Err(e) => {
                 return IoResult::Err(AppError::new(&format!(
-                    "{:?} (socket {})",
+                    "{} (socket {})",
                     e,
                     match socket.peer_addr() {
                         Ok(addr) => {

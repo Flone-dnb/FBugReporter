@@ -110,7 +110,7 @@ impl ClientService {
         let message = receive_message(
             &mut self.socket,
             &self.secret_key,
-            Some(MAX_WAIT_TIME_IN_READ_WRITE_MS),
+            None,
             MAX_MESSAGE_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS,
             &mut is_fin,
         );

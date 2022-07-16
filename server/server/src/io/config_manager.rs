@@ -13,7 +13,7 @@ const RANDOM_PORT_RANGE: Range<u16> = 7000..65535;
 
 const DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS: u32 = 3;
 const DEFAULT_BAN_TIME_DURATION_IN_MIN: i64 = 5;
-const DEFAULT_MAX_ATTACHMENT_SIZE_IN_MB: u64 = 5;
+const DEFAULT_MAX_ATTACHMENT_SIZE_IN_MB: usize = 5;
 
 const CONFIG_FILE_NAME: &str = "server_config.ini";
 
@@ -33,7 +33,7 @@ const CONFIG_BAN_TIME_DURATION_IN_MIN: &str = "ban_time_duration_in_min";
 pub struct ConfigManager {
     pub port_for_reporters: u16,
     pub port_for_clients: u16,
-    pub max_attachment_size_in_mb: u64,
+    pub max_attachment_size_in_mb: usize,
     pub max_allowed_login_attempts: u32,
     pub ban_time_duration_in_min: i64,
     pub config_file_path: String,

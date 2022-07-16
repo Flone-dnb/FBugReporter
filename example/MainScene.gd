@@ -117,6 +117,14 @@ func send_report(
 			error_message += "Make sure to include the file \"reporter.log\" which is located at ";
 			error_message += reporter.get_log_file_path();
 			get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = error_message;
+		elif result_code == 9:
+			# the specified attachments exceed the maximum allowed attachment size limit on the server
+			# NOTICE ME: here it's better to try again without some attachment(s)
+			var error_message: String = "An error occurred: the specified attachments exceed the maximum allowed attachment size limit on the server.\n";
+			error_message += "If you're not the developer of this game, please, contact the developers and tell them about this issue!\n";
+			error_message += "Make sure to include the file \"reporter.log\" which is located at ";
+			error_message += reporter.get_log_file_path();
+			get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = error_message;
 		else:
 			# adding this just in case
 			var error_message: String = "An error occurred: reporter returned unknown error code \"" + String(result_code) + "\".\n";
@@ -138,7 +146,6 @@ func _notification(what):
 		# destructor logic
 		reporter.queue_free();
 
-
 func _on_SendReportButton_pressed():
 	# Check essential fields.
 	if get_node("VBoxContainer/ReportNameHBoxContainer/ReportNameLineEdit").text.length() == 0:
@@ -148,8 +155,10 @@ func _on_SendReportButton_pressed():
 		get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = "Please provide an issue description.";
 		return;
 	else:
-		get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = "";
+		get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = "Sending your report. Please wait...";
 		
+	yield(VisualServer, "frame_post_draw"); # wait for one frame to be drawn
+	
 	# Send report.
 	send_report(
 		get_node("VBoxContainer/ReportNameHBoxContainer/ReportNameLineEdit").text,

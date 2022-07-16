@@ -100,9 +100,18 @@ impl Reporter {
             client_os_info: os_info::get(),
         };
 
+        // Check input length.
+        let invalid_field = self.is_input_valid(&report);
+        if invalid_field.is_some() {
+            self.last_error = invalid_field.unwrap().id().to_string();
+            return ReportResult::InvalidInput.value();
+        }
+
         // Prepare logging.
         let mut logger = LogManager::new();
         logger.log(&format!("Received a report: {:?}", report));
+
+        let mut reporter = ReporterService::new();
 
         // Generate report attachments (if needed).
         let mut report_attachments: Vec<ReportAttachment> = Vec::new();
@@ -114,26 +123,35 @@ impl Reporter {
                 }
             }
 
-            let result = Self::generate_attachments_from_paths(attachments);
-            if let Err(e) = result {
-                logger.log(&e);
+            // Request mac attachment size (in total) in MB.
+            let result =
+                reporter.request_max_attachment_size_in_mb(self.server_addr.unwrap(), &mut logger);
+            if let Err(app_error) = result {
+                self.last_error = app_error.to_string();
+                logger.log(&app_error.to_string());
                 return ReportResult::InternalError.value();
             }
-            report_attachments = result.unwrap();
+            let max_attachments_size_in_mb = result.unwrap();
 
-            for attachment in report_attachments.iter() {
-                logger.log(&format!("Report attachment: {}", attachment.file_name));
+            logger.log(&format!(
+                "Received maximum allowed attachment size of {} MB.",
+                max_attachments_size_in_mb
+            ));
+
+            // Generate attachments from paths.
+            let result = Self::generate_attachments_from_paths(
+                attachments,
+                max_attachments_size_in_mb,
+                &mut logger,
+            );
+            if let Err((result, msg)) = result {
+                self.last_error = msg.clone();
+                logger.log(&msg);
+                return result.value();
             }
+            report_attachments = result.unwrap();
         }
 
-        // Check input length.
-        let invalid_field = self.is_input_valid(&report);
-        if invalid_field.is_some() {
-            self.last_error = invalid_field.unwrap().id().to_string();
-            return ReportResult::InvalidInput.value();
-        }
-
-        let mut reporter = ReporterService::new();
         let (result_code, error_message) = reporter.send_report(
             self.server_addr.unwrap(),
             report.clone(),
@@ -162,64 +180,87 @@ impl Reporter {
     /// Expects file path to exist.
     fn generate_attachments_from_paths(
         paths: Vec<String>,
-    ) -> Result<Vec<ReportAttachment>, String> {
+        max_attachments_size_in_mb: usize,
+        logger: &mut LogManager,
+    ) -> Result<Vec<ReportAttachment>, (ReportResult, String)> {
         let mut attachments: Vec<ReportAttachment> = Vec::new();
-        let mut total_attachment_size: usize = 0;
+        let mut total_attachment_size_in_bytes: usize = 0;
         for path in paths {
             let file_path = Path::new(&path);
 
             // Check file name.
             let file_name = file_path.file_name();
             if file_name.is_none() {
-                return Err(format!(
-                    "An error occurred at [{}, {}]: file name is empty ({})",
-                    file!(),
-                    line!(),
-                    path
+                return Err((
+                    ReportResult::InternalError,
+                    format!(
+                        "An error occurred at [{}, {}]: file name is empty ({})",
+                        file!(),
+                        line!(),
+                        path
+                    ),
                 ));
             }
             let file_name = file_name.unwrap().to_str();
             if file_name.is_none() {
-                return Err(format!(
-                    "An error occurred at [{}, {}]: failed to get file name ({})",
-                    file!(),
-                    line!(),
-                    path
+                return Err((
+                    ReportResult::InternalError,
+                    format!(
+                        "An error occurred at [{}, {}]: failed to get file name ({})",
+                        file!(),
+                        line!(),
+                        path
+                    ),
                 ));
             }
             let file_name = String::from(file_name.unwrap());
-            total_attachment_size += file_name.len();
+            total_attachment_size_in_bytes += file_name.len();
+
+            logger.log(&format!("Processing report attachment {}...", file_name,));
 
             // Read file into vec.
             let mut data: Vec<u8> = Vec::new();
 
             let file = File::open(path);
             if let Err(e) = file {
-                return Err(format!(
-                    "An error occurred at [{}, {}]: {}",
-                    file!(),
-                    line!(),
-                    e
+                return Err((
+                    ReportResult::InternalError,
+                    format!("An error occurred at [{}, {}]: {}", file!(), line!(), e),
                 ));
             }
             let mut file = file.unwrap();
             let result = file.read_to_end(&mut data);
             if let Err(e) = result {
-                return Err(format!(
-                    "An error occurred at [{}, {}]: {}",
-                    file!(),
-                    line!(),
-                    e
+                return Err((
+                    ReportResult::InternalError,
+                    format!("An error occurred at [{}, {}]: {}", file!(), line!(), e),
                 ));
             }
             let file_size = result.unwrap();
-            total_attachment_size += file_size;
+            total_attachment_size_in_bytes += file_size;
+
+            logger.log(&format!(
+                "Processed report attachment {} of size {} bytes.",
+                file_name, file_size
+            ));
 
             let attachment = ReportAttachment { file_name, data };
             attachments.push(attachment);
         }
 
-        // TODO: check total_attachment_size with allowed limit
+        let max_attachments_size_in_bytes = max_attachments_size_in_mb * 1024 * 1024;
+        if total_attachment_size_in_bytes > max_attachments_size_in_bytes {
+            return Err((
+                ReportResult::AttachmentTooBig,
+                format!(
+                    "An error occurred at [{}, {}]: maximum attachment size exceeded ({} > {})",
+                    file!(),
+                    line!(),
+                    total_attachment_size_in_bytes,
+                    max_attachments_size_in_bytes
+                ),
+            ));
+        }
 
         return Ok(attachments);
     }

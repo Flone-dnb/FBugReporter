@@ -20,7 +20,7 @@ pub struct ReporterService {
     secret_key: [u8; SECRET_KEY_SIZE],
     connected_count: Arc<Mutex<usize>>,
     exit_error: Option<Result<String, AppError>>,
-    max_total_attachment_size_in_mb: u64,
+    max_total_attachment_size_in_mb: usize,
 }
 
 impl ReporterService {
@@ -39,7 +39,7 @@ impl ReporterService {
         addr: SocketAddr,
         connected_count: Arc<Mutex<usize>>,
         database: Arc<Mutex<DatabaseManager>>,
-        max_attachment_size_in_mb: u64,
+        max_attachment_size_in_mb: usize,
     ) -> Self {
         {
             let mut guard = connected_count.lock().unwrap();
@@ -93,6 +93,7 @@ impl ReporterService {
         let max_allowed_message_size = MAX_MESSAGE_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS
             + (self.max_total_attachment_size_in_mb * 1024 * 1024);
 
+        // Wait for message.
         let mut is_fin = false; // don't check, react to FIN as error
         let message = receive_message(
             &mut self.socket,
@@ -150,6 +151,13 @@ impl ReporterService {
             } => {
                 return self.handle_report_request(reporter_net_protocol, game_report, attachments);
             }
+            ReporterRequest::MaxAttachmentSize {} => {
+                let result = self.handle_attachment_size_query_request();
+                if let Some(app_error) = result {
+                    return Err(app_error.add_entry(file!(), line!()));
+                }
+                return Ok(None);
+            }
         }
     }
 
@@ -178,7 +186,7 @@ impl ReporterService {
             if let Some(err) = send_message(
                 &mut self.socket,
                 &self.secret_key,
-                ReporterAnswer::ReportRequestResult { result_code },
+                ReporterAnswer::Report { result_code },
             ) {
                 return Err(err.add_entry(file!(), line!()));
             }
@@ -197,7 +205,7 @@ impl ReporterService {
             if let Some(err) = send_message(
                 &mut self.socket,
                 &self.secret_key,
-                ReporterAnswer::ReportRequestResult { result_code },
+                ReporterAnswer::Report { result_code },
             ) {
                 return Err(err.add_entry(file!(), line!()));
             }
@@ -211,9 +219,20 @@ impl ReporterService {
             )));
         }
 
+        // Calculate attachments size.
+        let mut attachments_size_in_bytes: usize = 0;
+        for attachment in attachments.iter() {
+            attachments_size_in_bytes += attachment.data.len();
+        }
+
+        // Log event.
         self.logger.lock().unwrap().print_and_log(
             LogCategory::Info,
-            &format!("received a report from socket {}", self.socket_addr),
+            &format!(
+                "received a report (attachments size ~{} KB) from reporter {}",
+                attachments_size_in_bytes / 1024,
+                self.socket_addr
+            ),
         );
 
         {
@@ -229,7 +248,7 @@ impl ReporterService {
                 if let Some(err) = send_message(
                     &mut self.socket,
                     &self.secret_key,
-                    ReporterAnswer::ReportRequestResult { result_code },
+                    ReporterAnswer::Report { result_code },
                 ) {
                     return Err(err.add_entry(file!(), line!()));
                 }
@@ -240,14 +259,14 @@ impl ReporterService {
 
         self.logger.lock().unwrap().print_and_log(
             LogCategory::Info,
-            &format!("saved a report from socket {}", self.socket_addr),
+            &format!("saved a report from reporter {}", self.socket_addr),
         );
 
         // Answer "OK".
         if let Some(err) = send_message(
             &mut self.socket,
             &self.secret_key,
-            ReporterAnswer::ReportRequestResult {
+            ReporterAnswer::Report {
                 result_code: ReportResult::Ok,
             },
         ) {
@@ -294,20 +313,15 @@ impl ReporterService {
     }
 
     /// Processes reporter's attachment size request.
-    ///
-    /// Returns `Option<String>` as `Ok`:
-    /// - if `Some(String)` then there was a "soft" error
-    /// (typically means that there was an error in client
-    /// data (wrong credentials, protocol version, etc...))
-    /// and we don't need to consider this as a bug,
-    /// - if `None` then the operation finished successfully.
-    ///
-    /// Returns `AppError` as `Err` if there was an internal error
-    /// (bug).
-    fn handle_attachment_size_query_request(&mut self) -> Result<Option<String>, AppError> {
-        // TODO
+    fn handle_attachment_size_query_request(&mut self) -> Option<AppError> {
+        let answer = ReporterAnswer::MaxAttachmentSize {
+            max_attachments_size_in_mb: self.max_total_attachment_size_in_mb,
+        };
+        if let Some(app_error) = send_message(&mut self.socket, &self.secret_key, answer) {
+            return Some(app_error.add_entry(file!(), line!()));
+        }
 
-        return Ok(None);
+        return None;
     }
 }
 

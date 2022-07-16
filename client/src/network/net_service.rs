@@ -125,7 +125,7 @@ impl NetService {
             self.socket.as_mut().unwrap(),
             &self.secret_key,
             None,
-            std::u64::MAX,
+            std::usize::MAX,
             &mut is_fin,
         );
         if is_fin {
@@ -247,7 +247,7 @@ impl NetService {
             self.socket.as_mut().unwrap(),
             &self.secret_key,
             None,
-            std::u64::MAX,
+            std::usize::MAX,
             &mut is_fin,
         );
         if is_fin {
@@ -300,7 +300,7 @@ impl NetService {
             self.socket.as_mut().unwrap(),
             &self.secret_key,
             None,
-            std::u64::MAX,
+            std::usize::MAX,
             &mut is_fin,
         );
         if is_fin {
@@ -372,7 +372,7 @@ impl NetService {
             self.socket.as_mut().unwrap(),
             &self.secret_key,
             None,
-            std::u64::MAX,
+            std::usize::MAX,
             &mut is_fin,
         );
         if is_fin {

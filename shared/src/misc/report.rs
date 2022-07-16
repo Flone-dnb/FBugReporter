@@ -80,6 +80,7 @@ pub enum ReportResult {
     ServerRejected,
     NetworkIssue,
     AttachmentDoesNotExist,
+    AttachmentTooBig,
     // make sure to handle new entries
     // in the 'example' project
 }
@@ -95,6 +96,7 @@ impl ReportResult {
             ReportResult::ServerRejected => 6,
             ReportResult::NetworkIssue => 7,
             ReportResult::AttachmentDoesNotExist => 8,
+            ReportResult::AttachmentTooBig => 9,
         }
     }
 }

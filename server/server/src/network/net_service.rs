@@ -14,7 +14,7 @@ use crate::{
 use shared::misc::db_manager::*;
 use shared::misc::error::AppError;
 
-pub const MAX_MESSAGE_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS: u64 = 131_072; // 128 kB
+pub const MAX_MESSAGE_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS: usize = 131_072; // 128 kB
 
 pub struct NetService {
     pub logger: Arc<Mutex<LogManager>>,
@@ -147,6 +147,7 @@ impl NetService {
                     LogCategory::Error,
                     &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
+                continue;
             }
 
             let (socket, addr) = accept_result.unwrap();
@@ -156,12 +157,14 @@ impl NetService {
                     LogCategory::Error,
                     &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
+                continue;
             }
             if let Err(e) = socket.set_nonblocking(true) {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
                     &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
+                continue;
             }
 
             let logger_copy = logger.clone();
@@ -187,6 +190,7 @@ impl NetService {
                     LogCategory::Error,
                     &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
+                continue;
             }
         }
     }
@@ -206,6 +210,7 @@ impl NetService {
                     LogCategory::Error,
                     &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
+                continue;
             }
 
             let (socket, addr) = accept_result.unwrap();
@@ -215,12 +220,14 @@ impl NetService {
                     LogCategory::Error,
                     &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
+                continue;
             }
             if let Err(e) = socket.set_nonblocking(true) {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
                     &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
+                continue;
             }
 
             {
@@ -257,6 +264,7 @@ impl NetService {
                     LogCategory::Error,
                     &AppError::new(&e.to_string(), file!(), line!()).to_string(),
                 );
+                continue;
             }
         }
     }

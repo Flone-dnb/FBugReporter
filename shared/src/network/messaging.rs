@@ -19,6 +19,15 @@ use serde::Serialize;
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
+// ---------- if changed one change other --------------
+type MessageLenType = u32; // maximum message size is 4 GB, but the server has its own limit
+const MAX_MESSAGE_LEN: usize = std::u32::MAX as usize;
+// ---------------------------------------------------------
+
+/// If total message size exceeds this value it will be split into smaller
+/// chunks and send in chunks.
+const MAX_MESSAGE_SIZE_UNTIL_SPLITING_IN_BYTES: usize = 8192;
+
 enum IoResult {
     Ok(usize),
     Fin,
@@ -419,36 +428,53 @@ where
         .encrypt_padded_vec_mut::<Pkcs7>(&binary_message);
 
     // Prepare encrypted message len buffer.
-    if encrypted_binary_message.len() + IV_LENGTH > std::u32::MAX as usize {
+    if encrypted_binary_message.len() + IV_LENGTH > MAX_MESSAGE_LEN {
         // should never happen
         return Some(AppError::new(
             &format!(
                 "resulting message is too big ({} > {})",
                 encrypted_binary_message.len() + IV_LENGTH,
-                std::u32::MAX
+                MAX_MESSAGE_LEN
             ),
             file!(),
             line!(),
         ));
     }
-    let encrypted_len = (encrypted_binary_message.len() + IV_LENGTH) as u32;
+    let encrypted_len = (encrypted_binary_message.len() + iv.len()) as MessageLenType;
     let encrypted_len_buf = bincode::serialize(&encrypted_len);
     if let Err(e) = encrypted_len_buf {
         return Some(AppError::new(&format!("{:?}", e), file!(), line!()));
     }
-    let mut send_buffer = encrypted_len_buf.unwrap();
 
-    // Merge all to one buffer.
+    // Merge all into one buffer.
+    let mut send_buffer = encrypted_len_buf.unwrap();
     send_buffer.append(&mut Vec::from(iv));
     send_buffer.append(&mut encrypted_binary_message);
 
-    // Send.
-    match write_to_socket(socket, &mut send_buffer, true) {
-        IoResult::Fin => {
-            return Some(AppError::new("unexpected FIN received", file!(), line!()));
+    if send_buffer.len() <= MAX_MESSAGE_SIZE_UNTIL_SPLITING_IN_BYTES {
+        // Send.
+        match write_to_socket(socket, &mut send_buffer, false) {
+            IoResult::Fin => {
+                return Some(AppError::new("unexpected FIN received", file!(), line!()));
+            }
+            IoResult::Err(err) => return Some(err.add_entry(file!(), line!())),
+            IoResult::Ok(_) => {}
         }
-        IoResult::Err(err) => return Some(err.add_entry(file!(), line!())),
-        IoResult::Ok(_) => {}
+    } else {
+        // Need to split the message in smaller chunks.
+        let mut chunks: Vec<&mut [u8]> = send_buffer
+            .chunks_mut(MAX_MESSAGE_SIZE_UNTIL_SPLITING_IN_BYTES)
+            .collect();
+        for chunk in chunks.iter_mut() {
+            // Send.
+            match write_to_socket(socket, chunk, false) {
+                IoResult::Fin => {
+                    return Some(AppError::new("unexpected FIN received", file!(), line!()));
+                }
+                IoResult::Err(err) => return Some(err.add_entry(file!(), line!())),
+                IoResult::Ok(_) => {}
+            }
+        }
     }
 
     None
@@ -469,7 +495,7 @@ pub fn receive_message(
     socket: &mut TcpStream,
     secret_key: &[u8; SECRET_KEY_SIZE],
     timeout_in_ms: Option<u64>,
-    max_allowed_message_size_in_bytes: u64,
+    max_allowed_message_size_in_bytes: usize,
     is_fin: &mut bool,
 ) -> Result<Vec<u8>, AppError> {
     if secret_key.is_empty() {
@@ -491,9 +517,9 @@ pub fn receive_message(
     }
     let socket_addr = peer_addr.unwrap();
 
-    // Read u32 (size of a message)
-    let mut message_size_buf = [0u8; std::mem::size_of::<u32>() as usize];
-    let mut _next_message_size: u64 = 0;
+    // Read total size of an incoming message.
+    let mut message_size_buf = vec![0u8; std::mem::size_of::<MessageLenType>()];
+    let mut _next_message_size: usize = 0;
 
     let mut _result = IoResult::Fin;
     if timeout_in_ms.is_some() {
@@ -532,7 +558,7 @@ pub fn receive_message(
                 ));
             }
 
-            let res = bincode::deserialize::<u32>(&message_size_buf);
+            let res = bincode::deserialize::<MessageLenType>(&message_size_buf);
             if let Err(e) = res {
                 return Err(AppError::new(
                     &format!("{:?} (socket: {})", e, socket_addr),
@@ -541,7 +567,7 @@ pub fn receive_message(
                 ));
             }
 
-            _next_message_size = res.unwrap() as u64;
+            _next_message_size = res.unwrap() as usize;
         }
     }
 
@@ -558,19 +584,53 @@ pub fn receive_message(
     }
 
     // Receive encrypted message.
-    let mut encrypted_message = vec![0u8; _next_message_size as usize];
-    match read_from_socket(socket, &mut encrypted_message) {
-        IoResult::Fin => {
-            *is_fin = true;
-            return Err(AppError::new(
-                &format!("unexpected FIN received (socket: {})", socket_addr),
-                file!(),
-                line!(),
-            ));
+    let mut encrypted_message: Vec<u8> = Vec::new();
+    if _next_message_size + std::mem::size_of::<MessageLenType>()
+        <= MAX_MESSAGE_SIZE_UNTIL_SPLITING_IN_BYTES
+    {
+        encrypted_message = vec![0u8; _next_message_size as usize];
+        match read_from_socket(socket, &mut encrypted_message) {
+            IoResult::Fin => {
+                *is_fin = true;
+                return Err(AppError::new(
+                    &format!("unexpected FIN received (socket: {})", socket_addr),
+                    file!(),
+                    line!(),
+                ));
+            }
+            IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
+            IoResult::Ok(_) => {}
+        };
+    } else {
+        // The message is split into multiple chunks.
+        let mut bytes_left_to_receive = _next_message_size;
+
+        while bytes_left_to_receive != 0 {
+            let mut _chunk: Vec<u8> = Vec::new();
+
+            if bytes_left_to_receive > MAX_MESSAGE_SIZE_UNTIL_SPLITING_IN_BYTES {
+                _chunk = vec![0u8; MAX_MESSAGE_SIZE_UNTIL_SPLITING_IN_BYTES];
+            } else {
+                _chunk = vec![0u8; bytes_left_to_receive];
+            }
+
+            match read_from_socket_fill_buf(socket, &mut _chunk) {
+                IoResult::Fin => {
+                    *is_fin = true;
+                    return Err(AppError::new(
+                        &format!("unexpected FIN received (socket: {})", socket_addr),
+                        file!(),
+                        line!(),
+                    ));
+                }
+                IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
+                IoResult::Ok(_) => {}
+            };
+
+            bytes_left_to_receive -= _chunk.len();
+            encrypted_message.append(&mut _chunk);
         }
-        IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
-        IoResult::Ok(_) => {}
-    };
+    }
 
     // Get IV.
     if encrypted_message.len() < IV_LENGTH {
@@ -642,7 +702,7 @@ pub fn receive_message(
 
 /// Writes the specified buffer to the socket.
 ///
-/// Parameters:
+/// ## Arguments:
 /// - `socket`: socket to write this data to.
 /// - `buf`: buffer to write to the socket.
 /// - `enable_wait_limit`: if `false` will wait for write operation to finish
@@ -659,7 +719,7 @@ fn write_to_socket(socket: &mut TcpStream, buf: &mut [u8], enable_wait_limit: bo
         if enable_wait_limit && total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
             return IoResult::Err(AppError::new(
                 &format!(
-                    "reached maximum response wait time limit of {} ms for socket {}",
+                    "reached maximum write wait time limit of {} ms for socket {}",
                     MAX_WAIT_TIME_IN_READ_WRITE_MS,
                     match socket.peer_addr() {
                         Ok(addr) => {
@@ -729,12 +789,13 @@ fn write_to_socket(socket: &mut TcpStream, buf: &mut [u8], enable_wait_limit: bo
     }
 }
 
-/// Reads data from the specified socket.
-/// Blocks the current thread until the data is received or timeout is reached.
+/// Reads data from the specified socket with custom timeout.
+/// Blocks the current thread until the data is received or the timeout is reached.
 ///
 /// Arguments:
 /// - `socket`: socket to read the data from.
 /// - `buf`: buffer to write read data.
+/// - `timeout_in_ms`: custom timeout in ms.
 ///
 /// Returns `None` if timeout reached.
 fn read_from_socket_with_timeout(
@@ -811,10 +872,12 @@ fn read_from_socket_with_timeout(
     }
 }
 
-/// Reads data from the specified socket.
-/// Infinitely blocks the current thread until the data is received.
+/// Reads data from the specified socket with a timeout.
+/// Blocks the current thread until the data is received or a timeout is reached.
 ///
-/// Parameters:
+/// The timeout is specified by `MAX_WAIT_TIME_IN_READ_WRITE_MS` constant.
+///
+/// ## Arguments
 /// - `socket`: socket to read the data from.
 /// - `buf`: buffer to write read data.
 fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
@@ -867,6 +930,90 @@ fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
                         file!(),
                         line!(),
                     ));
+                }
+
+                return IoResult::Ok(n);
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(WOULD_BLOCK_RETRY_AFTER_MS));
+                total_wait_time_ms += WOULD_BLOCK_RETRY_AFTER_MS;
+                continue;
+            }
+            Err(e) => {
+                return IoResult::Err(AppError::new(
+                    &format!(
+                        "{:?} (socket {})",
+                        e,
+                        match socket.peer_addr() {
+                            Ok(addr) => {
+                                addr.to_string()
+                            }
+                            Err(_) => {
+                                String::new()
+                            }
+                        },
+                    ),
+                    file!(),
+                    line!(),
+                ));
+            }
+        };
+    }
+}
+
+/// Reads data from the specified socket until the specified buffer is filled with a timeout.
+/// Blocks the current thread until the buffer is filled or a timeout is reached.
+///
+/// The timeout is specified by `MAX_WAIT_TIME_IN_READ_WRITE_MS` constant.
+///
+/// ## Arguments
+/// - `socket`: socket to read the data from.
+/// - `buf`: buffer to write read data.
+fn read_from_socket_fill_buf(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
+    if buf.is_empty() {
+        return IoResult::Err(AppError::new("passed 'buf' has 0 length", file!(), line!()));
+    }
+
+    let mut total_wait_time_ms: u64 = 0;
+    let mut filled_buf_count: usize = 0;
+    let mut temp_buf = vec![0u8; buf.len()];
+
+    loop {
+        if total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
+            return IoResult::Err(AppError::new(
+                &format!(
+                    "reached maximum response wait time limit of {} ms for socket {}",
+                    MAX_WAIT_TIME_IN_READ_WRITE_MS,
+                    match socket.peer_addr() {
+                        Ok(addr) => {
+                            addr.to_string()
+                        }
+                        Err(_) => {
+                            String::new()
+                        }
+                    },
+                ),
+                file!(),
+                line!(),
+            ));
+        }
+
+        match socket.read(&mut temp_buf) {
+            Ok(0) => {
+                return IoResult::Fin;
+            }
+            Ok(n) => {
+                // Write received data to buf.
+                for i in 0..n {
+                    buf[filled_buf_count + i] = temp_buf[i];
+                }
+
+                filled_buf_count += n;
+                total_wait_time_ms = 0;
+
+                if filled_buf_count != buf.len() {
+                    temp_buf = vec![0u8; buf.len() - filled_buf_count];
+                    continue;
                 }
 
                 return IoResult::Ok(n);

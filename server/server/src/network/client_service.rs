@@ -219,7 +219,15 @@ impl ClientService {
             }
             ClientRequest::QueryReport { report_id } => {
                 let result = self.handle_client_report_request(report_id);
-                if let Err(app_error) = result {
+                if let Some(app_error) = result {
+                    return Err(app_error.add_entry(file!(), line!()));
+                }
+
+                Ok(None)
+            }
+            ClientRequest::QueryAttachment { attachment_id } => {
+                let result = self.handle_client_attachment_request(attachment_id);
+                if let Some(app_error) = result {
                     return Err(app_error.add_entry(file!(), line!()));
                 }
 
@@ -658,11 +666,66 @@ impl ClientService {
         Ok(())
     }
 
+    // Handles client's "query attachment" request.
+    ///
+    /// Queries the specified attachment from the database and returns
+    /// it to the client.
+    fn handle_client_attachment_request(&mut self, attachment_id: usize) -> Option<AppError> {
+        {
+            // Log this event.
+            let mut username = String::new();
+            if self.username.is_some() {
+                username = self.username.as_ref().unwrap().clone();
+            }
+            self.logger.lock().unwrap().print_and_log(
+                LogCategory::Info,
+                &format!(
+                    "client \"{}\" requested an attachment with id {}",
+                    username, attachment_id
+                ),
+            )
+        }
+
+        // Get attachment from database.
+        let mut guard = self.database.lock().unwrap();
+        let result = guard.get_attachment(attachment_id);
+        drop(guard);
+
+        if let Err(app_error) = result {
+            return Some(app_error.add_entry(file!(), line!()));
+        }
+        let attachment = result.unwrap();
+
+        // Prepare message.
+        let mut message = ClientAnswer::Attachment {
+            is_found: false,
+            data: Vec::new(),
+        };
+
+        // See if found.
+        if attachment.is_some() {
+            let attachment = attachment.unwrap();
+
+            message = ClientAnswer::Attachment {
+                is_found: true,
+                data: attachment.data,
+            };
+        }
+
+        // Send attachment.
+        let result = send_message(&mut self.socket, &self.secret_key, message);
+        if let Some(app_error) = result {
+            return Some(app_error.add_entry(file!(), line!()));
+        }
+
+        None
+    }
+
     /// Handles client's "query report" request.
     ///
     /// Queries the specified report from the database and returns
     /// it to the client.
-    fn handle_client_report_request(&mut self, report_id: u64) -> Result<(), AppError> {
+    fn handle_client_report_request(&mut self, report_id: u64) -> Option<AppError> {
         {
             // Log this event.
             let mut username = String::new();
@@ -679,13 +742,13 @@ impl ClientService {
         }
 
         // Get reports from database.
-        let guard = self.database.lock().unwrap();
+        let mut guard = self.database.lock().unwrap();
         let result = guard.get_report(report_id);
         drop(guard);
 
         // Check report.
         if let Err(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Some(app_error.add_entry(file!(), line!()));
         }
         let report = result.unwrap();
 
@@ -701,15 +764,16 @@ impl ClientService {
             sender_name: report.sender_name,
             sender_email: report.sender_email,
             os_info: report.os_info,
+            attachments: report.attachments,
         };
 
         // Send reports.
         let result = send_message(&mut self.socket, &self.secret_key, message);
         if let Some(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Some(app_error.add_entry(file!(), line!()));
         }
 
-        Ok(())
+        None
     }
 
     /// Sends `ClientLoginAnswer` with `WrongCredentials` message

@@ -1,12 +1,14 @@
 // Std.
+use std::fs;
 use std::net::*;
+use std::path::Path;
 
 // External.
 use sha2::{Digest, Sha512};
 
 // Custom.
 use crate::io::config_manager::ConfigManager;
-use crate::layouts::report_layout::ReportData;
+use shared::misc::db_manager::ReportData;
 use shared::misc::error::AppError;
 use shared::misc::report::ReportSummary;
 use shared::network::client_messages::*;
@@ -281,20 +283,33 @@ impl NetService {
             }
         }
     }
-    pub fn query_report(&mut self, report_id: u64) -> Result<ReportData, AppError> {
+
+    /// Downloads and saves an attachment from the server.
+    ///
+    /// ## Return
+    /// `Err(AppError)` if something went wrong, otherwise
+    /// `Ok(true)` if attachment is found and saved,
+    /// `Ok(false)` if attachment is not found.
+    pub fn download_attachment(
+        &mut self,
+        attachment_id: usize,
+        path_to_save: &Path,
+    ) -> Result<bool, AppError> {
         if !self.is_connected {
             return Err(AppError::new("not connected", file!(), line!()));
         }
 
         // Prepare packet to send.
-        let packet = ClientRequest::QueryReport { report_id };
+        let message = ClientRequest::QueryAttachment { attachment_id };
 
+        // Send message.
         if let Some(app_error) =
-            send_message(self.socket.as_mut().unwrap(), &self.secret_key, packet)
+            send_message(self.socket.as_mut().unwrap(), &self.secret_key, message)
         {
             return Err(app_error.add_entry(file!(), line!()));
         }
 
+        // Wait for answer.
         let mut is_fin = false;
         let result = receive_message(
             self.socket.as_mut().unwrap(),
@@ -312,13 +327,72 @@ impl NetService {
         let serialized_packet = result.unwrap();
 
         // Deserialize.
-        let packet = bincode::deserialize::<ClientAnswer>(&serialized_packet);
-        if let Err(e) = packet {
+        let message = bincode::deserialize::<ClientAnswer>(&serialized_packet);
+        if let Err(e) = message {
             return Err(AppError::new(&e.to_string(), file!(), line!()));
         }
-        let packet = packet.unwrap();
+        let message = message.unwrap();
 
-        match packet {
+        match message {
+            ClientAnswer::Attachment { is_found, data } => {
+                if !is_found {
+                    return Ok(false);
+                } else {
+                    if let Err(e) = fs::write(path_to_save, data) {
+                        return Err(AppError::new(&e.to_string(), file!(), line!()));
+                    }
+                    return Ok(true);
+                }
+            }
+            _ => {
+                return Err(AppError::new(
+                    "unexpected message received",
+                    file!(),
+                    line!(),
+                ));
+            }
+        }
+    }
+    pub fn query_report(&mut self, report_id: u64) -> Result<ReportData, AppError> {
+        if !self.is_connected {
+            return Err(AppError::new("not connected", file!(), line!()));
+        }
+
+        // Prepare packet to send.
+        let message = ClientRequest::QueryReport { report_id };
+
+        // Send message.
+        if let Some(app_error) =
+            send_message(self.socket.as_mut().unwrap(), &self.secret_key, message)
+        {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+
+        // Wait for answer.
+        let mut is_fin = false;
+        let result = receive_message(
+            self.socket.as_mut().unwrap(),
+            &self.secret_key,
+            None,
+            std::usize::MAX,
+            &mut is_fin,
+        );
+        if is_fin {
+            return Err(AppError::new("unexpected FIN received", file!(), line!()));
+        }
+        if let Err(app_error) = result {
+            return Err(app_error.add_entry(file!(), line!()));
+        }
+        let serialized_packet = result.unwrap();
+
+        // Deserialize.
+        let message = bincode::deserialize::<ClientAnswer>(&serialized_packet);
+        if let Err(e) = message {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let message = message.unwrap();
+
+        match message {
             ClientAnswer::Report {
                 id,
                 title,
@@ -330,6 +404,7 @@ impl NetService {
                 sender_name,
                 sender_email,
                 os_info,
+                attachments,
             } => {
                 return Ok(ReportData {
                     id,
@@ -342,11 +417,12 @@ impl NetService {
                     sender_name,
                     sender_email,
                     os_info,
+                    attachments,
                 });
             }
             _ => {
                 return Err(AppError::new(
-                    "unexpected packet received",
+                    "unexpected message received",
                     file!(),
                     line!(),
                 ));

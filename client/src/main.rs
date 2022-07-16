@@ -10,6 +10,7 @@ use druid::widget::ViewSwitcher;
 use druid::{
     AppDelegate, AppLauncher, Command, Data, DelegateCtx, Env, Handled, Lens, Target, WindowDesc,
 };
+use native_dialog::{FileDialog, MessageDialog, MessageType};
 use rdev::display_size;
 
 // Custom.
@@ -19,9 +20,11 @@ use layouts::{
     main_layout::MainLayout, otp_layout::OtpLayout, report_layout::ReportLayout,
     settings_layout::SettingsLayout,
 };
-use misc::custom_data_button_controller::CUSTOM_DATA_BUTTON_CLICKED;
+use misc::report_attachment_button::REPORT_ATTACHMENT_BUTTON_CLICKED;
+use misc::report_id_button::REPORT_ID_BUTTON_CLICKED;
 use misc::theme::*;
 use network::net_service::NetService;
+use shared::misc::error::AppError;
 
 mod io;
 mod layouts;
@@ -49,6 +52,7 @@ pub struct ApplicationState {
     settings_layout: SettingsLayout,
     change_password_layout: ChangePasswordLayout,
     otp_layout: OtpLayout,
+    #[data(ignore)]
     report_layout: ReportLayout,
 
     // services
@@ -166,7 +170,7 @@ impl AppDelegate<ApplicationState> for MyDelegate {
         data: &mut ApplicationState,
         _env: &Env,
     ) -> Handled {
-        if let Some(button_data) = cmd.get(CUSTOM_DATA_BUTTON_CLICKED) {
+        if let Some(button_data) = cmd.get(REPORT_ID_BUTTON_CLICKED) {
             let report = data
                 .net_service
                 .lock()
@@ -188,8 +192,75 @@ impl AppDelegate<ApplicationState> for MyDelegate {
             }
             let report = report.unwrap();
 
-            data.report_layout.report = report;
+            data.report_layout.report = std::rc::Rc::new(report);
             data.current_layout = Layout::Report;
+
+            Handled::Yes
+        } else if let Some(button_data) = cmd.get(REPORT_ATTACHMENT_BUTTON_CLICKED) {
+            // Ask where to save the file.
+            let path_to_save_attachment = FileDialog::new()
+                .set_filename(&button_data.attachment_file_name)
+                .show_save_single_file()
+                .unwrap();
+            if path_to_save_attachment.is_none() {
+                return Handled::Yes;
+            }
+            let path_to_save_attachment = path_to_save_attachment.unwrap();
+
+            // TODO: show modal window
+
+            let result = data
+                .net_service
+                .lock()
+                .unwrap()
+                .download_attachment(button_data.attachment_id, path_to_save_attachment.as_path());
+            if let Err(app_error) = result {
+                if app_error.get_message().contains("FIN") {
+                    data.current_layout = Layout::Connect;
+                    data.connect_layout.connect_error = format!(
+                        "{}\nMost likely the server \
+                    closed connection due to your inactivity.",
+                        app_error.get_message()
+                    );
+                } else {
+                    println!("ERROR: {}", app_error.to_string());
+                }
+
+                return Handled::Yes;
+            }
+            let is_found = result.unwrap();
+
+            if is_found {
+                if let Err(e) = MessageDialog::new()
+                    .set_type(MessageType::Info)
+                    .set_title("Attachment")
+                    .set_text(&format!(
+                        "Attachment \"{}\" was successfully downloaded at {}.",
+                        button_data.attachment_file_name,
+                        path_to_save_attachment.to_str().unwrap()
+                    ))
+                    .show_alert()
+                {
+                    let message = AppError::new(&e.to_string(), file!(), line!()).to_string();
+                    data.logger_service.lock().unwrap().log(&message);
+                    println!("{}", message);
+                }
+            } else {
+                if let Err(e) = MessageDialog::new()
+                    .set_type(MessageType::Error)
+                    .set_title("Attachment")
+                    .set_text(&format!(
+                        "Attachment \"{}\" was not found on the server \
+                        (maybe this report was just deleted by an administrator).",
+                        button_data.attachment_file_name
+                    ))
+                    .show_alert()
+                {
+                    let message = AppError::new(&e.to_string(), file!(), line!()).to_string();
+                    data.logger_service.lock().unwrap().log(&message);
+                    println!("{}", message);
+                }
+            }
 
             Handled::Yes
         } else {

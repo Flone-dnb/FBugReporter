@@ -1,43 +1,32 @@
 // Std.
 use std::fs::File;
 use std::io::Write;
+use std::rc::Rc;
 
 // External.
 use druid::widget::{prelude::*, Scroll, SizedBox};
 use druid::widget::{Button, Flex, Label, Padding};
-use druid::WidgetExt;
+use druid::{TextAlignment, WidgetExt};
 use native_dialog::{FileDialog, MessageDialog, MessageType};
 
 // Custom.
 use super::main_layout::REPORT_COUNT_PER_PAGE;
+use crate::misc::report_attachment_button::*;
 use crate::{ApplicationState, Layout};
-
-#[derive(Clone, Data)]
-pub struct ReportData {
-    pub id: u64,
-    pub title: String,
-    pub game_name: String,
-    pub game_version: String,
-    pub text: String,
-    pub date: String,
-    pub time: String,
-    pub sender_name: String,
-    pub sender_email: String,
-    pub os_info: String,
-}
+use shared::misc::db_manager::ReportData;
 
 // Layout customization.
 const TEXT_SIZE: f64 = 18.0;
 
-#[derive(Clone, Data)]
+#[derive(Clone)]
 pub struct ReportLayout {
-    pub report: ReportData,
+    pub report: Rc<ReportData>, // using Rc to implement Clone
 }
 
 impl ReportLayout {
     pub fn new() -> Self {
         Self {
-            report: ReportData {
+            report: Rc::new(ReportData {
                 id: 0,
                 title: String::new(),
                 game_name: String::new(),
@@ -48,7 +37,8 @@ impl ReportLayout {
                 sender_name: String::new(),
                 sender_email: String::new(),
                 os_info: String::new(),
-            },
+                attachments: Vec::new(),
+            }),
         }
     }
 
@@ -65,6 +55,45 @@ impl ReportLayout {
         } else {
             delete_report_section =
                 delete_report_section.with_flex_child(SizedBox::empty().expand_width(), 1.0)
+        }
+
+        // Setup attachment column.
+        let mut attachment_column = Flex::column();
+
+        if !data.report_layout.report.attachments.is_empty() {
+            attachment_column.add_child(
+                Label::new("Report attachments:")
+                    .with_text_size(TEXT_SIZE)
+                    .align_left(),
+            );
+            attachment_column.add_default_spacer();
+            for attachment in data.report_layout.report.attachments.iter() {
+                attachment_column.add_child(
+                    Flex::row()
+                        .with_child(
+                            Button::from_label(
+                                Label::new(attachment.file_name.clone())
+                                    .with_text_alignment(TextAlignment::Start)
+                                    .with_text_size(TEXT_SIZE),
+                            )
+                            .controller(
+                                ReportAttachmentButtonController::new(ReportAttachmentButtonData {
+                                    attachment_id: attachment.id,
+                                    attachment_file_name: attachment.file_name.clone(),
+                                }),
+                            ),
+                        )
+                        .with_child(
+                            Label::new(match attachment.size_in_bytes {
+                                0..=1023 => format!("{} bytes", attachment.size_in_bytes),
+                                1024..=1048575 => format!("{} KB", attachment.size_in_bytes / 1024),
+                                _ => format!("{} MB", attachment.size_in_bytes / 1024 / 1024),
+                            })
+                            .with_text_size(TEXT_SIZE),
+                        )
+                        .align_left(),
+                );
+            }
         }
 
         Padding::new(
@@ -169,6 +198,9 @@ impl ReportLayout {
                 )
                 .with_default_spacer()
                 .with_default_spacer()
+                .with_child(attachment_column)
+                .with_default_spacer()
+                .with_default_spacer()
                 .with_flex_child(
                     Flex::row()
                         .with_child(
@@ -178,7 +210,7 @@ impl ReportLayout {
                         .with_flex_child(delete_report_section, 1.0)
                         .with_child(
                             Button::from_label(
-                                Label::new("Save to File").with_text_size(TEXT_SIZE),
+                                Label::new("Save Text to File").with_text_size(TEXT_SIZE),
                             )
                             .on_click(ReportLayout::on_save_to_file_clicked),
                         ),
@@ -273,7 +305,6 @@ impl ReportLayout {
             .show_save_single_file()
             .unwrap();
         if path.is_none() {
-            println!("FileDialog returned None");
             return;
         }
         let path = path.unwrap();

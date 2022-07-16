@@ -25,6 +25,13 @@ pub struct GameReport {
     // and maybe update table structure in the database (backwards compatibility)?
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ReportAttachmentSummary {
+    pub id: usize,
+    pub file_name: String,
+    pub size_in_bytes: usize,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ReportAttachment {
     pub file_name: String,

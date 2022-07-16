@@ -119,8 +119,11 @@ func send_report(
 			get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = error_message;
 		elif result_code == 9:
 			# the specified attachments exceed the maximum allowed attachment size limit on the server
+			
 			# NOTICE ME: here it's better to try again without some attachment(s)
-			var error_message: String = "An error occurred: the specified attachments exceed the maximum allowed attachment size limit on the server.\n";
+			var notice_me;
+			
+			var error_message: String = "An error occurred: the specified attachments exceed the maximum allowed attachment size limit.\n";
 			error_message += "If you're not the developer of this game, please, contact the developers and tell them about this issue!\n";
 			error_message += "Make sure to include the file \"reporter.log\" which is located at ";
 			error_message += reporter.get_log_file_path();

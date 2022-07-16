@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 
 // Custom.
-use crate::misc::report::ReportSummary;
+use crate::misc::report::{ReportAttachmentSummary, ReportSummary};
 
 /// Client's request to the server.
 /// If made changes, change protocol version.
@@ -26,6 +26,9 @@ pub enum ClientRequest {
     },
     QueryReport {
         report_id: u64,
+    },
+    QueryAttachment {
+        attachment_id: usize,
     },
     DeleteReport {
         report_id: u64,
@@ -56,6 +59,11 @@ pub enum ClientAnswer {
         sender_name: String,
         sender_email: String,
         os_info: String,
+        attachments: Vec<ReportAttachmentSummary>,
+    },
+    Attachment {
+        is_found: bool,
+        data: Vec<u8>,
     },
     DeleteReportResult {
         is_found_and_removed: bool,

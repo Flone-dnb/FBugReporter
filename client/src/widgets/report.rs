@@ -4,7 +4,7 @@ use druid::widget::{Button, Flex, Label, MainAxisAlignment};
 use druid::{Lens, TextAlignment, WidgetExt};
 
 // Custom.
-use crate::misc::custom_data_button_controller::*;
+use crate::misc::report_id_button::*;
 use crate::ApplicationState;
 
 // Layout customization.
@@ -85,7 +85,7 @@ impl ReportWidget {
                         .with_text_alignment(TextAlignment::Start)
                         .with_text_size(TEXT_SIZE),
                 )
-                .controller(CustomDataButtonController::new(CustomButtonData {
+                .controller(ReportIdButtonController::new(ReportIdButtonData {
                     report_id: self.id,
                 }))
                 .expand_width(),

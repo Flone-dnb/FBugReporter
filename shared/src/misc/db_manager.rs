@@ -67,6 +67,7 @@ pub struct ReportData {
     pub sender_name: String,
     pub sender_email: String,
     pub os_info: String,
+    pub attachments: Vec<ReportAttachmentSummary>,
 }
 
 pub struct DatabaseManager {
@@ -248,12 +249,70 @@ impl DatabaseManager {
             })
         }
     }
+    /// Queries the attachment by ID.
+    ///
+    /// ## Return
+    /// `Err(AppError)` if something went wrong, otherwise
+    /// `Ok(Some(ReportAttachment))` if attachment is found,
+    /// `Ok(None)` if attachment is not found.
+    pub fn get_attachment(
+        &mut self,
+        attachment_id: usize,
+    ) -> Result<Option<ReportAttachment>, AppError> {
+        let mut stmt = self
+            .connection
+            .prepare(&format!(
+                "SELECT file_name, data \
+                 FROM {} \
+                 WHERE id == {}",
+                ATTACHMENT_TABLE_NAME, attachment_id
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+
+        let row = rows.next();
+        if let Err(e) = row {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let row = row.unwrap();
+        if row.is_none() {
+            return Ok(None); // not found
+        }
+
+        let row = row.unwrap();
+
+        // Get file name.
+        let file_name = row.get(0);
+        if let Err(e) = file_name {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let file_name: String = file_name.unwrap();
+
+        // Get data.
+        let data = row.get(1);
+        if let Err(e) = data {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let data: Vec<u8> = data.unwrap();
+
+        Ok(Some(ReportAttachment { file_name, data }))
+    }
     /// Returns a report with the specified ID from the database.
     ///
     /// Returns error if a report with the specified ID does not exist.
-    pub fn get_report(&self, report_id: u64) -> Result<ReportData, AppError> {
-        let mut stmt = self
-            .connection
+    pub fn get_report(&mut self, report_id: u64) -> Result<ReportData, AppError> {
+        let transaction = self.connection.transaction();
+        if let Err(e) = transaction {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+        let transaction = transaction.unwrap();
+
+        let mut stmt = transaction
             .prepare(&format!(
                 "SELECT id, report_name, report_text, sender_name, sender_email, \
                 game_name, game_version, os_info, date_created_at, time_created_at \
@@ -286,6 +345,7 @@ impl DatabaseManager {
                 sender_name: String::new(),
                 sender_email: String::new(),
                 os_info: String::new(),
+                attachments: Vec::new(),
             });
         }
 
@@ -361,6 +421,75 @@ impl DatabaseManager {
         }
         let time: String = time.unwrap();
 
+        drop(row);
+        drop(rows);
+        drop(stmt);
+
+        // Query attachments.
+        let mut stmt = transaction
+            .prepare(&format!(
+                "SELECT id, file_name, size_in_bytes \
+                 FROM {} \
+                 WHERE fk_report_id == {}",
+                ATTACHMENT_TABLE_NAME, report_id
+            ))
+            .unwrap();
+        let result = stmt.query([]);
+        if let Err(e) = result {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
+        let mut rows = result.unwrap();
+        let mut attachments: Vec<ReportAttachmentSummary> = Vec::new();
+
+        loop {
+            let row = rows.next();
+            if let Err(e) = row {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            let row = row.unwrap();
+            if row.is_none() {
+                break;
+            }
+
+            let row = row.unwrap();
+
+            // Get attachment id.
+            let attachment_id = row.get(0);
+            if let Err(e) = attachment_id {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            let attachment_id: usize = attachment_id.unwrap();
+
+            // Get file name
+            let file_name = row.get(1);
+            if let Err(e) = file_name {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            let file_name: String = file_name.unwrap();
+
+            // Get size in bytes
+            let size_in_bytes = row.get(2);
+            if let Err(e) = size_in_bytes {
+                return Err(AppError::new(&e.to_string(), file!(), line!()));
+            }
+            let size_in_bytes: usize = size_in_bytes.unwrap();
+
+            attachments.push(ReportAttachmentSummary {
+                id: attachment_id,
+                file_name,
+                size_in_bytes,
+            })
+        }
+
+        drop(rows);
+        drop(stmt);
+
+        // Commit transaction.
+        if let Err(e) = transaction.commit() {
+            return Err(AppError::new(&e.to_string(), file!(), line!()));
+        }
+
         Ok(ReportData {
             id,
             title,
@@ -372,6 +501,7 @@ impl DatabaseManager {
             sender_name,
             sender_email,
             os_info,
+            attachments,
         })
     }
     /// Adds a new user to the database.

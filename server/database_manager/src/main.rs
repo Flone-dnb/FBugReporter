@@ -51,7 +51,6 @@ fn main() {
 
     let database_manager = DatabaseManager::new();
     if let Err(app_error) = database_manager {
-        let app_error = app_error.add_entry(file!(), line!());
         panic!("{}", app_error);
     }
     let database_manager = database_manager.unwrap();

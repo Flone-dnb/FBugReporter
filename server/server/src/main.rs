@@ -14,9 +14,8 @@ fn main() {
     println!("Type 'help' to see commands...\n");
 
     let net_service = NetService::new(LogManager::new());
-    if let Err(err) = net_service {
-        let error = err.add_entry(file!(), line!());
-        panic!("{}", error);
+    if let Err(app_error) = net_service {
+        panic!("{}", app_error);
     }
     let mut net_service = net_service.unwrap();
 

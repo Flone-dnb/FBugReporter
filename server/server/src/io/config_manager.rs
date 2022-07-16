@@ -58,10 +58,7 @@ impl ConfigManager {
             // No file found, create a new file.
             if let Err(e) = server_config.save_config() {
                 // Non-critical error.
-                print!(
-                    "WARNING: {}",
-                    AppError::new(&e.to_string(), file!(), line!())
-                );
+                print!("WARNING: {}", AppError::new(&e.to_string()));
             }
             return server_config;
         }
@@ -70,10 +67,7 @@ impl ConfigManager {
         if server_config.read_config(&config) {
             if let Err(e) = server_config.save_config() {
                 // Non-critical error.
-                print!(
-                    "WARNING: {}",
-                    AppError::new(&e.to_string(), file!(), line!())
-                );
+                print!("WARNING: {}", AppError::new(&e.to_string()));
             }
         }
 
@@ -137,7 +131,7 @@ impl ConfigManager {
 
         // Write to disk.
         if let Err(e) = config.write(CONFIG_FILE_NAME) {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         Ok(())

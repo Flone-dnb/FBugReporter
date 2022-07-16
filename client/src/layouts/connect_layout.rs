@@ -202,7 +202,7 @@ impl ConnectLayout {
                     .lock()
                     .unwrap()
                     .log(&app_error.to_string());
-                data.connect_layout.connect_error = app_error.to_string();
+                data.connect_layout.connect_error = app_error.get_message();
             }
             ConnectResult::ConnectFailed(reason) => {
                 println!("{}", reason);

@@ -58,16 +58,16 @@ impl NetService {
         // Connect socket.
         let tcp_socket = TcpStream::connect(format!("{}:{}", server, port));
         if let Err(e) = tcp_socket {
-            return ConnectResult::InternalError(AppError::new(&e.to_string(), file!(), line!()));
+            return ConnectResult::InternalError(AppError::new(&e.to_string()));
         }
         let tcp_socket = tcp_socket.unwrap();
 
         // Configure socket.
         if let Err(e) = tcp_socket.set_nodelay(true) {
-            return ConnectResult::InternalError(AppError::new(&e.to_string(), file!(), line!()));
+            return ConnectResult::InternalError(AppError::new(&e.to_string()));
         }
         if let Err(e) = tcp_socket.set_nonblocking(true) {
-            return ConnectResult::InternalError(AppError::new(&e.to_string(), file!(), line!()));
+            return ConnectResult::InternalError(AppError::new(&e.to_string()));
         }
 
         self.socket = Some(tcp_socket);
@@ -75,14 +75,12 @@ impl NetService {
         // Establish secure connection.
         let secret_key = accept_secure_connection_establishment(self.socket.as_mut().unwrap());
         if let Err(app_error) = secret_key {
-            return ConnectResult::InternalError(app_error.add_entry(file!(), line!()));
+            return ConnectResult::InternalError(app_error);
         }
         let result = secret_key.unwrap().try_into();
         if result.is_err() {
             return ConnectResult::InternalError(AppError::new(
                 "failed to convert Vec<u8> to generic array",
-                file!(),
-                line!(),
             ));
         }
         self.secret_key = result.unwrap();
@@ -118,7 +116,7 @@ impl NetService {
         if let Some(app_error) =
             send_message(self.socket.as_mut().unwrap(), &self.secret_key, packet)
         {
-            return ConnectResult::InternalError(app_error.add_entry(file!(), line!()));
+            return ConnectResult::InternalError(app_error);
         }
 
         // Receive answer.
@@ -131,21 +129,17 @@ impl NetService {
             &mut is_fin,
         );
         if is_fin {
-            return ConnectResult::InternalError(AppError::new(
-                "unexpected FIN received",
-                file!(),
-                line!(),
-            ));
+            return ConnectResult::InternalError(AppError::new("unexpected FIN received"));
         }
         if let Err(app_error) = packet {
-            return ConnectResult::InternalError(app_error.add_entry(file!(), line!()));
+            return ConnectResult::InternalError(app_error);
         }
         let packet = packet.unwrap();
 
         // Deserialize.
         let packet = bincode::deserialize::<ClientAnswer>(&packet);
         if let Err(e) = packet {
-            return ConnectResult::InternalError(AppError::new(&e.to_string(), file!(), line!()));
+            return ConnectResult::InternalError(AppError::new(&e.to_string()));
         }
         let packet = packet.unwrap();
 
@@ -205,11 +199,7 @@ impl NetService {
                 }
             }
             _ => {
-                return ConnectResult::InternalError(AppError::new(
-                    "unexpected packet received",
-                    file!(),
-                    line!(),
-                ));
+                return ConnectResult::InternalError(AppError::new("unexpected packet received"));
             }
         }
 
@@ -232,7 +222,7 @@ impl NetService {
         amount: u64,
     ) -> Result<(Vec<ReportSummary>, u64), AppError> {
         if !self.is_connected {
-            return Err(AppError::new("not connected", file!(), line!()));
+            return Err(AppError::new("not connected"));
         }
 
         // Prepare packet to send.
@@ -241,7 +231,7 @@ impl NetService {
         if let Some(app_error) =
             send_message(self.socket.as_mut().unwrap(), &self.secret_key, packet)
         {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         let mut is_fin = false;
@@ -253,17 +243,17 @@ impl NetService {
             &mut is_fin,
         );
         if is_fin {
-            return Err(AppError::new("unexpected FIN received", file!(), line!()));
+            return Err(AppError::new("unexpected FIN received"));
         }
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let serialized_packet = result.unwrap();
 
         // Deserialize.
         let packet = bincode::deserialize::<ClientAnswer>(&serialized_packet);
         if let Err(e) = packet {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let packet = packet.unwrap();
 
@@ -275,11 +265,7 @@ impl NetService {
                 return Ok((reports, total_reports));
             }
             _ => {
-                return Err(AppError::new(
-                    "unexpected packet received",
-                    file!(),
-                    line!(),
-                ));
+                return Err(AppError::new("unexpected packet received"));
             }
         }
     }
@@ -296,7 +282,7 @@ impl NetService {
         path_to_save: &Path,
     ) -> Result<bool, AppError> {
         if !self.is_connected {
-            return Err(AppError::new("not connected", file!(), line!()));
+            return Err(AppError::new("not connected"));
         }
 
         // Prepare packet to send.
@@ -306,7 +292,7 @@ impl NetService {
         if let Some(app_error) =
             send_message(self.socket.as_mut().unwrap(), &self.secret_key, message)
         {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         // Wait for answer.
@@ -319,17 +305,17 @@ impl NetService {
             &mut is_fin,
         );
         if is_fin {
-            return Err(AppError::new("unexpected FIN received", file!(), line!()));
+            return Err(AppError::new("unexpected FIN received"));
         }
         if let Err(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
         let serialized_packet = result.unwrap();
 
         // Deserialize.
         let message = bincode::deserialize::<ClientAnswer>(&serialized_packet);
         if let Err(e) = message {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let message = message.unwrap();
 
@@ -339,23 +325,19 @@ impl NetService {
                     return Ok(false);
                 } else {
                     if let Err(e) = fs::write(path_to_save, data) {
-                        return Err(AppError::new(&e.to_string(), file!(), line!()));
+                        return Err(AppError::new(&e.to_string()));
                     }
                     return Ok(true);
                 }
             }
             _ => {
-                return Err(AppError::new(
-                    "unexpected message received",
-                    file!(),
-                    line!(),
-                ));
+                return Err(AppError::new("unexpected message received"));
             }
         }
     }
     pub fn query_report(&mut self, report_id: u64) -> Result<ReportData, AppError> {
         if !self.is_connected {
-            return Err(AppError::new("not connected", file!(), line!()));
+            return Err(AppError::new("not connected"));
         }
 
         // Prepare packet to send.
@@ -365,7 +347,7 @@ impl NetService {
         if let Some(app_error) =
             send_message(self.socket.as_mut().unwrap(), &self.secret_key, message)
         {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         // Wait for answer.
@@ -378,17 +360,17 @@ impl NetService {
             &mut is_fin,
         );
         if is_fin {
-            return Err(AppError::new("unexpected FIN received", file!(), line!()));
+            return Err(AppError::new("unexpected FIN received"));
         }
         if let Err(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
         let serialized_packet = result.unwrap();
 
         // Deserialize.
         let message = bincode::deserialize::<ClientAnswer>(&serialized_packet);
         if let Err(e) = message {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let message = message.unwrap();
 
@@ -421,17 +403,13 @@ impl NetService {
                 });
             }
             _ => {
-                return Err(AppError::new(
-                    "unexpected message received",
-                    file!(),
-                    line!(),
-                ));
+                return Err(AppError::new("unexpected message received"));
             }
         }
     }
     pub fn delete_report(&mut self, report_id: u64) -> Result<bool, AppError> {
         if !self.is_connected {
-            return Err(AppError::new("not connected", file!(), line!()));
+            return Err(AppError::new("not connected"));
         }
 
         // Prepare packet to send.
@@ -440,7 +418,7 @@ impl NetService {
         if let Some(app_error) =
             send_message(self.socket.as_mut().unwrap(), &self.secret_key, packet)
         {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         let mut is_fin = false;
@@ -452,17 +430,17 @@ impl NetService {
             &mut is_fin,
         );
         if is_fin {
-            return Err(AppError::new("unexpected FIN received", file!(), line!()));
+            return Err(AppError::new("unexpected FIN received"));
         }
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let serialized_packet = result.unwrap();
 
         // Deserialize.
         let packet = bincode::deserialize::<ClientAnswer>(&serialized_packet);
         if let Err(e) = packet {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let packet = packet.unwrap();
 
@@ -473,11 +451,7 @@ impl NetService {
                 return Ok(is_found_and_removed);
             }
             _ => {
-                return Err(AppError::new(
-                    "unexpected packet received",
-                    file!(),
-                    line!(),
-                ));
+                return Err(AppError::new("unexpected packet received"));
             }
         }
     }

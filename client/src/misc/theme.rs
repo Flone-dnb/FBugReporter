@@ -47,10 +47,7 @@ impl ApplicationTheme {
             // No file found, create a new file.
             if let Err(e) = theme.save_theme() {
                 // Non-critical error.
-                print!(
-                    "WARNING: {}",
-                    AppError::new(&e.to_string(), file!(), line!())
-                );
+                print!("WARNING: {}", AppError::new(&e.to_string()));
             }
             return theme;
         }
@@ -124,10 +121,7 @@ impl ApplicationTheme {
             // Create a new file with all values filled.
             if let Err(e) = theme.save_theme() {
                 // Non-critical error.
-                print!(
-                    "WARNING: {}",
-                    AppError::new(&e.to_string(), file!(), line!())
-                );
+                print!("WARNING: {}", AppError::new(&e.to_string()));
             }
         }
 
@@ -183,7 +177,7 @@ impl ApplicationTheme {
         );
 
         if let Err(e) = config.write(CONFIG_THEME_FILE_NAME) {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         Ok(())

@@ -1,53 +1,75 @@
 // Std.
 use std::fmt::Display;
 
+// External.
+use backtrace::Backtrace;
+
 #[derive(Debug)]
 pub struct AppError {
     message: String,
-    file: &'static str,
-    line: u32,
-    stack: Vec<ErrorEntry>,
+    backtrace: Backtrace,
 }
 
 impl AppError {
-    pub fn new(message: &str, file: &'static str, line: u32) -> Self {
+    pub fn new(message: &str) -> Self {
         Self {
             message: String::from(message),
-            file,
-            line,
-            stack: Vec::new(),
+            backtrace: Backtrace::new(),
         }
-    }
-    pub fn add_entry(mut self, file: &'static str, line: u32) -> Self {
-        self.stack.push(ErrorEntry { file, line });
-        self
     }
     pub fn get_message(&self) -> String {
         self.message.clone()
+    }
+    fn backtrace_to_string(&self) -> String {
+        let mut current_entry_index: usize = 0;
+        let mut output = String::new();
+
+        for frame in self.backtrace.frames() {
+            for symbol in frame.symbols() {
+                if symbol.filename().is_none() || symbol.lineno().is_none() {
+                    continue;
+                }
+                output += &format!(
+                    "{} {}:{}\n",
+                    current_entry_index,
+                    Self::shorten_backtrace_paths(symbol.filename().unwrap().to_str().unwrap()),
+                    symbol.lineno().unwrap()
+                );
+                current_entry_index += 1;
+            }
+        }
+
+        output
+    }
+    fn shorten_backtrace_paths(filename: &str) -> String {
+        if filename.contains("rustc") {
+            // Probably a crate from standard library.
+            return filename.to_string();
+        }
+
+        if filename.contains(".cargo") {
+            // Probably an external crate.
+            return filename[filename.find(".cargo").unwrap()..].to_string();
+        }
+
+        let src_dir_pos = filename.find("src");
+        if src_dir_pos.is_none() {
+            return filename.to_string();
+        }
+        let src_dir_pos = src_dir_pos.unwrap();
+
+        filename[src_dir_pos..].to_string()
     }
 }
 
 impl Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut error_message = String::from(format!(
-            "An error occurred at [{}, {}]: {}",
-            self.file, self.line, self.message,
+        let error_message = String::from(format!(
+            "An error occurred: {}\nBacktrace:\n{}",
+            self.message,
+            self.backtrace_to_string()
         ));
-
-        if !self.stack.is_empty() {
-            error_message += "\n";
-        }
-
-        for error in self.stack.iter() {
-            error_message += &format!("- at [{}, {}]\n", error.file, error.line);
-        }
 
         write!(f, "{}", error_message)
     }
-}
-
-#[derive(Debug)]
-struct ErrorEntry {
-    file: &'static str,
-    line: u32,
 }

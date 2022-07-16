@@ -56,12 +56,12 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
     let g_buf = bincode::serialize(&g);
 
     if let Err(e) = p_buf {
-        return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
+        return Err(AppError::new(&e.to_string()));
     }
     let mut p_buf = p_buf.unwrap();
 
     if let Err(e) = g_buf {
-        return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
+        return Err(AppError::new(&e.to_string()));
     }
     let mut g_buf = g_buf.unwrap();
 
@@ -80,10 +80,10 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
     // Send p and g values.
     match write_to_socket(socket, &mut pg_send_buf, true) {
         IoResult::Fin => {
-            return Err(AppError::new("unexpected FIN received", file!(), line!()));
+            return Err(AppError::new("unexpected FIN received"));
         }
-        IoResult::Err(err) => {
-            return Err(err.add_entry(file!(), line!()));
+        IoResult::Err(app_error) => {
+            return Err(app_error);
         }
         IoResult::Ok(_) => {}
     }
@@ -98,7 +98,7 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
     // Prepare to send open key 'A'.
     let a_open_buf = bincode::serialize(&a_open);
     if let Err(e) = a_open_buf {
-        return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
+        return Err(AppError::new(&e.to_string()));
     }
     let mut a_open_buf = a_open_buf.unwrap();
 
@@ -106,16 +106,16 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
     let a_open_len = a_open_buf.len() as u64;
     let a_open_len_buf = bincode::serialize(&a_open_len);
     if let Err(e) = a_open_len_buf {
-        return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
+        return Err(AppError::new(&e.to_string()));
     }
     let mut a_open_len_buf = a_open_len_buf.unwrap();
     a_open_len_buf.append(&mut a_open_buf);
     match write_to_socket(socket, &mut a_open_len_buf, true) {
         IoResult::Fin => {
-            return Err(AppError::new("unexpected FIN received", file!(), line!()));
+            return Err(AppError::new("unexpected FIN received"));
         }
-        IoResult::Err(err) => {
-            return Err(err.add_entry(file!(), line!()));
+        IoResult::Err(app_error) => {
+            return Err(app_error);
         }
         IoResult::Ok(_) => {}
     }
@@ -124,10 +124,10 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
     let mut b_open_len_buf = vec![0u8; std::mem::size_of::<u64>()];
     match read_from_socket(socket, &mut b_open_len_buf) {
         IoResult::Fin => {
-            return Err(AppError::new("unexpected FIN received", file!(), line!()));
+            return Err(AppError::new("unexpected FIN received"));
         }
-        IoResult::Err(err) => {
-            return Err(err.add_entry(file!(), line!()));
+        IoResult::Err(app_error) => {
+            return Err(app_error);
         }
         IoResult::Ok(_) => {}
     }
@@ -135,24 +135,24 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
     // Receive open key 'B'.
     let b_open_len = bincode::deserialize::<u64>(&b_open_len_buf);
     if let Err(e) = b_open_len {
-        return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
+        return Err(AppError::new(&e.to_string()));
     }
     let b_open_len = b_open_len.unwrap();
     let mut b_open_buf = vec![0u8; b_open_len as usize];
 
     match read_from_socket(socket, &mut b_open_buf) {
         IoResult::Fin => {
-            return Err(AppError::new("unexpected FIN received", file!(), line!()));
+            return Err(AppError::new("unexpected FIN received"));
         }
-        IoResult::Err(err) => {
-            return Err(err.add_entry(file!(), line!()));
+        IoResult::Err(app_error) => {
+            return Err(app_error);
         }
         IoResult::Ok(_) => {}
     }
 
     let b_open_big = bincode::deserialize::<BigUint>(&b_open_buf);
     if let Err(e) = b_open_big {
-        return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
+        return Err(AppError::new(&e.to_string()));
     }
     let b_open_big = b_open_big.unwrap();
 
@@ -162,11 +162,7 @@ pub fn start_establishing_secure_connection(socket: &mut TcpStream) -> Result<Ve
 
     if secret_key_str.len() < SECRET_KEY_SIZE {
         if secret_key_str.is_empty() {
-            return Err(AppError::new(
-                "generated secret key is empty",
-                file!(),
-                line!(),
-            ));
+            return Err(AppError::new("generated secret key is empty"));
         }
 
         loop {
@@ -198,10 +194,10 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     loop {
         match read_from_socket(socket, &mut p_len_buf) {
             IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received", file!(), line!()));
+                return Err(AppError::new("unexpected FIN received"));
             }
             IoResult::Err(app_error) => {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
             IoResult::Ok(_) => {
                 break;
@@ -210,7 +206,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     }
     let p_len = bincode::deserialize::<u64>(&p_len_buf);
     if let Err(e) = p_len {
-        return Err(AppError::new(&e.to_string(), file!(), line!()));
+        return Err(AppError::new(&e.to_string()));
     }
     let p_len = p_len.unwrap();
 
@@ -219,10 +215,10 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     loop {
         match read_from_socket(socket, &mut p_buf) {
             IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received", file!(), line!()));
+                return Err(AppError::new("unexpected FIN received"));
             }
             IoResult::Err(app_error) => {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
             IoResult::Ok(_) => {
                 break;
@@ -231,7 +227,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     }
     let p_buf = bincode::deserialize::<BigUint>(&p_buf);
     if let Err(e) = p_buf {
-        return Err(AppError::new(&e.to_string(), file!(), line!()));
+        return Err(AppError::new(&e.to_string()));
     }
     let p = p_buf.unwrap();
 
@@ -240,10 +236,10 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     loop {
         match read_from_socket(socket, &mut g_len_buf) {
             IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received", file!(), line!()));
+                return Err(AppError::new("unexpected FIN received"));
             }
             IoResult::Err(app_error) => {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
             IoResult::Ok(_) => {
                 break;
@@ -252,7 +248,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     }
     let g_len = bincode::deserialize::<u64>(&g_len_buf);
     if let Err(e) = g_len {
-        return Err(AppError::new(&e.to_string(), file!(), line!()));
+        return Err(AppError::new(&e.to_string()));
     }
     let g_len = g_len.unwrap();
 
@@ -261,10 +257,10 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     loop {
         match read_from_socket(socket, &mut g_buf) {
             IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received", file!(), line!()));
+                return Err(AppError::new("unexpected FIN received"));
             }
             IoResult::Err(app_error) => {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
             IoResult::Ok(_) => {
                 break;
@@ -273,7 +269,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     }
     let g_buf = bincode::deserialize::<BigUint>(&g_buf);
     if let Err(e) = g_buf {
-        return Err(AppError::new(&e.to_string(), file!(), line!()));
+        return Err(AppError::new(&e.to_string()));
     }
     let g = g_buf.unwrap();
 
@@ -285,10 +281,10 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     loop {
         match read_from_socket(socket, &mut a_open_len_buf) {
             IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received", file!(), line!()));
+                return Err(AppError::new("unexpected FIN received"));
             }
             IoResult::Err(app_error) => {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
             IoResult::Ok(_) => {
                 break;
@@ -298,7 +294,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
 
     let a_open_len = bincode::deserialize::<u64>(&a_open_len_buf);
     if let Err(e) = a_open_len {
-        return Err(AppError::new(&e.to_string(), file!(), line!()));
+        return Err(AppError::new(&e.to_string()));
     }
     let a_open_len = a_open_len.unwrap();
 
@@ -307,10 +303,10 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     loop {
         match read_from_socket(socket, &mut a_open_buf) {
             IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received", file!(), line!()));
+                return Err(AppError::new("unexpected FIN received"));
             }
             IoResult::Err(app_error) => {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
             IoResult::Ok(_) => {
                 break;
@@ -320,7 +316,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
 
     let a_open_big = bincode::deserialize::<BigUint>(&a_open_buf);
     if let Err(e) = a_open_big {
-        return Err(AppError::new(&e.to_string(), file!(), line!()));
+        return Err(AppError::new(&e.to_string()));
     }
     let a_open_big = a_open_big.unwrap();
 
@@ -331,17 +327,17 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     let b_open_len = b_open_buf.len() as u64;
     let b_open_len_buf = bincode::serialize(&b_open_len);
     if let Err(e) = b_open_len_buf {
-        return Err(AppError::new(&e.to_string(), file!(), line!()));
+        return Err(AppError::new(&e.to_string()));
     }
     let mut b_open_len_buf = b_open_len_buf.unwrap();
     b_open_len_buf.append(&mut b_open_buf);
     loop {
         match write_to_socket(socket, &mut b_open_len_buf, true) {
             IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received", file!(), line!()));
+                return Err(AppError::new("unexpected FIN received"));
             }
             IoResult::Err(app_error) => {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
             IoResult::Ok(_) => {
                 break;
@@ -355,11 +351,7 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
 
     if secret_key_str.len() < SECRET_KEY_SIZE {
         if secret_key_str.is_empty() {
-            return Err(AppError::new(
-                "generated secret key is empty",
-                file!(),
-                line!(),
-            ));
+            return Err(AppError::new("generated secret key is empty"));
         }
 
         loop {
@@ -393,8 +385,6 @@ where
     if secret_key.is_empty() {
         return Some(AppError::new(
             "can't send message - secure connected is not established yet",
-            file!(),
-            line!(),
         ));
     }
 
@@ -407,15 +397,11 @@ where
     let result = mac.finalize();
     let mut tag_bytes = result.into_bytes().to_vec();
     if tag_bytes.len() != CMAC_TAG_LENGTH {
-        return Some(AppError::new(
-            &format!(
-                "unexpected tag length: {} != {}",
-                tag_bytes.len(),
-                CMAC_TAG_LENGTH
-            ),
-            file!(),
-            line!(),
-        ));
+        return Some(AppError::new(&format!(
+            "unexpected tag length: {} != {}",
+            tag_bytes.len(),
+            CMAC_TAG_LENGTH
+        )));
     }
 
     binary_message.append(&mut tag_bytes);
@@ -430,20 +416,16 @@ where
     // Prepare encrypted message len buffer.
     if encrypted_binary_message.len() + IV_LENGTH > MAX_MESSAGE_LEN {
         // should never happen
-        return Some(AppError::new(
-            &format!(
-                "resulting message is too big ({} > {})",
-                encrypted_binary_message.len() + IV_LENGTH,
-                MAX_MESSAGE_LEN
-            ),
-            file!(),
-            line!(),
-        ));
+        return Some(AppError::new(&format!(
+            "resulting message is too big ({} > {})",
+            encrypted_binary_message.len() + IV_LENGTH,
+            MAX_MESSAGE_LEN
+        )));
     }
     let encrypted_len = (encrypted_binary_message.len() + iv.len()) as MessageLenType;
     let encrypted_len_buf = bincode::serialize(&encrypted_len);
     if let Err(e) = encrypted_len_buf {
-        return Some(AppError::new(&format!("{:?}", e), file!(), line!()));
+        return Some(AppError::new(&format!("{:?}", e)));
     }
 
     // Merge all into one buffer.
@@ -455,9 +437,9 @@ where
         // Send.
         match write_to_socket(socket, &mut send_buffer, false) {
             IoResult::Fin => {
-                return Some(AppError::new("unexpected FIN received", file!(), line!()));
+                return Some(AppError::new("unexpected FIN received"));
             }
-            IoResult::Err(err) => return Some(err.add_entry(file!(), line!())),
+            IoResult::Err(app_error) => return Some(app_error),
             IoResult::Ok(_) => {}
         }
     } else {
@@ -469,9 +451,9 @@ where
             // Send.
             match write_to_socket(socket, chunk, false) {
                 IoResult::Fin => {
-                    return Some(AppError::new("unexpected FIN received", file!(), line!()));
+                    return Some(AppError::new("unexpected FIN received"));
                 }
-                IoResult::Err(err) => return Some(err.add_entry(file!(), line!())),
+                IoResult::Err(app_error) => return Some(app_error),
                 IoResult::Ok(_) => {}
             }
         }
@@ -501,19 +483,16 @@ pub fn receive_message(
     if secret_key.is_empty() {
         return Err(AppError::new(
             "can't receive message - secure connected is not established",
-            file!(),
-            line!(),
         ));
     }
 
     // Get socket remote address.
     let peer_addr = socket.peer_addr();
     if let Err(e) = peer_addr {
-        return Err(AppError::new(
-            &format!("failed to get socket peer address (error: {})", e),
-            file!(),
-            line!(),
-        ));
+        return Err(AppError::new(&format!(
+            "failed to get socket peer address (error: {})",
+            e
+        )));
     }
     let socket_addr = peer_addr.unwrap();
 
@@ -537,34 +516,25 @@ pub fn receive_message(
     match _result {
         IoResult::Fin => {
             *is_fin = true;
-            return Err(AppError::new(
-                &format!("unexpected FIN received (socket: {})", socket_addr),
-                file!(),
-                line!(),
-            ));
+            return Err(AppError::new(&format!(
+                "unexpected FIN received (socket: {})",
+                socket_addr
+            )));
         }
-        IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
+        IoResult::Err(app_error) => return Err(app_error),
         IoResult::Ok(byte_count) => {
             if byte_count != message_size_buf.len() {
-                return Err(AppError::new(
-                    &format!(
-                        "not all data received (got: {}, expected: {}) (socket: {})",
-                        byte_count,
-                        message_size_buf.len(),
-                        socket_addr
-                    ),
-                    file!(),
-                    line!(),
-                ));
+                return Err(AppError::new(&format!(
+                    "not all data received (got: {}, expected: {}) (socket: {})",
+                    byte_count,
+                    message_size_buf.len(),
+                    socket_addr
+                )));
             }
 
             let res = bincode::deserialize::<MessageLenType>(&message_size_buf);
             if let Err(e) = res {
-                return Err(AppError::new(
-                    &format!("{:?} (socket: {})", e, socket_addr),
-                    file!(),
-                    line!(),
-                ));
+                return Err(AppError::new(&format!("{:?} (socket: {})", e, socket_addr)));
             }
 
             _next_message_size = res.unwrap() as usize;
@@ -573,14 +543,10 @@ pub fn receive_message(
 
     // Check message size.
     if _next_message_size > max_allowed_message_size_in_bytes {
-        return Err(AppError::new(
-            &format!(
-                "incoming message is too big to receive ({} > {} bytes) (socket: {})",
-                _next_message_size, max_allowed_message_size_in_bytes, socket_addr
-            ),
-            file!(),
-            line!(),
-        ));
+        return Err(AppError::new(&format!(
+            "incoming message is too big to receive ({} > {} bytes) (socket: {})",
+            _next_message_size, max_allowed_message_size_in_bytes, socket_addr
+        )));
     }
 
     // Receive encrypted message.
@@ -592,13 +558,12 @@ pub fn receive_message(
         match read_from_socket(socket, &mut encrypted_message) {
             IoResult::Fin => {
                 *is_fin = true;
-                return Err(AppError::new(
-                    &format!("unexpected FIN received (socket: {})", socket_addr),
-                    file!(),
-                    line!(),
-                ));
+                return Err(AppError::new(&format!(
+                    "unexpected FIN received (socket: {})",
+                    socket_addr
+                )));
             }
-            IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
+            IoResult::Err(app_error) => return Err(app_error),
             IoResult::Ok(_) => {}
         };
     } else {
@@ -617,13 +582,12 @@ pub fn receive_message(
             match read_from_socket_fill_buf(socket, &mut _chunk) {
                 IoResult::Fin => {
                     *is_fin = true;
-                    return Err(AppError::new(
-                        &format!("unexpected FIN received (socket: {})", socket_addr),
-                        file!(),
-                        line!(),
-                    ));
+                    return Err(AppError::new(&format!(
+                        "unexpected FIN received (socket: {})",
+                        socket_addr
+                    )));
                 }
-                IoResult::Err(err) => return Err(err.add_entry(file!(), line!())),
+                IoResult::Err(app_error) => return Err(app_error),
                 IoResult::Ok(_) => {}
             };
 
@@ -634,15 +598,11 @@ pub fn receive_message(
 
     // Get IV.
     if encrypted_message.len() < IV_LENGTH {
-        return Err(AppError::new(
-            &format!(
-                "unexpected message length ({}) (socket: {})",
-                encrypted_message.len(),
-                socket_addr
-            ),
-            file!(),
-            line!(),
-        ));
+        return Err(AppError::new(&format!(
+            "unexpected message length ({}) (socket: {})",
+            encrypted_message.len(),
+            socket_addr
+        )));
     }
     let iv = encrypted_message[..IV_LENGTH].to_vec();
     encrypted_message = encrypted_message[IV_LENGTH..].to_vec();
@@ -650,11 +610,7 @@ pub fn receive_message(
     // Convert IV.
     let iv = iv.try_into();
     if iv.is_err() {
-        return Err(AppError::new(
-            "failed to convert iv to generic array",
-            file!(),
-            line!(),
-        ));
+        return Err(AppError::new("failed to convert iv to generic array"));
     }
     let iv: [u8; IV_LENGTH] = iv.unwrap();
 
@@ -662,11 +618,7 @@ pub fn receive_message(
     let decrypted_message = Aes256CbcDec::new(secret_key.into(), &iv.into())
         .decrypt_padded_vec_mut::<Pkcs7>(&encrypted_message);
     if let Err(e) = decrypted_message {
-        return Err(AppError::new(
-            &format!("{:?} (socket: {})", e, socket_addr),
-            file!(),
-            line!(),
-        ));
+        return Err(AppError::new(&format!("{:?} (socket: {})", e, socket_addr)));
     }
     let mut decrypted_message = decrypted_message.unwrap();
 
@@ -680,21 +632,13 @@ pub fn receive_message(
     // Convert tag.
     let tag = tag.try_into();
     if tag.is_err() {
-        return Err(AppError::new(
-            "failed to convert cmac tag to generic array",
-            file!(),
-            line!(),
-        ));
+        return Err(AppError::new("failed to convert cmac tag to generic array"));
     }
     let tag: [u8; CMAC_TAG_LENGTH] = tag.unwrap();
 
     // Check that tag is correct.
     if let Err(e) = mac.verify(&tag.into()) {
-        return Err(AppError::new(
-            &format!("{:?} (socket: {})", e, socket_addr),
-            file!(),
-            line!(),
-        ));
+        return Err(AppError::new(&format!("{:?} (socket: {})", e, socket_addr)));
     }
 
     Ok(decrypted_message)
@@ -710,29 +654,25 @@ pub fn receive_message(
 /// for operation to finish and return error in case of a timeout.
 fn write_to_socket(socket: &mut TcpStream, buf: &mut [u8], enable_wait_limit: bool) -> IoResult {
     if buf.is_empty() {
-        return IoResult::Err(AppError::new("passed 'buf' has 0 length", file!(), line!()));
+        return IoResult::Err(AppError::new("passed 'buf' has 0 length"));
     }
 
     let mut total_wait_time_ms: u64 = 0;
 
     loop {
         if enable_wait_limit && total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
-            return IoResult::Err(AppError::new(
-                &format!(
-                    "reached maximum write wait time limit of {} ms for socket {}",
-                    MAX_WAIT_TIME_IN_READ_WRITE_MS,
-                    match socket.peer_addr() {
-                        Ok(addr) => {
-                            addr.to_string()
-                        }
-                        Err(_) => {
-                            String::new()
-                        }
-                    },
-                ),
-                file!(),
-                line!(),
-            ));
+            return IoResult::Err(AppError::new(&format!(
+                "reached maximum write wait time limit of {} ms for socket {}",
+                MAX_WAIT_TIME_IN_READ_WRITE_MS,
+                match socket.peer_addr() {
+                    Ok(addr) => {
+                        addr.to_string()
+                    }
+                    Err(_) => {
+                        String::new()
+                    }
+                },
+            )));
         }
 
         match socket.write(buf) {
@@ -741,23 +681,19 @@ fn write_to_socket(socket: &mut TcpStream, buf: &mut [u8], enable_wait_limit: bo
             }
             Ok(n) => {
                 if n != buf.len() {
-                    return IoResult::Err(AppError::new(
-                        &format!(
-                            "failed to write (got: {}, expected: {}) (socket {})",
-                            n,
-                            buf.len(),
-                            match socket.peer_addr() {
-                                Ok(addr) => {
-                                    addr.to_string()
-                                }
-                                Err(_) => {
-                                    String::new()
-                                }
-                            },
-                        ),
-                        file!(),
-                        line!(),
-                    ));
+                    return IoResult::Err(AppError::new(&format!(
+                        "failed to write (got: {}, expected: {}) (socket {})",
+                        n,
+                        buf.len(),
+                        match socket.peer_addr() {
+                            Ok(addr) => {
+                                addr.to_string()
+                            }
+                            Err(_) => {
+                                String::new()
+                            }
+                        },
+                    )));
                 }
 
                 return IoResult::Ok(n);
@@ -768,22 +704,18 @@ fn write_to_socket(socket: &mut TcpStream, buf: &mut [u8], enable_wait_limit: bo
                 continue;
             }
             Err(e) => {
-                return IoResult::Err(AppError::new(
-                    &format!(
-                        "{:?} (socket {})",
-                        e,
-                        match socket.peer_addr() {
-                            Ok(addr) => {
-                                addr.to_string()
-                            }
-                            Err(_) => {
-                                String::new()
-                            }
+                return IoResult::Err(AppError::new(&format!(
+                    "{:?} (socket {})",
+                    e,
+                    match socket.peer_addr() {
+                        Ok(addr) => {
+                            addr.to_string()
                         }
-                    ),
-                    file!(),
-                    line!(),
-                ));
+                        Err(_) => {
+                            String::new()
+                        }
+                    }
+                )));
             }
         };
     }
@@ -804,11 +736,7 @@ fn read_from_socket_with_timeout(
     timeout_in_ms: u64,
 ) -> Option<IoResult> {
     if buf.is_empty() {
-        return Some(IoResult::Err(AppError::new(
-            "passed 'buf' has 0 length",
-            file!(),
-            line!(),
-        )));
+        return Some(IoResult::Err(AppError::new("passed 'buf' has 0 length")));
     }
 
     let mut total_wait_time_ms: u64 = 0;
@@ -824,23 +752,19 @@ fn read_from_socket_with_timeout(
             }
             Ok(n) => {
                 if n != buf.len() {
-                    return Some(IoResult::Err(AppError::new(
-                        &format!(
-                            "failed to read (got: {}, expected: {}) (socket {})",
-                            n,
-                            buf.len(),
-                            match socket.peer_addr() {
-                                Ok(addr) => {
-                                    addr.to_string()
-                                }
-                                Err(_) => {
-                                    String::new()
-                                }
-                            },
-                        ),
-                        file!(),
-                        line!(),
-                    )));
+                    return Some(IoResult::Err(AppError::new(&format!(
+                        "failed to read (got: {}, expected: {}) (socket {})",
+                        n,
+                        buf.len(),
+                        match socket.peer_addr() {
+                            Ok(addr) => {
+                                addr.to_string()
+                            }
+                            Err(_) => {
+                                String::new()
+                            }
+                        },
+                    ))));
                 }
 
                 return Some(IoResult::Ok(n));
@@ -851,22 +775,18 @@ fn read_from_socket_with_timeout(
                 continue;
             }
             Err(e) => {
-                return Some(IoResult::Err(AppError::new(
-                    &format!(
-                        "{:?} (socket {})",
-                        e,
-                        match socket.peer_addr() {
-                            Ok(addr) => {
-                                addr.to_string()
-                            }
-                            Err(_) => {
-                                String::new()
-                            }
-                        },
-                    ),
-                    file!(),
-                    line!(),
-                )));
+                return Some(IoResult::Err(AppError::new(&format!(
+                    "{:?} (socket {})",
+                    e,
+                    match socket.peer_addr() {
+                        Ok(addr) => {
+                            addr.to_string()
+                        }
+                        Err(_) => {
+                            String::new()
+                        }
+                    },
+                ))));
             }
         };
     }
@@ -882,29 +802,25 @@ fn read_from_socket_with_timeout(
 /// - `buf`: buffer to write read data.
 fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
     if buf.is_empty() {
-        return IoResult::Err(AppError::new("passed 'buf' has 0 length", file!(), line!()));
+        return IoResult::Err(AppError::new("passed 'buf' has 0 length"));
     }
 
     let mut total_wait_time_ms: u64 = 0;
 
     loop {
         if total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
-            return IoResult::Err(AppError::new(
-                &format!(
-                    "reached maximum response wait time limit of {} ms for socket {}",
-                    MAX_WAIT_TIME_IN_READ_WRITE_MS,
-                    match socket.peer_addr() {
-                        Ok(addr) => {
-                            addr.to_string()
-                        }
-                        Err(_) => {
-                            String::new()
-                        }
-                    },
-                ),
-                file!(),
-                line!(),
-            ));
+            return IoResult::Err(AppError::new(&format!(
+                "reached maximum response wait time limit of {} ms for socket {}",
+                MAX_WAIT_TIME_IN_READ_WRITE_MS,
+                match socket.peer_addr() {
+                    Ok(addr) => {
+                        addr.to_string()
+                    }
+                    Err(_) => {
+                        String::new()
+                    }
+                },
+            )));
         }
 
         match socket.read(buf) {
@@ -913,23 +829,19 @@ fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
             }
             Ok(n) => {
                 if n != buf.len() {
-                    return IoResult::Err(AppError::new(
-                        &format!(
-                            "failed to read (got: {}, expected: {}) (socket {})",
-                            n,
-                            buf.len(),
-                            match socket.peer_addr() {
-                                Ok(addr) => {
-                                    addr.to_string()
-                                }
-                                Err(_) => {
-                                    String::new()
-                                }
-                            },
-                        ),
-                        file!(),
-                        line!(),
-                    ));
+                    return IoResult::Err(AppError::new(&format!(
+                        "failed to read (got: {}, expected: {}) (socket {})",
+                        n,
+                        buf.len(),
+                        match socket.peer_addr() {
+                            Ok(addr) => {
+                                addr.to_string()
+                            }
+                            Err(_) => {
+                                String::new()
+                            }
+                        },
+                    )));
                 }
 
                 return IoResult::Ok(n);
@@ -940,22 +852,18 @@ fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
                 continue;
             }
             Err(e) => {
-                return IoResult::Err(AppError::new(
-                    &format!(
-                        "{:?} (socket {})",
-                        e,
-                        match socket.peer_addr() {
-                            Ok(addr) => {
-                                addr.to_string()
-                            }
-                            Err(_) => {
-                                String::new()
-                            }
-                        },
-                    ),
-                    file!(),
-                    line!(),
-                ));
+                return IoResult::Err(AppError::new(&format!(
+                    "{:?} (socket {})",
+                    e,
+                    match socket.peer_addr() {
+                        Ok(addr) => {
+                            addr.to_string()
+                        }
+                        Err(_) => {
+                            String::new()
+                        }
+                    },
+                )));
             }
         };
     }
@@ -971,7 +879,7 @@ fn read_from_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
 /// - `buf`: buffer to write read data.
 fn read_from_socket_fill_buf(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
     if buf.is_empty() {
-        return IoResult::Err(AppError::new("passed 'buf' has 0 length", file!(), line!()));
+        return IoResult::Err(AppError::new("passed 'buf' has 0 length"));
     }
 
     let mut total_wait_time_ms: u64 = 0;
@@ -980,22 +888,18 @@ fn read_from_socket_fill_buf(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult
 
     loop {
         if total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
-            return IoResult::Err(AppError::new(
-                &format!(
-                    "reached maximum response wait time limit of {} ms for socket {}",
-                    MAX_WAIT_TIME_IN_READ_WRITE_MS,
-                    match socket.peer_addr() {
-                        Ok(addr) => {
-                            addr.to_string()
-                        }
-                        Err(_) => {
-                            String::new()
-                        }
-                    },
-                ),
-                file!(),
-                line!(),
-            ));
+            return IoResult::Err(AppError::new(&format!(
+                "reached maximum response wait time limit of {} ms for socket {}",
+                MAX_WAIT_TIME_IN_READ_WRITE_MS,
+                match socket.peer_addr() {
+                    Ok(addr) => {
+                        addr.to_string()
+                    }
+                    Err(_) => {
+                        String::new()
+                    }
+                },
+            )));
         }
 
         match socket.read(&mut temp_buf) {
@@ -1024,22 +928,18 @@ fn read_from_socket_fill_buf(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult
                 continue;
             }
             Err(e) => {
-                return IoResult::Err(AppError::new(
-                    &format!(
-                        "{:?} (socket {})",
-                        e,
-                        match socket.peer_addr() {
-                            Ok(addr) => {
-                                addr.to_string()
-                            }
-                            Err(_) => {
-                                String::new()
-                            }
-                        },
-                    ),
-                    file!(),
-                    line!(),
-                ));
+                return IoResult::Err(AppError::new(&format!(
+                    "{:?} (socket {})",
+                    e,
+                    match socket.peer_addr() {
+                        Ok(addr) => {
+                            addr.to_string()
+                        }
+                        Err(_) => {
+                            String::new()
+                        }
+                    },
+                )));
             }
         };
     }

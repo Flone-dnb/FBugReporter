@@ -31,7 +31,7 @@ impl ReporterService {
     ) -> Result<usize, AppError> {
         let result = Self::establish_secure_connection_with_server(server_addr, logger);
         if let Err(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
         let (mut tcp_socket, secret_key) = result.unwrap();
 
@@ -40,7 +40,7 @@ impl ReporterService {
 
         // Send message.
         if let Some(app_error) = send_message(&mut tcp_socket, &secret_key, message) {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         let mut is_fin = false;
@@ -52,14 +52,10 @@ impl ReporterService {
             &mut is_fin,
         );
         if is_fin {
-            return Err(AppError::new(
-                "the server closed connection unexpectedly",
-                file!(),
-                line!(),
-            ));
+            return Err(AppError::new("the server closed connection unexpectedly"));
         }
         if let Err(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         let result = result.unwrap();
@@ -67,7 +63,7 @@ impl ReporterService {
         // Deserialize.
         let received_message = bincode::deserialize::<ReporterAnswer>(&result);
         if let Err(e) = received_message {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let received_message = received_message.unwrap();
 
@@ -79,14 +75,10 @@ impl ReporterService {
                 return Ok(max_attachments_size_in_mb);
             }
             _ => {
-                return Err(AppError::new(
-                    &format!(
-                        "received unexpected answer from the server ({:?})",
-                        received_message
-                    ),
-                    file!(),
-                    line!(),
-                ));
+                return Err(AppError::new(&format!(
+                    "received unexpected answer from the server ({:?})",
+                    received_message
+                )));
             }
         }
     }
@@ -100,10 +92,7 @@ impl ReporterService {
     ) -> (ReportResult, Option<AppError>) {
         let result = Self::establish_secure_connection_with_server(server_addr, logger);
         if let Err(app_error) = result {
-            return (
-                ReportResult::InternalError,
-                Some(app_error.add_entry(file!(), line!())),
-            );
+            return (ReportResult::InternalError, Some(app_error));
         }
         let (mut tcp_socket, secret_key) = result.unwrap();
 
@@ -116,10 +105,7 @@ impl ReporterService {
 
         // Send message.
         if let Some(app_error) = send_message(&mut tcp_socket, &secret_key, message) {
-            return (
-                ReportResult::InternalError,
-                Some(app_error.add_entry(file!(), line!())),
-            );
+            return (ReportResult::InternalError, Some(app_error));
         }
 
         let mut is_fin = false;
@@ -133,18 +119,11 @@ impl ReporterService {
         if is_fin {
             return (
                 ReportResult::InternalError,
-                Some(AppError::new(
-                    "the server closed connection unexpectedly",
-                    file!(),
-                    line!(),
-                )),
+                Some(AppError::new("the server closed connection unexpectedly")),
             );
         }
         if let Err(app_error) = result {
-            return (
-                ReportResult::InternalError,
-                Some(app_error.add_entry(file!(), line!())),
-            );
+            return (ReportResult::InternalError, Some(app_error));
         }
 
         let result = result.unwrap();
@@ -154,7 +133,7 @@ impl ReporterService {
         if let Err(e) = received_message {
             return (
                 ReportResult::InternalError,
-                Some(AppError::new(&e.to_string(), file!(), line!())),
+                Some(AppError::new(&e.to_string())),
             );
         }
         let received_message = received_message.unwrap();
@@ -165,11 +144,10 @@ impl ReporterService {
                 if result_code != ReportResult::Ok {
                     return (
                         result_code,
-                        Some(AppError::new(
-                            &format!("The server returned error: {:?}", result_code),
-                            file!(),
-                            line!(),
-                        )),
+                        Some(AppError::new(&format!(
+                            "The server returned error: {:?}",
+                            result_code
+                        ))),
                     );
                 }
                 return (result_code, None);
@@ -177,14 +155,10 @@ impl ReporterService {
             _ => {
                 return (
                     ReportResult::InternalError,
-                    Some(AppError::new(
-                        &format!(
-                            "received unexpected answer from the server ({:?})",
-                            received_message
-                        ),
-                        file!(),
-                        line!(),
-                    )),
+                    Some(AppError::new(&format!(
+                        "received unexpected answer from the server ({:?})",
+                        received_message
+                    ))),
                 );
             }
         }
@@ -198,32 +172,28 @@ impl ReporterService {
         let tcp_socket = TcpStream::connect(server_addr);
 
         if let Err(e) = tcp_socket {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         } else {
             logger.log("Connected to the server.");
         }
 
         let mut tcp_socket = tcp_socket.unwrap();
         if let Err(e) = tcp_socket.set_nodelay(true) {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         if let Err(e) = tcp_socket.set_nonblocking(true) {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let secret_key = accept_secure_connection_establishment(&mut tcp_socket);
         if let Err(app_error) = secret_key {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         } else {
             logger.log("Secure connection established.");
         }
         let result = secret_key.unwrap().try_into();
         if result.is_err() {
-            return Err(AppError::new(
-                "failed to convert Vec<u8> to generic array",
-                file!(),
-                line!(),
-            ));
+            return Err(AppError::new("failed to convert Vec<u8> to generic array"));
         }
         let secret_key: [u8; SECRET_KEY_SIZE] = result.unwrap();
 

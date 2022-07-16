@@ -231,8 +231,8 @@ impl ReportLayout {
             if app_error.get_message().contains("FIN") {
                 data.current_layout = Layout::Connect;
                 data.connect_layout.connect_error = format!(
-                    "{}\nMost likely the server \
-                    closed connection due to your inactivity.",
+                    "{}\nMaybe the server \
+                    closed the connection due to your inactivity.",
                     app_error.get_message()
                 );
             } else {
@@ -273,15 +273,12 @@ impl ReportLayout {
             if app_error.get_message().contains("FIN") {
                 data.current_layout = Layout::Connect;
                 data.connect_layout.connect_error = format!(
-                    "{}\nMost likely the server \
-                    closed connection due to your inactivity.",
+                    "{}\nMaybe the server \
+                    closed the connection due to your inactivity.",
                     app_error.get_message()
                 );
             } else {
-                println!(
-                    "ERROR: {}",
-                    app_error.add_entry(file!(), line!()).to_string()
-                );
+                println!("ERROR: {}", app_error.to_string());
             }
 
             return;

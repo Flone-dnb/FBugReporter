@@ -17,3 +17,4 @@ os_info = "3.0.7"
 cmac = "0.7.1"
 aes = "0.8.1"
 cbc = {version = "0.1.2", features = ["alloc"]}
+backtrace = "0.3.66"

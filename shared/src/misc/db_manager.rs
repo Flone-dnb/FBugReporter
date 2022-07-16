@@ -90,39 +90,39 @@ impl DatabaseManager {
 
         let result = Connection::open(DATABASE_NAME);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut connection = result.unwrap();
 
         // Enable foreign keys.
         if let Some(app_error) = Self::enable_foreign_keys(&mut connection) {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         // Check 'version' table.
         if let Err(app_error) = Self::create_version_table_if_not_found(&mut connection) {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         // Check 'report' table.
         if let Err(app_error) = Self::create_report_table_if_not_found(&mut connection) {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         // Check 'user' table.
         if let Err(app_error) = Self::create_user_table_if_not_found(&mut connection) {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         // Check 'attachment' table.
         if let Err(app_error) = Self::create_attachment_table_if_not_found(&mut connection) {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         // Handle old database version.
         if let Err(app_error) = Self::handle_old_database_version(&mut connection) {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         Ok(Self { connection })
@@ -135,23 +135,23 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
 
         let row = rows.next();
         if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let row = row.unwrap();
         if row.is_none() {
-            return Err(AppError::new("database returned none", file!(), line!()));
+            return Err(AppError::new("database returned none"));
         } else {
             let count = row.unwrap().get(0);
             if let Err(e) = count {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
             return Ok(count.unwrap());
         }
@@ -186,7 +186,7 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
@@ -196,7 +196,7 @@ impl DatabaseManager {
         loop {
             let row = rows.next();
             if let Err(e) = row {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
             let row = row.unwrap();
             if row.is_none() {
@@ -208,35 +208,35 @@ impl DatabaseManager {
             // Get report id.
             let id = row.get(0);
             if let Err(e) = id {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
             let id: u64 = id.unwrap();
 
             // Get report title.
             let title = row.get(1);
             if let Err(e) = title {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
             let title: String = title.unwrap();
 
             // Get report game name.
             let game = row.get(2);
             if let Err(e) = game {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
             let game: String = game.unwrap();
 
             // Get report date.
             let date = row.get(3);
             if let Err(e) = date {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
             let date: String = date.unwrap();
 
             // Get report date.
             let time = row.get(4);
             if let Err(e) = time {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
             let time: String = time.unwrap();
 
@@ -270,14 +270,14 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
 
         let row = rows.next();
         if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let row = row.unwrap();
         if row.is_none() {
@@ -289,14 +289,14 @@ impl DatabaseManager {
         // Get file name.
         let file_name = row.get(0);
         if let Err(e) = file_name {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let file_name: String = file_name.unwrap();
 
         // Get data.
         let data = row.get(1);
         if let Err(e) = data {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let data: Vec<u8> = data.unwrap();
 
@@ -308,7 +308,7 @@ impl DatabaseManager {
     pub fn get_report(&mut self, report_id: u64) -> Result<ReportData, AppError> {
         let transaction = self.connection.transaction();
         if let Err(e) = transaction {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let transaction = transaction.unwrap();
 
@@ -322,14 +322,14 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
 
         let row = rows.next();
         if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let row = row.unwrap();
         if row.is_none() {
@@ -354,70 +354,70 @@ impl DatabaseManager {
         // Get report id.
         let id = row.get(0);
         if let Err(e) = id {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let id: u64 = id.unwrap();
 
         // Get report title.
         let title = row.get(1);
         if let Err(e) = title {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let title: String = title.unwrap();
 
         // Get report text.
         let text = row.get(2);
         if let Err(e) = text {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let text: String = text.unwrap();
 
         // Get report sender name.
         let sender_name = row.get(3);
         if let Err(e) = sender_name {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let sender_name: String = sender_name.unwrap();
 
         // Get report sender email.
         let sender_email = row.get(4);
         if let Err(e) = sender_email {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let sender_email: String = sender_email.unwrap();
 
         // Get report game name.
         let game_name = row.get(5);
         if let Err(e) = game_name {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let game_name: String = game_name.unwrap();
 
         // Get report game version.
         let game_version = row.get(6);
         if let Err(e) = game_version {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let game_version: String = game_version.unwrap();
 
         // Get reporter OS info.
         let os_info = row.get(7);
         if let Err(e) = os_info {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let os_info: String = os_info.unwrap();
 
         // Get report date.
         let date = row.get(8);
         if let Err(e) = date {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let date: String = date.unwrap();
 
         // Get report time.
         let time = row.get(9);
         if let Err(e) = time {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let time: String = time.unwrap();
 
@@ -436,7 +436,7 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
@@ -445,7 +445,7 @@ impl DatabaseManager {
         loop {
             let row = rows.next();
             if let Err(e) = row {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
             let row = row.unwrap();
             if row.is_none() {
@@ -457,21 +457,21 @@ impl DatabaseManager {
             // Get attachment id.
             let attachment_id = row.get(0);
             if let Err(e) = attachment_id {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
             let attachment_id: usize = attachment_id.unwrap();
 
             // Get file name
             let file_name = row.get(1);
             if let Err(e) = file_name {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
             let file_name: String = file_name.unwrap();
 
             // Get size in bytes
             let size_in_bytes = row.get(2);
             if let Err(e) = size_in_bytes {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
             let size_in_bytes: usize = size_in_bytes.unwrap();
 
@@ -487,7 +487,7 @@ impl DatabaseManager {
 
         // Commit transaction.
         if let Err(e) = transaction.commit() {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         Ok(ReportData {
@@ -522,7 +522,7 @@ impl DatabaseManager {
         // Check if username is used.
         let result = self.is_user_exists(username);
         if let Err(e) = result {
-            return AddUserResult::Error(AppError::new(&e.to_string(), file!(), line!()));
+            return AddUserResult::Error(AppError::new(&e.to_string()));
         }
         let exists = result.unwrap();
         if exists {
@@ -603,7 +603,7 @@ impl DatabaseManager {
                 datetime.time().format("%H:%M:%S").to_string()
             ],
         ) {
-            return AddUserResult::Error(AppError::new(&e.to_string(), file!(), line!()));
+            return AddUserResult::Error(AppError::new(&e.to_string()));
         }
 
         AddUserResult::Ok {
@@ -618,7 +618,7 @@ impl DatabaseManager {
     pub fn remove_user(&self, username: &str) -> Result<bool, AppError> {
         let result = self.is_user_exists(username);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let exists = result.unwrap();
         if exists == false {
@@ -634,7 +634,7 @@ impl DatabaseManager {
             ),
             params![],
         ) {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         Ok(true)
@@ -654,7 +654,7 @@ impl DatabaseManager {
             ),
             params![],
         ) {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         Ok(true)
@@ -675,14 +675,14 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
 
         let row = rows.next();
         if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let row = row.unwrap();
         if row.is_none() {
@@ -693,14 +693,14 @@ impl DatabaseManager {
         // Get password.
         let password: Result<Vec<u8>> = row.get(0);
         if let Err(e) = password {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let password = password.unwrap();
 
         // Get salt.
         let salt: Result<String> = row.get(1);
         if let Err(e) = salt {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let salt = salt.unwrap();
 
@@ -730,7 +730,7 @@ impl DatabaseManager {
                 username
             ],
         ) {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         Ok(())
@@ -776,7 +776,7 @@ impl DatabaseManager {
             |row| row.get(0),
         );
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let report_id = result.unwrap();
@@ -805,7 +805,7 @@ impl DatabaseManager {
                 ],
             );
             if let Err(e) = result {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
         }
 
@@ -825,27 +825,26 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
 
         let row = rows.next();
         if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let row = row.unwrap();
         if row.is_none() {
-            return Err(AppError::new(
-                &format!("database returned None for username {}", username),
-                file!(),
-                line!(),
-            ));
+            return Err(AppError::new(&format!(
+                "database returned None for username {}",
+                username
+            )));
         }
         let row = row.unwrap();
         let need_change_password = row.get(0);
         if let Err(e) = need_change_password {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let need_change_password: i32 = need_change_password.unwrap();
 
@@ -854,14 +853,10 @@ impl DatabaseManager {
         } else if need_change_password == 0 {
             return Ok(false);
         } else {
-            return Err(AppError::new(
-                &format!(
-                    "database returned 'need_change_password' equal to '{}' for user {}",
-                    need_change_password, username
-                ),
-                file!(),
-                line!(),
-            ));
+            return Err(AppError::new(&format!(
+                "database returned 'need_change_password' equal to '{}' for user {}",
+                need_change_password, username
+            )));
         }
     }
     /// Check if a given user has admin privileges.
@@ -878,27 +873,26 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
 
         let row = rows.next();
         if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let row = row.unwrap();
         if row.is_none() {
-            return Err(AppError::new(
-                &format!("database returned None for username {}", username),
-                file!(),
-                line!(),
-            ));
+            return Err(AppError::new(&format!(
+                "database returned None for username {}",
+                username
+            )));
         }
         let row = row.unwrap();
         let is_admin = row.get(0);
         if let Err(e) = is_admin {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let is_admin: i32 = is_admin.unwrap();
 
@@ -907,14 +901,10 @@ impl DatabaseManager {
         } else if is_admin == 0 {
             return Ok(false);
         } else {
-            return Err(AppError::new(
-                &format!(
-                    "database returned 'is_admin' equal to '{}' for user {}",
-                    is_admin, username
-                ),
-                file!(),
-                line!(),
-            ));
+            return Err(AppError::new(&format!(
+                "database returned 'is_admin' equal to '{}' for user {}",
+                is_admin, username
+            )));
         }
     }
     /// Check if a given user needs to setup OTP (receive OTP QR code).
@@ -931,27 +921,26 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
 
         let row = rows.next();
         if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let row = row.unwrap();
         if row.is_none() {
-            return Err(AppError::new(
-                &format!("database returned None for username {}", username),
-                file!(),
-                line!(),
-            ));
+            return Err(AppError::new(&format!(
+                "database returned None for username {}",
+                username
+            )));
         }
         let row = row.unwrap();
         let need_setup_otp = row.get(0);
         if let Err(e) = need_setup_otp {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let need_setup_otp: i32 = need_setup_otp.unwrap();
 
@@ -960,14 +949,10 @@ impl DatabaseManager {
         } else if need_setup_otp == 0 {
             return Ok(false);
         } else {
-            return Err(AppError::new(
-                &format!(
-                    "database returned 'need_setup_otp' equal to '{}' for user {}",
-                    need_setup_otp, username
-                ),
-                file!(),
-                line!(),
-            ));
+            return Err(AppError::new(&format!(
+                "database returned 'need_setup_otp' equal to '{}' for user {}",
+                need_setup_otp, username
+            )));
         }
     }
     /// Returns OTP secret key.
@@ -981,27 +966,26 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
 
         let row = rows.next();
         if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let row = row.unwrap();
         if row.is_none() {
-            return Err(AppError::new(
-                &format!("database returned None for username {}", username),
-                file!(),
-                line!(),
-            ));
+            return Err(AppError::new(&format!(
+                "database returned None for username {}",
+                username
+            )));
         }
         let row = row.unwrap();
         let otp_secret = row.get::<usize, String>(0);
         if let Err(e) = otp_secret {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let otp_secret = otp_secret.unwrap();
 
@@ -1020,8 +1004,8 @@ impl DatabaseManager {
     ) -> Result<bool, AppError> {
         // Check if user needs to change his password.
         let result = self.is_user_needs_to_change_password(username);
-        if let Err(e) = result {
-            return Err(e.add_entry(file!(), line!()));
+        if let Err(app_error) = result {
+            return Err(app_error);
         }
         let need_change_password = result.unwrap();
         if need_change_password == false {
@@ -1029,8 +1013,8 @@ impl DatabaseManager {
         }
 
         let result = self.get_user_password_and_salt(username);
-        if let Err(e) = result {
-            return Err(e.add_entry(file!(), line!()));
+        if let Err(app_error) = result {
+            return Err(app_error);
         }
         let (_current_password, salt) = result.unwrap();
 
@@ -1050,7 +1034,7 @@ impl DatabaseManager {
             [password],
         );
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         Ok(false)
@@ -1059,20 +1043,16 @@ impl DatabaseManager {
     pub fn set_user_finished_otp_setup(&self, username: &str) -> Result<(), AppError> {
         // Check if user needs to setup OTP.
         let result = self.is_user_needs_setup_otp(username);
-        if let Err(e) = result {
-            return Err(e.add_entry(file!(), line!()));
+        if let Err(app_error) = result {
+            return Err(app_error);
         }
         let need_change_password = result.unwrap();
         if need_change_password == false {
-            return Err(AppError::new(
-                &format!(
-                    "user \"{}\" already setup OTP \
+            return Err(AppError::new(&format!(
+                "user \"{}\" already setup OTP \
                     but we requested to finish OTP setup",
-                    username
-                ),
-                file!(),
-                line!(),
-            ));
+                username
+            )));
         }
 
         // Update 'need_setup_otp' in database.
@@ -1084,7 +1064,7 @@ impl DatabaseManager {
             [],
         );
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         Ok(())
@@ -1103,14 +1083,14 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
 
         let row = rows.next();
         if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let row = row.unwrap();
         if row.is_none() {
@@ -1124,7 +1104,7 @@ impl DatabaseManager {
     fn enable_foreign_keys(connection: &mut Connection) -> Option<AppError> {
         let result = connection.execute("PRAGMA foreign_keys=on;", []);
         if let Err(e) = result {
-            return Some(AppError::new(&e.to_string(), file!(), line!()));
+            return Some(AppError::new(&e.to_string()));
         }
 
         None
@@ -1140,7 +1120,7 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
@@ -1186,7 +1166,7 @@ impl DatabaseManager {
         // Create table.
         let result = connection.execute(&table_structure, []);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         Ok(())
@@ -1202,7 +1182,7 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
@@ -1222,7 +1202,7 @@ impl DatabaseManager {
         // Create table.
         let result = connection.execute(&table_structure, []);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         // Insert database version.
@@ -1231,7 +1211,7 @@ impl DatabaseManager {
             &format!("INSERT INTO {} (version) VALUES (?1)", VERSION_TABLE_NAME),
             params![SUPPORTED_DATABASE_VERSION],
         ) {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         println!("INFO: database version is {}", SUPPORTED_DATABASE_VERSION);
@@ -1249,7 +1229,7 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
@@ -1297,7 +1277,7 @@ impl DatabaseManager {
 
         let result = connection.execute(&table_structure, []);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         Ok(())
@@ -1313,7 +1293,7 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
@@ -1351,7 +1331,7 @@ impl DatabaseManager {
 
         let result = connection.execute(&table_structure, []);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         Ok(())
@@ -1366,25 +1346,25 @@ impl DatabaseManager {
             .unwrap();
         let result = stmt.query([]);
         if let Err(e) = result {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         let mut rows = result.unwrap();
 
         let row = rows.next();
         if let Err(e) = row {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let row = row.unwrap();
         if row.is_none() {
-            return Err(AppError::new("no version in database", file!(), line!()));
+            return Err(AppError::new("no version in database"));
         }
         let row = row.unwrap();
 
         // Get version.
         let version: Result<u64> = row.get(0);
         if let Err(e) = version {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
         let version = version.unwrap();
 
@@ -1404,7 +1384,7 @@ impl DatabaseManager {
         if version == 0 {
             // Upgrade to version 1.
             if let Err(app_error) = DatabaseManager::upgrade_database_to_version_1(connection) {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
         }
 
@@ -1417,10 +1397,10 @@ impl DatabaseManager {
         // After everything is done, we drop the version table
         // and insert the new version value.
         if let Err(app_error) = DatabaseManager::drop_version_table(connection) {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
         if let Err(app_error) = DatabaseManager::create_version_table_if_not_found(connection) {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         Ok(())
@@ -1429,7 +1409,7 @@ impl DatabaseManager {
     fn drop_version_table(connection: &mut Connection) -> Result<(), AppError> {
         if let Err(e) = connection.execute(&format!("DROP TABLE {}", VERSION_TABLE_NAME), params![])
         {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         Ok(())
@@ -1443,7 +1423,7 @@ impl DatabaseManager {
             ),
             params![],
         ) {
-            return Err(AppError::new(&e.to_string(), file!(), line!()));
+            return Err(AppError::new(&e.to_string()));
         }
 
         Ok(())

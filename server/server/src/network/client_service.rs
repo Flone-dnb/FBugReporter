@@ -94,15 +94,13 @@ impl ClientService {
     pub fn process(mut self) {
         let secret_key = start_establishing_secure_connection(&mut self.socket);
         if let Err(app_error) = secret_key {
-            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
+            self.exit_error = Some(Err(app_error));
             return;
         }
         let result = secret_key.unwrap().try_into();
         if result.is_err() {
             self.exit_error = Some(Err(AppError::new(
                 "failed to convert Vec<u8> to generic array",
-                file!(),
-                line!(),
             )));
             return;
         }
@@ -116,8 +114,8 @@ impl ClientService {
             MAX_MESSAGE_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS,
             &mut is_fin,
         );
-        if let Err(e) = message {
-            self.exit_error = Some(Err(e.add_entry(file!(), line!())));
+        if let Err(app_error) = message {
+            self.exit_error = Some(Err(app_error));
             return;
         }
         let message = message.unwrap();
@@ -125,7 +123,7 @@ impl ClientService {
         // Deserialize.
         let message = bincode::deserialize::<ClientRequest>(&message);
         if let Err(e) = message {
-            self.exit_error = Some(Err(AppError::new(&e.to_string(), file!(), line!())));
+            self.exit_error = Some(Err(AppError::new(&e.to_string())));
             return;
         }
         let message = message.unwrap();
@@ -133,7 +131,7 @@ impl ClientService {
         // Handle message.
         let result = self.handle_client_message(message);
         if let Err(app_error) = result {
-            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
+            self.exit_error = Some(Err(app_error));
             return;
         }
         let result = result.unwrap();
@@ -145,7 +143,7 @@ impl ClientService {
         // Connected.
         let result = self.wait_for_client_requests();
         if let Err(app_error) = result {
-            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
+            self.exit_error = Some(Err(app_error));
             return;
         }
         let result = result.unwrap();
@@ -185,7 +183,7 @@ impl ClientService {
                     None,
                 );
                 if let Err(app_error) = result {
-                    return Err(app_error.add_entry(file!(), line!()));
+                    return Err(app_error);
                 }
 
                 Ok(result.unwrap())
@@ -204,7 +202,7 @@ impl ClientService {
                     Some(new_password),
                 );
                 if let Err(app_error) = result {
-                    return Err(app_error.add_entry(file!(), line!()));
+                    return Err(app_error);
                 }
 
                 Ok(result.unwrap())
@@ -212,7 +210,7 @@ impl ClientService {
             ClientRequest::QueryReportsSummary { page, amount } => {
                 let result = self.handle_client_reports_request(page, amount);
                 if let Err(app_error) = result {
-                    return Err(app_error.add_entry(file!(), line!()));
+                    return Err(app_error);
                 }
 
                 Ok(None)
@@ -220,7 +218,7 @@ impl ClientService {
             ClientRequest::QueryReport { report_id } => {
                 let result = self.handle_client_report_request(report_id);
                 if let Some(app_error) = result {
-                    return Err(app_error.add_entry(file!(), line!()));
+                    return Err(app_error);
                 }
 
                 Ok(None)
@@ -228,7 +226,7 @@ impl ClientService {
             ClientRequest::QueryAttachment { attachment_id } => {
                 let result = self.handle_client_attachment_request(attachment_id);
                 if let Some(app_error) = result {
-                    return Err(app_error.add_entry(file!(), line!()));
+                    return Err(app_error);
                 }
 
                 Ok(None)
@@ -236,7 +234,7 @@ impl ClientService {
             ClientRequest::DeleteReport { report_id } => {
                 let result = self.handle_client_delete_report_request(report_id);
                 if let Err(app_error) = result {
-                    return Err(app_error.add_entry(file!(), line!()));
+                    return Err(app_error);
                 }
 
                 Ok(None)
@@ -273,7 +271,7 @@ impl ClientService {
                 }),
             };
             if let Some(app_error) = send_message(&mut self.socket, &self.secret_key, answer) {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
 
             return Ok(Some(format!(
@@ -288,7 +286,7 @@ impl ClientService {
         drop(database_guard);
 
         if let Err(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         // Check if user exists.
@@ -297,7 +295,7 @@ impl ClientService {
             // No user was found for this username.
             let result = self.answer_client_wrong_credentials(&username);
             if let Err(app_error) = result {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
 
             return Ok(Some(result.unwrap()));
@@ -316,7 +314,7 @@ impl ClientService {
             // Wrong password.
             let result = self.answer_client_wrong_credentials(&username);
             if let Err(app_error) = result {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
 
             return Ok(Some(result.unwrap()));
@@ -330,8 +328,8 @@ impl ClientService {
                 .lock()
                 .unwrap()
                 .is_user_needs_to_change_password(&username);
-            if let Err(e) = result {
-                return Err(e.add_entry(file!(), line!()));
+            if let Err(app_error) = result {
+                return Err(app_error);
             }
             _need_change_password = result.unwrap();
         }
@@ -351,8 +349,8 @@ impl ClientService {
                 is_admin: false,
                 fail_reason: Some(ClientLoginFailReason::NeedFirstPassword),
             };
-            if let Some(err) = send_message(&mut self.socket, &self.secret_key, answer) {
-                return Err(err.add_entry(file!(), line!()));
+            if let Some(app_error) = send_message(&mut self.socket, &self.secret_key, answer) {
+                return Err(app_error);
             }
 
             return Ok(None);
@@ -365,8 +363,8 @@ impl ClientService {
                 .lock()
                 .unwrap()
                 .update_user_password(&username, new_password.unwrap());
-            if let Err(e) = result {
-                return Err(e.add_entry(file!(), line!()));
+            if let Err(app_error) = result {
+                return Err(app_error);
             }
             let result = result.unwrap();
             if result {
@@ -387,15 +385,15 @@ impl ClientService {
         {
             let db_guard = self.database.lock().unwrap();
             let result = db_guard.is_user_needs_setup_otp(&username);
-            if let Err(e) = result {
-                return Err(e.add_entry(file!(), line!()));
+            if let Err(app_error) = result {
+                return Err(app_error);
             }
             let _need_setup_otp = result.unwrap();
 
             // Get OTP secret.
             let result = db_guard.get_otp_secret_key_for_user(&username);
-            if let Err(e) = result {
-                return Err(e.add_entry(file!(), line!()));
+            if let Err(app_error) = result {
+                return Err(app_error);
             }
             let otp_secret = result.unwrap();
 
@@ -413,13 +411,13 @@ impl ClientService {
                     username.clone(),
                 );
                 if let Err(e) = totp {
-                    return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
+                    return Err(AppError::new(&format!("{:?}", e)));
                 }
                 let totp = totp.unwrap();
 
                 let qr_code = totp.get_qr();
                 if let Err(e) = qr_code {
-                    return Err(AppError::new(&e.to_string(), file!(), line!()));
+                    return Err(AppError::new(&e.to_string()));
                 }
                 let qr_code = qr_code.unwrap();
 
@@ -437,8 +435,8 @@ impl ClientService {
                     is_admin: false,
                     fail_reason: Some(ClientLoginFailReason::SetupOTP { qr_code }),
                 };
-                if let Some(err) = send_message(&mut self.socket, &self.secret_key, answer) {
-                    return Err(err.add_entry(file!(), line!()));
+                if let Some(app_error) = send_message(&mut self.socket, &self.secret_key, answer) {
+                    return Err(app_error);
                 }
 
                 return Ok(None);
@@ -450,8 +448,10 @@ impl ClientService {
                         is_admin: false,
                         fail_reason: Some(ClientLoginFailReason::NeedOTP),
                     };
-                    if let Some(err) = send_message(&mut self.socket, &self.secret_key, answer) {
-                        return Err(err.add_entry(file!(), line!()));
+                    if let Some(app_error) =
+                        send_message(&mut self.socket, &self.secret_key, answer)
+                    {
+                        return Err(app_error);
                     }
 
                     return Ok(Some(format!(
@@ -463,13 +463,13 @@ impl ClientService {
                 // Generate current OTP.
                 let totp = TOTP::new(TOTP_ALGORITHM, 6, 1, 30, otp_secret, None, String::new());
                 if let Err(e) = totp {
-                    return Err(AppError::new(&format!("{:?}", e), file!(), line!()));
+                    return Err(AppError::new(&format!("{:?}", e)));
                 }
                 let totp = totp.unwrap();
 
                 let time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
                 if let Err(e) = time {
-                    return Err(AppError::new(&e.to_string(), file!(), line!()));
+                    return Err(AppError::new(&e.to_string()));
                 }
                 let time = time.unwrap().as_secs();
                 let token = totp.generate(time);
@@ -481,7 +481,7 @@ impl ClientService {
                     );
                     let result = self.answer_client_wrong_credentials(&username);
                     if let Err(app_error) = result {
-                        return Err(app_error.add_entry(file!(), line!()));
+                        return Err(app_error);
                     }
 
                     return Ok(Some(result.unwrap()));
@@ -492,7 +492,7 @@ impl ClientService {
                         .unwrap()
                         .set_user_finished_otp_setup(&username);
                     if let Err(app_error) = result {
-                        return Err(app_error.add_entry(file!(), line!()));
+                        return Err(app_error);
                     }
                     self.logger.lock().unwrap().print_and_log(
                         LogCategory::Info,
@@ -511,13 +511,13 @@ impl ClientService {
                 &username,
                 &self.socket.peer_addr().unwrap().ip().to_string(),
             ) {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
 
             // Check if user is admin.
             let result = guard.is_user_admin(&username);
             if let Err(app_error) = result {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
             _is_admin = result.unwrap();
         }
@@ -548,8 +548,8 @@ impl ClientService {
             is_admin: _is_admin,
             fail_reason: None,
         };
-        if let Some(err) = send_message(&mut self.socket, &self.secret_key, answer) {
-            return Err(err.add_entry(file!(), line!()));
+        if let Some(app_error) = send_message(&mut self.socket, &self.secret_key, answer) {
+            return Err(app_error);
         }
 
         Ok(None)
@@ -567,13 +567,13 @@ impl ClientService {
 
         // Check reports.
         if let Err(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
         let reports = result.unwrap();
 
         // Check report count.
         if let Err(app_error) = report_count {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
         let report_count = report_count.unwrap();
 
@@ -586,7 +586,7 @@ impl ClientService {
         // Send reports.
         let result = send_message(&mut self.socket, &self.secret_key, message);
         if let Some(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         Ok(())
@@ -605,7 +605,7 @@ impl ClientService {
             }
             let result = self.database.lock().unwrap().is_user_admin(&username);
             if let Err(e) = result {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
             let is_admin = result.unwrap();
 
@@ -627,14 +627,14 @@ impl ClientService {
                     .lock()
                     .unwrap()
                     .print_and_log(LogCategory::Warning, &message);
-                return Err(AppError::new(&message, file!(), line!()));
+                return Err(AppError::new(&message));
             }
         }
 
         // Remove report from database.
         let result = self.database.lock().unwrap().remove_report(report_id);
         if let Err(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
         let found = result.unwrap();
         if !found {
@@ -660,7 +660,7 @@ impl ClientService {
         // Send reports.
         let result = send_message(&mut self.socket, &self.secret_key, message);
         if let Some(app_error) = result {
-            return Err(app_error.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         Ok(())
@@ -692,7 +692,7 @@ impl ClientService {
         drop(guard);
 
         if let Err(app_error) = result {
-            return Some(app_error.add_entry(file!(), line!()));
+            return Some(app_error);
         }
         let attachment = result.unwrap();
 
@@ -715,7 +715,7 @@ impl ClientService {
         // Send attachment.
         let result = send_message(&mut self.socket, &self.secret_key, message);
         if let Some(app_error) = result {
-            return Some(app_error.add_entry(file!(), line!()));
+            return Some(app_error);
         }
 
         None
@@ -748,7 +748,7 @@ impl ClientService {
 
         // Check report.
         if let Err(app_error) = result {
-            return Some(app_error.add_entry(file!(), line!()));
+            return Some(app_error);
         }
         let report = result.unwrap();
 
@@ -770,7 +770,7 @@ impl ClientService {
         // Send reports.
         let result = send_message(&mut self.socket, &self.secret_key, message);
         if let Some(app_error) = result {
-            return Some(app_error.add_entry(file!(), line!()));
+            return Some(app_error);
         }
 
         None
@@ -815,8 +815,8 @@ impl ClientService {
                         },
                     }),
                 };
-                if let Some(err) = send_message(&mut self.socket, &self.secret_key, _answer) {
-                    return Err(err.add_entry(file!(), line!()));
+                if let Some(app_error) = send_message(&mut self.socket, &self.secret_key, _answer) {
+                    return Err(app_error);
                 }
             }
             AttemptResult::Ban => {
@@ -836,8 +836,8 @@ impl ClientService {
                         },
                     }),
                 };
-                if let Some(err) = send_message(&mut self.socket, &self.secret_key, _answer) {
-                    return Err(err.add_entry(file!(), line!()));
+                if let Some(app_error) = send_message(&mut self.socket, &self.secret_key, _answer) {
+                    return Err(app_error);
                 }
             }
         }
@@ -872,7 +872,7 @@ impl ClientService {
                 return Ok(None);
             }
             if let Err(app_error) = result {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
             let message = result.unwrap();
 
@@ -890,14 +890,14 @@ impl ClientService {
             // Deserialize.
             let message = bincode::deserialize::<ClientRequest>(&message);
             if let Err(e) = message {
-                return Err(AppError::new(&e.to_string(), file!(), line!()));
+                return Err(AppError::new(&e.to_string()));
             }
             let message = message.unwrap();
 
             // Handle message.
             let result = self.handle_client_message(message);
             if let Err(app_error) = result {
-                return Err(app_error.add_entry(file!(), line!()));
+                return Err(app_error);
             }
             let result = result.unwrap();
             if result.is_some() {

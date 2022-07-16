@@ -127,7 +127,7 @@ impl Reporter {
             let result =
                 reporter.request_max_attachment_size_in_mb(self.server_addr.unwrap(), &mut logger);
             if let Err(app_error) = result {
-                self.last_error = app_error.to_string();
+                self.last_error = app_error.get_message();
                 logger.log(&app_error.to_string());
                 return ReportResult::InternalError.value();
             }
@@ -165,11 +165,13 @@ impl Reporter {
             logger.log("Successfully sent the report.");
         } else {
             if error_message.is_none() {
-                self.last_error = String::from("Error message is None.");
+                self.last_error = String::from("An error occurred but the error message is empty.");
+                logger.log(&self.last_error);
             } else {
-                self.last_error = error_message.unwrap().to_string();
+                let app_error = error_message.unwrap();
+                logger.log(&app_error.to_string());
+                self.last_error = app_error.get_message();
             }
-            logger.log(&self.last_error);
         }
 
         return result_code.value();

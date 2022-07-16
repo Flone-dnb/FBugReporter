@@ -76,15 +76,13 @@ impl ReporterService {
     pub fn process(mut self) {
         let secret_key = start_establishing_secure_connection(&mut self.socket);
         if let Err(app_error) = secret_key {
-            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
+            self.exit_error = Some(Err(app_error));
             return;
         }
         let result = secret_key.unwrap().try_into();
         if result.is_err() {
             self.exit_error = Some(Err(AppError::new(
                 "failed to convert Vec<u8> to generic array",
-                file!(),
-                line!(),
             )));
             return;
         }
@@ -103,7 +101,7 @@ impl ReporterService {
             &mut is_fin,
         );
         if let Err(app_error) = message {
-            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
+            self.exit_error = Some(Err(app_error));
             return;
         }
         let message = message.unwrap();
@@ -111,14 +109,14 @@ impl ReporterService {
         // Deserialize.
         let message = bincode::deserialize::<ReporterRequest>(&message);
         if let Err(e) = message {
-            self.exit_error = Some(Err(AppError::new(&e.to_string(), file!(), line!())));
+            self.exit_error = Some(Err(AppError::new(&e.to_string())));
             return;
         }
         let message = message.unwrap();
 
         let result = self.handle_reporter_message(message);
         if let Err(app_error) = result {
-            self.exit_error = Some(Err(app_error.add_entry(file!(), line!())));
+            self.exit_error = Some(Err(app_error));
             return;
         }
         let result = result.unwrap();
@@ -154,7 +152,7 @@ impl ReporterService {
             ReporterRequest::MaxAttachmentSize {} => {
                 let result = self.handle_attachment_size_query_request();
                 if let Some(app_error) = result {
-                    return Err(app_error.add_entry(file!(), line!()));
+                    return Err(app_error);
                 }
                 return Ok(None);
             }
@@ -183,12 +181,12 @@ impl ReporterService {
             let result_code = ReportResult::WrongProtocol;
 
             // Notify reporter.
-            if let Some(err) = send_message(
+            if let Some(app_error) = send_message(
                 &mut self.socket,
                 &self.secret_key,
                 ReporterAnswer::Report { result_code },
             ) {
-                return Err(err.add_entry(file!(), line!()));
+                return Err(app_error);
             }
 
             return Ok(Some(format!(
@@ -202,12 +200,12 @@ impl ReporterService {
             let result_code = ReportResult::ServerRejected;
 
             // Notify reporter.
-            if let Some(err) = send_message(
+            if let Some(app_error) = send_message(
                 &mut self.socket,
                 &self.secret_key,
                 ReporterAnswer::Report { result_code },
             ) {
-                return Err(err.add_entry(file!(), line!()));
+                return Err(app_error);
             }
 
             return Ok(Some(format!(
@@ -236,7 +234,7 @@ impl ReporterService {
         );
 
         {
-            if let Err(err) = self
+            if let Err(app_error) = self
                 .database
                 .lock()
                 .unwrap()
@@ -245,15 +243,15 @@ impl ReporterService {
                 let result_code = ReportResult::InternalError;
 
                 // Notify reporter of our failure.
-                if let Some(err) = send_message(
+                if let Some(app_error) = send_message(
                     &mut self.socket,
                     &self.secret_key,
                     ReporterAnswer::Report { result_code },
                 ) {
-                    return Err(err.add_entry(file!(), line!()));
+                    return Err(app_error);
                 }
 
-                return Err(err.add_entry(file!(), line!()));
+                return Err(app_error);
             }
         }
 
@@ -263,14 +261,14 @@ impl ReporterService {
         );
 
         // Answer "OK".
-        if let Some(err) = send_message(
+        if let Some(app_error) = send_message(
             &mut self.socket,
             &self.secret_key,
             ReporterAnswer::Report {
                 result_code: ReportResult::Ok,
             },
         ) {
-            return Err(err.add_entry(file!(), line!()));
+            return Err(app_error);
         }
 
         return Ok(None);
@@ -318,7 +316,7 @@ impl ReporterService {
             max_attachments_size_in_mb: self.max_total_attachment_size_in_mb,
         };
         if let Some(app_error) = send_message(&mut self.socket, &self.secret_key, answer) {
-            return Some(app_error.add_entry(file!(), line!()));
+            return Some(app_error);
         }
 
         return None;

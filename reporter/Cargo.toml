@@ -12,8 +12,8 @@ serde = {version = "1.0.137", features = ["derive"]}
 bincode = "1.3.3"
 chrono = "0.4.19"
 os_info = "3.4.0"
-backtrace = "0.3.65"
 shared = {path = "../shared"}
+backtrace = "0.3.66"
 
 [lib]
 crate-type = ["cdylib"]

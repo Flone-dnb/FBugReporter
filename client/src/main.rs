@@ -219,7 +219,7 @@ impl AppDelegate<ApplicationState> for MyDelegate {
                     ))
                     .show_alert()
                 {
-                    let message = AppError::new(&e.to_string(), file!(), line!()).to_string();
+                    let message = AppError::new(&e.to_string()).to_string();
                     data.logger_service.lock().unwrap().log(&message);
                     println!("{}", message);
                 }
@@ -257,7 +257,7 @@ impl AppDelegate<ApplicationState> for MyDelegate {
                     ))
                     .show_alert()
                 {
-                    let message = AppError::new(&e.to_string(), file!(), line!()).to_string();
+                    let message = AppError::new(&e.to_string()).to_string();
                     data.logger_service.lock().unwrap().log(&message);
                     println!("{}", message);
                 }
@@ -272,7 +272,7 @@ impl AppDelegate<ApplicationState> for MyDelegate {
                     ))
                     .show_alert()
                 {
-                    let message = AppError::new(&e.to_string(), file!(), line!()).to_string();
+                    let message = AppError::new(&e.to_string()).to_string();
                     data.logger_service.lock().unwrap().log(&message);
                     println!("{}", message);
                 }

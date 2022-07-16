@@ -33,8 +33,8 @@ impl NetService {
         let config = Arc::new(ConfigManager::new());
 
         let db = DatabaseManager::new();
-        if let Err(err) = db {
-            return Err(err.add_entry(file!(), line!()));
+        if let Err(app_error) = db {
+            return Err(app_error);
         }
 
         let logger = Arc::new(Mutex::new(logger));
@@ -62,7 +62,7 @@ impl NetService {
         if let Err(ref e) = listener_socker_reporters {
             self.logger.lock().unwrap().print_and_log(
                 LogCategory::Error,
-                &AppError::new(&e.to_string(), file!(), line!()).to_string(),
+                &AppError::new(&e.to_string()).to_string(),
             );
         }
         let listener_socker_reporters = listener_socker_reporters.unwrap();
@@ -73,7 +73,7 @@ impl NetService {
         if let Err(ref e) = listener_socker_clients {
             self.logger.lock().unwrap().print_and_log(
                 LogCategory::Error,
-                &AppError::new(&e.to_string(), file!(), line!()).to_string(),
+                &AppError::new(&e.to_string()).to_string(),
             );
         }
         let listener_socker_clients = listener_socker_clients.unwrap();
@@ -145,7 +145,7 @@ impl NetService {
             if let Err(ref e) = accept_result {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
+                    &AppError::new(&e.to_string()).to_string(),
                 );
                 continue;
             }
@@ -155,14 +155,14 @@ impl NetService {
             if let Err(e) = socket.set_nodelay(true) {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
+                    &AppError::new(&e.to_string()).to_string(),
                 );
                 continue;
             }
             if let Err(e) = socket.set_nonblocking(true) {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
+                    &AppError::new(&e.to_string()).to_string(),
                 );
                 continue;
             }
@@ -188,7 +188,7 @@ impl NetService {
             if let Err(ref e) = handle {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
+                    &AppError::new(&e.to_string()).to_string(),
                 );
                 continue;
             }
@@ -208,7 +208,7 @@ impl NetService {
             if let Err(ref e) = accept_result {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
+                    &AppError::new(&e.to_string()).to_string(),
                 );
                 continue;
             }
@@ -218,14 +218,14 @@ impl NetService {
             if let Err(e) = socket.set_nodelay(true) {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
+                    &AppError::new(&e.to_string()).to_string(),
                 );
                 continue;
             }
             if let Err(e) = socket.set_nonblocking(true) {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
+                    &AppError::new(&e.to_string()).to_string(),
                 );
                 continue;
             }
@@ -262,7 +262,7 @@ impl NetService {
             if let Err(ref e) = handle {
                 logger.lock().unwrap().print_and_log(
                     LogCategory::Error,
-                    &AppError::new(&e.to_string(), file!(), line!()).to_string(),
+                    &AppError::new(&e.to_string()).to_string(),
                 );
                 continue;
             }

@@ -207,7 +207,23 @@ impl AppDelegate<ApplicationState> for MyDelegate {
             }
             let path_to_save_attachment = path_to_save_attachment.unwrap();
 
-            // TODO: show modal window
+            {
+                // TODO: show modal window instead when https://github.com/linebender/druid/issues/429 is done
+                if let Err(e) = MessageDialog::new()
+                    .set_type(MessageType::Info)
+                    .set_title("Attachment")
+                    .set_text(&format!(
+                        "Attachment \"{}\" is queued for download.\n\
+                        You will be notified when the attachment will be downloaded.",
+                        button_data.attachment_file_name,
+                    ))
+                    .show_alert()
+                {
+                    let message = AppError::new(&e.to_string(), file!(), line!()).to_string();
+                    data.logger_service.lock().unwrap().log(&message);
+                    println!("{}", message);
+                }
+            }
 
             let result = data
                 .net_service
@@ -235,7 +251,7 @@ impl AppDelegate<ApplicationState> for MyDelegate {
                     .set_type(MessageType::Info)
                     .set_title("Attachment")
                     .set_text(&format!(
-                        "Attachment \"{}\" was successfully downloaded at {}.",
+                        "Attachment \"{}\" was successfully downloaded and saved at \"{}\".",
                         button_data.attachment_file_name,
                         path_to_save_attachment.to_str().unwrap()
                     ))

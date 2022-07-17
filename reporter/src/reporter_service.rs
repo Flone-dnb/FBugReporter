@@ -1,5 +1,6 @@
 // Std.
 use std::net::*;
+use std::time::Duration;
 
 // Custom.
 use crate::log_manager::LogManager;
@@ -26,7 +27,7 @@ impl ReporterService {
     /// An error if something went wrong, otherwise maximum allowed size of attachments.
     pub fn request_max_attachment_size_in_mb(
         &mut self,
-        server_addr: SocketAddrV4,
+        server_addr: String,
         logger: &mut LogManager,
     ) -> Result<usize, AppError> {
         let result = Self::establish_secure_connection_with_server(server_addr, logger);
@@ -85,7 +86,7 @@ impl ReporterService {
 
     pub fn send_report(
         &mut self,
-        server_addr: SocketAddrV4,
+        server_addr: String,
         report: GameReport,
         logger: &mut LogManager,
         attachments: Vec<ReportAttachment>,
@@ -166,18 +167,32 @@ impl ReporterService {
 
     /// Connects to the server and establishes a secure connection.
     fn establish_secure_connection_with_server(
-        server_addr: SocketAddrV4,
+        server_addr: String,
         logger: &mut LogManager,
     ) -> Result<(TcpStream, [u8; SECRET_KEY_SIZE]), AppError> {
-        let tcp_socket = TcpStream::connect(server_addr);
-
-        if let Err(e) = tcp_socket {
+        let addrs = server_addr.to_socket_addrs();
+        if let Err(e) = addrs {
             return Err(AppError::new(&e.to_string()));
-        } else {
-            logger.log("Connected to the server.");
+        }
+        let addrs = addrs.unwrap();
+
+        let mut tcp_socket: Option<TcpStream> = None;
+        for addr in addrs {
+            let result = TcpStream::connect_timeout(&addr, Duration::from_secs(2));
+            if result.is_ok() {
+                tcp_socket = Some(result.unwrap());
+                break;
+            }
+        }
+
+        if tcp_socket.is_none() {
+            return Err(AppError::new("the server is offline, try again later"));
         }
 
         let mut tcp_socket = tcp_socket.unwrap();
+
+        logger.log("Connected to the server.");
+
         if let Err(e) = tcp_socket.set_nodelay(true) {
             return Err(AppError::new(&e.to_string()));
         }

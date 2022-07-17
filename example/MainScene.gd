@@ -7,7 +7,9 @@ var game_version: String = "v1.0.0"; # put your game version here, make sure tha
 var report_text_limit: int = 10;
 
 func _ready():
-	reporter.set_server(127, 0, 0, 1, 21580); # should be according to your server's info
+	# specify your server's IP (or domain name) and port
+	# using 'localhost' for local usage (this computer)
+	reporter.set_server("localhost", 21580);
 	initial_report_text = get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text;
 	
 	# set length limits

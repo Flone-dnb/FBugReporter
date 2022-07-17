@@ -2,6 +2,7 @@
 use std::fs;
 use std::net::*;
 use std::path::Path;
+use std::time::Duration;
 
 // External.
 use sha2::{Digest, Sha512};
@@ -55,11 +56,29 @@ impl NetService {
         otp: String,
         new_password: Option<String>,
     ) -> ConnectResult {
-        // Connect socket.
-        let tcp_socket = TcpStream::connect(format!("{}:{}", server, port));
-        if let Err(e) = tcp_socket {
+        let addrs = format!("{}:{}", server, port).to_socket_addrs();
+        if let Err(e) = addrs {
             return ConnectResult::InternalError(AppError::new(&e.to_string()));
         }
+        let addrs = addrs.unwrap();
+
+        let mut tcp_socket: Option<TcpStream> = None;
+        for addr in addrs {
+            let result = TcpStream::connect_timeout(&addr, Duration::from_secs(2));
+            if result.is_ok() {
+                tcp_socket = Some(result.unwrap());
+                break;
+            }
+        }
+
+        if tcp_socket.is_none() {
+            return ConnectResult::InternalError(AppError::new(
+                "could not connect to the \
+                        server, make sure that server name and port are correct and the \
+                        server is running",
+            ));
+        }
+
         let tcp_socket = tcp_socket.unwrap();
 
         // Configure socket.

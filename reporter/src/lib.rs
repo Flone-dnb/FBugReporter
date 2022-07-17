@@ -2,7 +2,6 @@
 use backtrace::Backtrace;
 use std::fs::File;
 use std::io::Read;
-use std::net::{Ipv4Addr, SocketAddrV4};
 use std::path::Path;
 
 // External.
@@ -18,7 +17,7 @@ use shared::misc::report::*;
 #[derive(NativeClass)]
 #[inherit(Node)]
 struct Reporter {
-    server_addr: Option<SocketAddrV4>,
+    server_addr: Option<String>,
     last_report: Option<GameReport>,
     last_error: String,
 }
@@ -47,11 +46,8 @@ impl Reporter {
     }
 
     #[export]
-    fn set_server(&mut self, _owner: &Node, ip_a: u8, ip_b: u8, ip_c: u8, ip_d: u8, port: u16) {
-        self.server_addr = Some(SocketAddrV4::new(
-            Ipv4Addr::new(ip_a, ip_b, ip_c, ip_d),
-            port,
-        ));
+    fn set_server(&mut self, _owner: &Node, server: String, port: u16) {
+        self.server_addr = Some(format!("{}:{}", server, port));
     }
 
     #[export]
@@ -124,8 +120,10 @@ impl Reporter {
             }
 
             // Request mac attachment size (in total) in MB.
-            let result =
-                reporter.request_max_attachment_size_in_mb(self.server_addr.unwrap(), &mut logger);
+            let result = reporter.request_max_attachment_size_in_mb(
+                self.server_addr.as_ref().unwrap().clone(),
+                &mut logger,
+            );
             if let Err(app_error) = result {
                 self.last_error = app_error.get_message();
                 logger.log(&app_error.to_string());
@@ -153,7 +151,7 @@ impl Reporter {
         }
 
         let (result_code, error_message) = reporter.send_report(
-            self.server_addr.unwrap(),
+            self.server_addr.as_ref().unwrap().clone(),
             report.clone(),
             &mut logger,
             report_attachments,

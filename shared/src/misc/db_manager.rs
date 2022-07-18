@@ -1,8 +1,12 @@
+// Std.
+use core::panic;
+
 // External.
 use chrono::prelude::*;
 use rand::Rng;
 use rusqlite::{params, Connection, Result};
 use sha2::{Digest, Sha512};
+use sysinfo::{DiskExt, System, SystemExt};
 
 // Custom.
 use super::report::*;
@@ -72,6 +76,7 @@ pub struct ReportData {
 
 pub struct DatabaseManager {
     connection: Connection,
+    database_disk_mount_point: String,
 }
 
 impl DatabaseManager {
@@ -125,8 +130,59 @@ impl DatabaseManager {
             return Err(app_error);
         }
 
-        Ok(Self { connection })
+        Ok(Self {
+            connection,
+            database_disk_mount_point: Self::determine_database_disk_mount_point(),
+        })
     }
+
+    fn determine_database_disk_mount_point() -> String {
+        let database_dir = std::env::current_dir().unwrap();
+
+        let mut sys = System::new_all();
+        sys.refresh_disks_list();
+        sys.refresh_disks();
+
+        let mut database_mount_point = String::new();
+        for disk in sys.disks() {
+            let disk_mount_point = disk.mount_point().to_str().unwrap();
+            if database_dir.starts_with(disk_mount_point)
+                && disk_mount_point.len() > database_mount_point.len()
+            {
+                database_mount_point = String::from(disk_mount_point);
+            }
+        }
+
+        if database_mount_point.is_empty() {
+            panic!("unable to determine database disk mount point");
+        }
+
+        database_mount_point
+    }
+
+    /// Returns a pair of total and used disk space in MB.
+    ///
+    /// ## Error
+    /// Returns `(0, 0)` if something went wrong.
+    pub fn get_disk_space_mb(&self) -> (u64, u64) {
+        let mut sys = System::new_all();
+        sys.refresh_disks_list();
+        sys.refresh_disks();
+
+        for disk in sys.disks() {
+            if disk.mount_point().to_str().unwrap() == self.database_disk_mount_point {
+                let total_space = disk.total_space();
+                let free_space = disk.available_space();
+                return (
+                    total_space / 1024 / 1024,
+                    (total_space - free_space) / 1024 / 1024,
+                );
+            }
+        }
+
+        (0, 0)
+    }
+
     /// Returns the amount of reports the database contains.
     pub fn get_report_count(&self) -> Result<u64, AppError> {
         let mut stmt = self

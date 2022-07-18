@@ -47,6 +47,8 @@ pub enum ClientAnswer {
     ReportsSummary {
         reports: Vec<ReportSummary>,
         total_reports: u64,
+        total_disk_space_mb: u64,
+        used_disk_space_mb: u64,
     },
     Report {
         id: u64,

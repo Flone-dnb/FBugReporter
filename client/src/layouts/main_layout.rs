@@ -8,6 +8,7 @@ use druid::widget::{Button, Flex, Label, MainAxisAlignment, Padding};
 use druid::WidgetExt;
 
 // Custom.
+use crate::network::net_service::ServerDiskUsage;
 use crate::widgets::report::ReportWidget;
 use crate::{ApplicationState, Layout};
 use shared::misc::report::ReportSummary;
@@ -85,6 +86,23 @@ impl MainLayout {
             Flex::column()
                 .main_axis_alignment(MainAxisAlignment::Start)
                 .must_fill_main_axis(true)
+                .with_child(
+                    Flex::row()
+                        .main_axis_alignment(MainAxisAlignment::Center)
+                        .with_child(
+                            Label::new(|data: &ApplicationState, _env: &_| {
+                                let disk = data.main_layout.get_server_disk_usage(data);
+                                let percent = (disk.used_disk_space_mb as f64
+                                    / disk.total_disk_space_mb as f64)
+                                    * 100.0;
+                                format!(
+                                    "Server Disk Usage: {}/{} MB ({:.1}%)",
+                                    disk.used_disk_space_mb, disk.total_disk_space_mb, percent
+                                )
+                            })
+                            .with_text_size(TEXT_SIZE),
+                        ),
+                )
                 .with_flex_child(reports_column, 1.0)
                 .with_default_spacer()
                 .with_child(
@@ -164,6 +182,9 @@ impl MainLayout {
                         ),
                 ),
         )
+    }
+    fn get_server_disk_usage(&self, data: &ApplicationState) -> ServerDiskUsage {
+        data.net_service.lock().unwrap().get_server_disk_usage()
     }
     fn query_reports(&self, data: &ApplicationState) -> Result<(Vec<ReportSummary>, u64), ()> {
         let result = data

@@ -577,10 +577,19 @@ impl ClientService {
         }
         let report_count = report_count.unwrap();
 
+        // Get disk space.
+        let (mut _total_disk_space_mb, mut _used_disk_space_mb) = (0u64, 0u64);
+        {
+            let guard = self.database.lock().unwrap();
+            (_total_disk_space_mb, _used_disk_space_mb) = guard.get_disk_space_mb();
+        }
+
         // Prepare message to send.
         let message = ClientAnswer::ReportsSummary {
             reports,
             total_reports: report_count,
+            total_disk_space_mb: _total_disk_space_mb,
+            used_disk_space_mb: _used_disk_space_mb,
         };
 
         // Send reports.

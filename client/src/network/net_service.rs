@@ -16,6 +16,12 @@ use shared::network::client_messages::*;
 use shared::network::messaging::*;
 use shared::network::net_params::*;
 
+#[derive(Clone, Copy)]
+pub struct ServerDiskUsage {
+    pub total_disk_space_mb: u64,
+    pub used_disk_space_mb: u64,
+}
+
 pub enum ConnectResult {
     Connected(bool),
     ConnectFailed(String),
@@ -29,6 +35,7 @@ pub struct NetService {
     socket: Option<TcpStream>,
     secret_key: [u8; SECRET_KEY_SIZE],
     is_connected: bool,
+    current_server_disk_usage: ServerDiskUsage,
 }
 
 impl NetService {
@@ -37,6 +44,10 @@ impl NetService {
             socket: None,
             secret_key: [0; SECRET_KEY_SIZE],
             is_connected: false,
+            current_server_disk_usage: ServerDiskUsage {
+                total_disk_space_mb: 0,
+                used_disk_space_mb: 0,
+            },
         }
     }
     /// Tries to connect to the server.
@@ -235,6 +246,15 @@ impl NetService {
         // wait for further commands from the user.
         ConnectResult::Connected(_is_admin)
     }
+
+    pub fn get_server_disk_usage(&self) -> ServerDiskUsage {
+        return self.current_server_disk_usage;
+    }
+
+    /// Queries a page of report from the server.
+    ///
+    /// ## Return
+    /// A page of reports and a total number of reports in the database.
     pub fn query_reports(
         &mut self,
         page: u64,
@@ -280,7 +300,13 @@ impl NetService {
             ClientAnswer::ReportsSummary {
                 reports,
                 total_reports,
+                total_disk_space_mb,
+                used_disk_space_mb,
             } => {
+                self.current_server_disk_usage = ServerDiskUsage {
+                    total_disk_space_mb,
+                    used_disk_space_mb,
+                };
                 return Ok((reports, total_reports));
             }
             _ => {

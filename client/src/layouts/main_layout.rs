@@ -103,6 +103,7 @@ impl MainLayout {
                             .with_text_size(TEXT_SIZE),
                         ),
                 )
+                .with_default_spacer()
                 .with_flex_child(reports_column, 1.0)
                 .with_default_spacer()
                 .with_child(

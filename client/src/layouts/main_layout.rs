@@ -5,7 +5,7 @@ use std::rc::Rc;
 // External.
 use druid::widget::{prelude::*, ViewSwitcher};
 use druid::widget::{Button, Flex, Label, MainAxisAlignment, Padding};
-use druid::WidgetExt;
+use druid::{Color, WidgetExt};
 
 // Custom.
 use crate::network::net_service::ServerDiskUsage;
@@ -81,6 +81,11 @@ impl MainLayout {
             }
         }
 
+        // Disk usage.
+        let disk = data.main_layout.get_server_disk_usage(data);
+        let percent_used =
+            (disk.used_disk_space_mb as f64 / disk.total_disk_space_mb as f64) * 100.0;
+
         Padding::new(
             5.0,
             Flex::column()
@@ -92,15 +97,26 @@ impl MainLayout {
                         .with_child(
                             Label::new(|data: &ApplicationState, _env: &_| {
                                 let disk = data.main_layout.get_server_disk_usage(data);
-                                let percent = (disk.used_disk_space_mb as f64
+                                let percent_used = (disk.used_disk_space_mb as f64
                                     / disk.total_disk_space_mb as f64)
                                     * 100.0;
                                 format!(
-                                    "Server Disk Usage: {}/{} MB ({:.1}%)",
-                                    disk.used_disk_space_mb, disk.total_disk_space_mb, percent
+                                    "Server Disk Usage: {:.1}/{:.1} GB ({:.1}% used)",
+                                    disk.used_disk_space_mb as f64 / 1024.0,
+                                    disk.total_disk_space_mb as f64 / 1024.0,
+                                    percent_used
                                 )
                             })
-                            .with_text_size(TEXT_SIZE),
+                            .with_text_size(TEXT_SIZE)
+                            .with_text_color(
+                                if percent_used >= 90.0 {
+                                    Color::RED
+                                } else if percent_used >= 80.0 {
+                                    Color::YELLOW
+                                } else {
+                                    Color::WHITE
+                                },
+                            ),
                         ),
                 )
                 .with_default_spacer()

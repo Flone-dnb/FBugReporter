@@ -219,7 +219,7 @@ impl ReportLayout {
         )
     }
     fn on_return_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
-        // Hack: do this here because query_reports from MainLayout
+        // Do this here because query_reports from MainLayout
         // does not have mut Data.
         let result = data
             .net_service

@@ -3,7 +3,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 // External.
-use druid::widget::{prelude::*, ViewSwitcher};
+use druid::widget::{prelude::*, SizedBox, ViewSwitcher};
 use druid::widget::{Button, Flex, Label, MainAxisAlignment, Padding};
 use druid::{Color, WidgetExt};
 
@@ -20,6 +20,8 @@ pub const REPORT_COUNT_PER_PAGE: u64 = 15;
 #[derive(Clone, Data)]
 pub struct MainLayout {
     pub current_page: u64,
+
+    pub repaint_ui: bool,
 
     #[data(ignore)]
     pub reports: Rc<RefCell<Vec<ReportSummary>>>, // using Rc because Data requires Clone
@@ -38,12 +40,13 @@ impl MainLayout {
             reports: Rc::new(RefCell::new(Vec::new())),
             total_reports: Cell::new(0),
             is_user_admin: false,
+            repaint_ui: false,
         }
     }
     pub fn build_ui() -> impl Widget<ApplicationState> {
         ViewSwitcher::new(
-            // repaint UI when the current page is changed
-            |data: &ApplicationState, _env| data.main_layout.current_page,
+            // repaint UI when requested (when variable changes)
+            |data: &ApplicationState, _env| data.main_layout.repaint_ui,
             |selector, data, _env| match selector {
                 _ => Box::new(MainLayout::build_ui_internal(data)),
             },
@@ -91,10 +94,19 @@ impl MainLayout {
             Flex::column()
                 .main_axis_alignment(MainAxisAlignment::Start)
                 .must_fill_main_axis(true)
-                .with_child(
+                .with_flex_child(
                     Flex::row()
-                        .main_axis_alignment(MainAxisAlignment::Center)
-                        .with_child(
+                        .must_fill_main_axis(true)
+                        .with_flex_child(
+                            Button::from_label(
+                                Label::new("Refresh Report List").with_text_size(TEXT_SIZE),
+                            )
+                            .on_click(MainLayout::on_refresh_report_list_clicked)
+                            .align_left(),
+                            0.25,
+                        )
+                        .with_flex_child(SizedBox::empty().expand(), 0.05)
+                        .with_flex_child(
                             Label::new(|data: &ApplicationState, _env: &_| {
                                 let disk = data.main_layout.get_server_disk_usage(data);
                                 let percent_used = (disk.used_disk_space_mb as f64
@@ -117,7 +129,16 @@ impl MainLayout {
                                     Color::WHITE
                                 },
                             ),
+                            0.4,
+                        )
+                        .with_flex_child(SizedBox::empty().expand(), 0.05)
+                        .with_flex_child(
+                            Button::from_label(Label::new("TODO").with_text_size(TEXT_SIZE))
+                                .on_click(MainLayout::on_refresh_report_list_clicked)
+                                .align_right(),
+                            0.25,
                         ),
+                    0.1,
                 )
                 .with_default_spacer()
                 .with_flex_child(reports_column, 1.0)
@@ -251,6 +272,15 @@ impl MainLayout {
         data.main_layout.total_reports.set(total_count);
 
         data.main_layout.current_page = last_page;
+        data.main_layout.repaint_ui = !data.main_layout.repaint_ui;
+    }
+    fn on_refresh_report_list_clicked(
+        _ctx: &mut EventCtx,
+        data: &mut ApplicationState,
+        _env: &Env,
+    ) {
+        data.main_layout.reports.borrow_mut().clear();
+        data.main_layout.repaint_ui = !data.main_layout.repaint_ui;
     }
     fn on_open_first_page_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
         let result = data
@@ -281,6 +311,7 @@ impl MainLayout {
         data.main_layout.total_reports.set(total_count);
 
         data.main_layout.current_page = 1;
+        data.main_layout.repaint_ui = !data.main_layout.repaint_ui;
     }
     fn on_prev_page_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
         Self::load_page(data, false);
@@ -325,6 +356,7 @@ impl MainLayout {
         data.main_layout.total_reports.set(total_count);
 
         data.main_layout.current_page = new_page;
+        data.main_layout.repaint_ui = !data.main_layout.repaint_ui;
     }
     fn calculate_last_page(total_reports: u64) -> u64 {
         if total_reports <= REPORT_COUNT_PER_PAGE {

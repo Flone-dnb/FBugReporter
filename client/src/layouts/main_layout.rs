@@ -132,12 +132,7 @@ impl MainLayout {
                             0.4,
                         )
                         .with_flex_child(SizedBox::empty().expand(), 0.05)
-                        .with_flex_child(
-                            Button::from_label(Label::new("TODO").with_text_size(TEXT_SIZE))
-                                .on_click(MainLayout::on_refresh_report_list_clicked)
-                                .align_right(),
-                            0.25,
-                        ),
+                        .with_flex_child(SizedBox::empty().expand(), 0.25),
                     0.1,
                 )
                 .with_default_spacer()

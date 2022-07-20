@@ -22,10 +22,10 @@ fn find_database() -> bool {
         }
         let path = path.unwrap();
 
-        if path.file_type().unwrap().is_file() {
-            if path.file_name().to_str().unwrap() == DATABASE_NAME {
-                return true;
-            }
+        if path.file_type().unwrap().is_file()
+            && path.file_name().to_str().unwrap() == DATABASE_NAME
+        {
+            return true;
         }
     }
 
@@ -57,10 +57,7 @@ fn main() {
 
     loop {
         if let Err(e) = io::stdout().flush() {
-            println!(
-                "could not flush stdout (error: {}), continuing...",
-                e.to_string()
-            );
+            println!("could not flush stdout (error: {}), continuing...", e);
             continue;
         }
         let mut input = String::new();
@@ -94,10 +91,7 @@ fn main() {
             } else {
                 println!("should this user be able to delete reports using the client application? (y/n)");
                 if let Err(e) = io::stdout().flush() {
-                    println!(
-                        "could not flush stdout (error: {}), continuing...",
-                        e.to_string()
-                    );
+                    println!("could not flush stdout (error: {}), continuing...", e);
                     continue;
                 }
                 if let Err(e) = io::stdin().read_line(&mut input) {
@@ -148,7 +142,7 @@ fn main() {
                         );
                     }
                     AddUserResult::Error(e) => {
-                        panic!("{} at [{}, {}]", e.to_string(), file!(), line!());
+                        panic!("{} at [{}, {}]", e, file!(), line!());
                     }
                 }
             }
@@ -169,10 +163,7 @@ fn main() {
                 );
 
                 if let Err(e) = io::stdout().flush() {
-                    println!(
-                        "could not flush stdout (error: {}), continuing...",
-                        e.to_string()
-                    );
+                    println!("could not flush stdout (error: {}), continuing...", e);
                     continue;
                 }
                 if let Err(e) = io::stdin().read_line(&mut input) {
@@ -194,7 +185,7 @@ fn main() {
                 if input == remove_user_confirm_string {
                     let result = database_manager.remove_user(&username_str);
                     if let Err(app_error) = result {
-                        panic!("{} at [{}, {}]", app_error.to_string(), file!(), line!());
+                        panic!("{} at [{}, {}]", app_error, file!(), line!());
                     } else {
                         let result = result.unwrap();
 

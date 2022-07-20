@@ -18,10 +18,8 @@ fn find_server(server: &str) -> bool {
         }
         let path = path.unwrap();
 
-        if path.file_type().unwrap().is_file() {
-            if path.file_name().to_str().unwrap() == server {
-                return true;
-            }
+        if path.file_type().unwrap().is_file() && path.file_name().to_str().unwrap() == server {
+            return true;
         }
     }
 
@@ -62,7 +60,6 @@ fn main() {
             println!("Failed to wait for server process, error: {}", e);
         }
 
-        println!("The server process exited with code {}", result.unwrap());
-        println!("")
+        println!("The server process exited with code {}\n", result.unwrap());
     }
 }

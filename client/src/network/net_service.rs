@@ -40,15 +40,7 @@ pub struct NetService {
 
 impl NetService {
     pub fn new() -> Self {
-        Self {
-            socket: None,
-            secret_key: [0; SECRET_KEY_SIZE],
-            is_connected: false,
-            current_server_disk_usage: ServerDiskUsage {
-                total_disk_space_mb: 0,
-                used_disk_space_mb: 0,
-            },
-        }
+        Self::default()
     }
     /// Tries to connect to the server.
     ///
@@ -76,8 +68,8 @@ impl NetService {
         let mut tcp_socket: Option<TcpStream> = None;
         for addr in addrs {
             let result = TcpStream::connect_timeout(&addr, Duration::from_secs(2));
-            if result.is_ok() {
-                tcp_socket = Some(result.unwrap());
+            if let Ok(socket) = result {
+                tcp_socket = Some(socket);
                 break;
             }
         }
@@ -128,10 +120,10 @@ impl NetService {
             otp,
         };
 
-        if new_password.is_some() {
+        if let Some(new_password) = new_password {
             // Generate new password hash.
             hasher = Sha512::new();
-            hasher.update(new_password.unwrap().as_bytes());
+            hasher.update(new_password.as_bytes());
             let new_password = hasher.finalize().to_vec();
 
             // Update packet to send.
@@ -248,7 +240,7 @@ impl NetService {
     }
 
     pub fn get_server_disk_usage(&self) -> ServerDiskUsage {
-        return self.current_server_disk_usage;
+        self.current_server_disk_usage
     }
 
     /// Queries a page of report from the server.
@@ -307,11 +299,9 @@ impl NetService {
                     total_disk_space_mb,
                     used_disk_space_mb,
                 };
-                return Ok((reports, total_reports));
+                Ok((reports, total_reports))
             }
-            _ => {
-                return Err(AppError::new("unexpected packet received"));
-            }
+            _ => Err(AppError::new("unexpected packet received")),
         }
     }
 
@@ -367,17 +357,15 @@ impl NetService {
         match message {
             ClientAnswer::Attachment { is_found, data } => {
                 if !is_found {
-                    return Ok(false);
+                    Ok(false)
                 } else {
                     if let Err(e) = fs::write(path_to_save, data) {
                         return Err(AppError::new(&e.to_string()));
                     }
-                    return Ok(true);
+                    Ok(true)
                 }
             }
-            _ => {
-                return Err(AppError::new("unexpected message received"));
-            }
+            _ => Err(AppError::new("unexpected message received")),
         }
     }
     pub fn query_report(&mut self, report_id: u64) -> Result<ReportData, AppError> {
@@ -432,24 +420,20 @@ impl NetService {
                 sender_email,
                 os_info,
                 attachments,
-            } => {
-                return Ok(ReportData {
-                    id,
-                    title,
-                    game_name,
-                    game_version,
-                    text,
-                    date,
-                    time,
-                    sender_name,
-                    sender_email,
-                    os_info,
-                    attachments,
-                });
-            }
-            _ => {
-                return Err(AppError::new("unexpected message received"));
-            }
+            } => Ok(ReportData {
+                id,
+                title,
+                game_name,
+                game_version,
+                text,
+                date,
+                time,
+                sender_name,
+                sender_email,
+                os_info,
+                attachments,
+            }),
+            _ => Err(AppError::new("unexpected message received")),
         }
     }
     pub fn delete_report(&mut self, report_id: u64) -> Result<bool, AppError> {
@@ -492,12 +476,22 @@ impl NetService {
         match packet {
             ClientAnswer::DeleteReportResult {
                 is_found_and_removed,
-            } => {
-                return Ok(is_found_and_removed);
-            }
-            _ => {
-                return Err(AppError::new("unexpected packet received"));
-            }
+            } => Ok(is_found_and_removed),
+            _ => Err(AppError::new("unexpected packet received")),
+        }
+    }
+}
+
+impl Default for NetService {
+    fn default() -> Self {
+        Self {
+            socket: None,
+            secret_key: [0; SECRET_KEY_SIZE],
+            is_connected: false,
+            current_server_disk_usage: ServerDiskUsage {
+                total_disk_space_mb: 0,
+                used_disk_space_mb: 0,
+            },
         }
     }
 }

@@ -154,7 +154,7 @@ fn build_root_widget() -> impl Widget<ApplicationState> {
             Layout::Main => Box::new(MainLayout::build_ui()),
             Layout::ChangePassword => Box::new(ChangePasswordLayout::build_ui()),
             Layout::Otp => Box::new(OtpLayout::build_ui(&data.otp_layout)),
-            Layout::Report => Box::new(ReportLayout::build_ui(&data)),
+            Layout::Report => Box::new(ReportLayout::build_ui(data)),
         },
     )
 }
@@ -185,7 +185,7 @@ impl AppDelegate<ApplicationState> for MyDelegate {
                         app_error.get_message()
                     );
                 } else {
-                    println!("ERROR: {}", app_error.to_string());
+                    println!("ERROR: {}", app_error);
                 }
 
                 return Handled::Yes;
@@ -239,7 +239,7 @@ impl AppDelegate<ApplicationState> for MyDelegate {
                         app_error.get_message()
                     );
                 } else {
-                    println!("ERROR: {}", app_error.to_string());
+                    println!("ERROR: {}", app_error);
                 }
 
                 return Handled::Yes;
@@ -261,21 +261,19 @@ impl AppDelegate<ApplicationState> for MyDelegate {
                     data.logger_service.lock().unwrap().log(&message);
                     println!("{}", message);
                 }
-            } else {
-                if let Err(e) = MessageDialog::new()
-                    .set_type(MessageType::Error)
-                    .set_title("Attachment")
-                    .set_text(&format!(
-                        "Attachment \"{}\" was not found on the server \
+            } else if let Err(e) = MessageDialog::new()
+                .set_type(MessageType::Error)
+                .set_title("Attachment")
+                .set_text(&format!(
+                    "Attachment \"{}\" was not found on the server \
                         (maybe this report was just deleted by an administrator).",
-                        button_data.attachment_file_name
-                    ))
-                    .show_alert()
-                {
-                    let message = AppError::new(&e.to_string()).to_string();
-                    data.logger_service.lock().unwrap().log(&message);
-                    println!("{}", message);
-                }
+                    button_data.attachment_file_name
+                ))
+                .show_alert()
+            {
+                let message = AppError::new(&e.to_string()).to_string();
+                data.logger_service.lock().unwrap().log(&message);
+                println!("{}", message);
             }
 
             Handled::Yes

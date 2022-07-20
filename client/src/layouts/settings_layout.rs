@@ -8,12 +8,12 @@ use crate::{ApplicationState, Layout};
 
 const TEXT_SIZE: f64 = 20.0;
 
-#[derive(Clone, Data)]
+#[derive(Default, Clone, Data)]
 pub struct SettingsLayout {}
 
 impl SettingsLayout {
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
     pub fn build_ui() -> impl Widget<ApplicationState> {
         Padding::new(

@@ -21,7 +21,7 @@ const BUTTON_HEIGHT: f64 = 0.14;
 const TEXT_SIZE: f64 = 20.0;
 const ROW_SPACING: f64 = 0.2;
 
-#[derive(Clone, Data, Lens)]
+#[derive(Default, Clone, Data, Lens)]
 pub struct OtpLayout {
     pub qr_code: Option<String>,
     otp: String,
@@ -30,11 +30,7 @@ pub struct OtpLayout {
 
 impl OtpLayout {
     pub fn new() -> Self {
-        Self {
-            otp: String::new(),
-            qr_code: None,
-            connect_error: String::new(),
-        }
+        Self::default()
     }
     pub fn build_ui(&self) -> impl Widget<ApplicationState> {
         let mut qr_code_item = Flex::column();
@@ -197,19 +193,19 @@ impl OtpLayout {
             ConnectResult::NeedFirstPassword => {
                 let message = "error: received \"NeedFirstPassword\" in OTP mode.";
                 println!("{}", message);
-                data.logger_service.lock().unwrap().log(&message);
+                data.logger_service.lock().unwrap().log(message);
                 data.otp_layout.connect_error = String::from(message);
             }
             ConnectResult::SetupOTP(_) => {
                 let message = "error: received \"SetupOTP\" in OTP mode.";
                 println!("{}", message);
-                data.logger_service.lock().unwrap().log(&message);
+                data.logger_service.lock().unwrap().log(message);
                 data.otp_layout.connect_error = String::from(message);
             }
             ConnectResult::NeedOTP => {
                 let message = "error: received \"NeedOTP\" in OTP mode.";
                 println!("{}", message);
-                data.logger_service.lock().unwrap().log(&message);
+                data.logger_service.lock().unwrap().log(message);
                 data.otp_layout.connect_error = String::from(message);
             }
         }

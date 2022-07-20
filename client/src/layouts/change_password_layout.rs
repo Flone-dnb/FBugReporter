@@ -18,7 +18,7 @@ const BUTTONS_WIDTH_PADDING: f64 = 1.0;
 const BUTTON_HEIGHT: f64 = 0.3;
 const TEXT_SIZE: f64 = 20.0;
 
-#[derive(Clone, Data, Lens)]
+#[derive(Default, Clone, Data, Lens)]
 pub struct ChangePasswordLayout {
     pub old_password: String,
     pub new_password: String,
@@ -28,12 +28,7 @@ pub struct ChangePasswordLayout {
 
 impl ChangePasswordLayout {
     pub fn new() -> Self {
-        Self {
-            old_password: String::new(),
-            new_password: String::new(),
-            new_password_repeat: String::new(),
-            connect_error: String::new(),
-        }
+        Self::default()
     }
     pub fn build_ui() -> impl Widget<ApplicationState> {
         Flex::column()
@@ -175,7 +170,7 @@ impl ChangePasswordLayout {
             ConnectResult::NeedFirstPassword => {
                 let message = "error: received \"NeedFirstPassword\" in Change Password mode.";
                 println!("{}", message);
-                data.logger_service.lock().unwrap().log(&message);
+                data.logger_service.lock().unwrap().log(message);
                 data.change_password_layout.connect_error = String::from(message);
             }
             ConnectResult::SetupOTP(qr_code) => {

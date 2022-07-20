@@ -19,9 +19,7 @@ pub struct LogManager {
 impl LogManager {
     /// Removes old log file and creates an empty one.
     pub fn new() -> Self {
-        Self {
-            log_file_path: LogManager::recreate_log_file(),
-        }
+        Self::default()
     }
     pub fn get_log_file_path() -> String {
         #[cfg(target_os = "linux")]
@@ -33,7 +31,7 @@ impl LogManager {
                 log_path += "/";
             }
 
-            return log_path + LOG_FILE_NAME;
+            log_path + LOG_FILE_NAME
         }
         #[cfg(target_os = "windows")]
         {
@@ -110,6 +108,14 @@ impl LogManager {
             panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
         }
 
-        return log_path;
+        log_path
+    }
+}
+
+impl Default for LogManager {
+    fn default() -> Self {
+        Self {
+            log_file_path: LogManager::recreate_log_file(),
+        }
     }
 }

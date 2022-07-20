@@ -207,9 +207,7 @@ fn read_theme_color_hex(param: &str, color: &mut Color, config: &Ini) -> bool {
     let mut value_was_empty = true;
 
     let value = config.get(CONFIG_THEME_SECTION_NAME, param);
-    if value.is_some() {
-        let value = value.unwrap();
-
+    if let Some(value) = value {
         if !value.is_empty() {
             let new_color = Color::from_hex_str(&value);
             if let Err(ref e) = new_color {
@@ -224,7 +222,7 @@ fn read_theme_color_hex(param: &str, color: &mut Color, config: &Ini) -> bool {
         }
     }
 
-    return value_was_empty;
+    value_was_empty
 }
 
 /// Read float parameter from string.
@@ -241,13 +239,16 @@ fn read_theme_param_float(param: &str, input: &mut f64, config: &Ini) -> bool {
         );
     } else {
         let value = value.unwrap();
-        if value.is_some() {
-            *input = value.unwrap();
-            value_was_empty = false;
-        } else {
-            println!("ERROR: param '{}' is None.", param);
+        match value {
+            Some(value) => {
+                *input = value;
+                value_was_empty = false;
+            }
+            None => {
+                println!("ERROR: param '{}' is None.", param);
+            }
         }
     }
 
-    return value_was_empty;
+    value_was_empty
 }

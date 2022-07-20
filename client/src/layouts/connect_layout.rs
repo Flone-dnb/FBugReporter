@@ -29,15 +29,7 @@ pub struct ConnectLayout {
 
 impl ConnectLayout {
     pub fn new() -> Self {
-        let config_file = ConfigManager::new();
-
-        Self {
-            server: config_file.server,
-            port: config_file.port,
-            username: config_file.username,
-            password: String::new(),
-            connect_error: String::new(),
-        }
+        Self::default()
     }
     pub fn build_ui() -> impl Widget<ApplicationState> {
         Flex::column()
@@ -228,5 +220,19 @@ impl ConnectLayout {
     }
     fn on_settings_clicked(_ctx: &mut EventCtx, data: &mut ApplicationState, _env: &Env) {
         data.current_layout = Layout::Settings;
+    }
+}
+
+impl Default for ConnectLayout {
+    fn default() -> Self {
+        let config_file = ConfigManager::new();
+
+        Self {
+            server: config_file.server,
+            port: config_file.port,
+            username: config_file.username,
+            password: String::new(),
+            connect_error: String::new(),
+        }
     }
 }

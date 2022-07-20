@@ -35,28 +35,19 @@ pub struct MainLayout {
 
 impl MainLayout {
     pub fn new() -> Self {
-        Self {
-            current_page: 1,
-            reports: Rc::new(RefCell::new(Vec::new())),
-            total_reports: Cell::new(0),
-            is_user_admin: false,
-            repaint_ui: false,
-        }
+        Self::default()
     }
     pub fn build_ui() -> impl Widget<ApplicationState> {
         ViewSwitcher::new(
             // repaint UI when requested (when variable changes)
             |data: &ApplicationState, _env| data.main_layout.repaint_ui,
-            |selector, data, _env| match selector {
-                _ => Box::new(MainLayout::build_ui_internal(data)),
-            },
+            |_selector, data, _env| Box::new(MainLayout::build_ui_internal(data)),
         )
     }
     fn build_ui_internal(data: &ApplicationState) -> impl Widget<ApplicationState> {
         if data.main_layout.reports.borrow_mut().is_empty() {
             let result = data.main_layout.query_reports(data);
-            if result.is_ok() {
-                let (reports, total_count) = result.unwrap();
+            if let Ok((reports, total_count)) = result {
                 *data.main_layout.reports.borrow_mut() = reports;
                 data.main_layout.total_reports.set(total_count);
             }
@@ -365,5 +356,17 @@ impl MainLayout {
         }
 
         last_page
+    }
+}
+
+impl Default for MainLayout {
+    fn default() -> Self {
+        Self {
+            current_page: 1,
+            reports: Rc::new(RefCell::new(Vec::new())),
+            total_reports: Cell::new(0),
+            is_user_admin: false,
+            repaint_ui: false,
+        }
     }
 }

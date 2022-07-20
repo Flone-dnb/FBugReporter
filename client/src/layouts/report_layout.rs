@@ -25,21 +25,7 @@ pub struct ReportLayout {
 
 impl ReportLayout {
     pub fn new() -> Self {
-        Self {
-            report: Rc::new(ReportData {
-                id: 0,
-                title: String::new(),
-                game_name: String::new(),
-                game_version: String::new(),
-                text: String::new(),
-                date: String::new(),
-                time: String::new(),
-                sender_name: String::new(),
-                sender_email: String::new(),
-                os_info: String::new(),
-                attachments: Vec::new(),
-            }),
-        }
+        Self::default()
     }
 
     pub fn build_ui(data: &ApplicationState) -> impl Widget<ApplicationState> {
@@ -147,26 +133,24 @@ impl ReportLayout {
                                 if data.report_layout.report.sender_name.is_empty()
                                     && data.report_layout.report.sender_email.is_empty()
                                 {
-                                    format!("Sender: no information provided")
+                                    String::from("Sender: no information provided")
+                                } else if !data.report_layout.report.sender_name.is_empty()
+                                    && data.report_layout.report.sender_email.is_empty()
+                                {
+                                    format!("Sender: {}", data.report_layout.report.sender_name)
+                                } else if data.report_layout.report.sender_name.is_empty()
+                                    && !data.report_layout.report.sender_email.is_empty()
+                                {
+                                    format!(
+                                        "Sender: email: {}",
+                                        data.report_layout.report.sender_name
+                                    )
                                 } else {
-                                    if !data.report_layout.report.sender_name.is_empty()
-                                        && data.report_layout.report.sender_email.is_empty()
-                                    {
-                                        format!("Sender: {}", data.report_layout.report.sender_name)
-                                    } else if data.report_layout.report.sender_name.is_empty()
-                                        && !data.report_layout.report.sender_email.is_empty()
-                                    {
-                                        format!(
-                                            "Sender: email: {}",
-                                            data.report_layout.report.sender_name
-                                        )
-                                    } else {
-                                        format!(
-                                            "Sender: {} (email: {})",
-                                            data.report_layout.report.sender_name,
-                                            data.report_layout.report.sender_email
-                                        )
-                                    }
+                                    format!(
+                                        "Sender: {} (email: {})",
+                                        data.report_layout.report.sender_name,
+                                        data.report_layout.report.sender_email
+                                    )
                                 }
                             })
                             .with_text_size(TEXT_SIZE),
@@ -244,8 +228,7 @@ impl ReportLayout {
 
             return;
         }
-        if result.is_ok() {
-            let (reports, total_count) = result.unwrap();
+        if let Ok((reports, total_count)) = result {
             *data.main_layout.reports.borrow_mut() = reports;
             data.main_layout.total_reports.set(total_count);
         }
@@ -278,14 +261,14 @@ impl ReportLayout {
                     app_error.get_message()
                 );
             } else {
-                println!("ERROR: {}", app_error.to_string());
+                println!("ERROR: {}", app_error);
             }
 
             return;
         }
         let found = result.unwrap();
 
-        if found == false {
+        if !found {
             println!(
                 "ERROR: a report with id {} was not found",
                 data.report_layout.report.id
@@ -343,5 +326,25 @@ impl ReportLayout {
         .unwrap();
         writeln!(&mut file, "os_info: {}", data.report_layout.report.os_info).unwrap();
         writeln!(&mut file, "text:\n{}", data.report_layout.report.text).unwrap();
+    }
+}
+
+impl Default for ReportLayout {
+    fn default() -> Self {
+        Self {
+            report: Rc::new(ReportData {
+                id: 0,
+                title: String::new(),
+                game_name: String::new(),
+                game_version: String::new(),
+                text: String::new(),
+                date: String::new(),
+                time: String::new(),
+                sender_name: String::new(),
+                sender_email: String::new(),
+                os_info: String::new(),
+                attachments: Vec::new(),
+            }),
+        }
     }
 }

@@ -18,6 +18,7 @@ const CONFIG_SERVER_PARAM: &str = "server";
 const CONFIG_PORT_PARAM: &str = "port";
 const CONFIG_USERNAME_PARAM: &str = "username";
 
+#[derive(Default)]
 pub struct ConfigManager {
     pub server: String,
     pub port: String,
@@ -37,7 +38,7 @@ impl ConfigManager {
             return config;
         }
 
-        config.read_config_file(&mut config_file);
+        config.read_config_file(&config_file);
 
         config
     }
@@ -56,8 +57,7 @@ impl ConfigManager {
         if let Err(e) = config_file.write(&config_path) {
             println!(
                 "WARNING: failed to save configuration to the file \"{}\" (error: {}).",
-                &config_path,
-                e.to_string()
+                &config_path, e
             );
         }
     }
@@ -71,7 +71,7 @@ impl ConfigManager {
                 config_path += "/";
             }
 
-            return config_path + CONFIG_FILE_NAME;
+            config_path + CONFIG_FILE_NAME
         }
         #[cfg(target_os = "windows")]
         {
@@ -114,30 +114,20 @@ impl ConfigManager {
     fn read_config_file(&mut self, config: &Ini) {
         // Read server.
         let server = config.get(CONFIG_SECTION_NAME, CONFIG_SERVER_PARAM);
-        if server.is_some() {
-            self.server = server.unwrap();
+        if let Some(server) = server {
+            self.server = server;
         }
 
         // Read port.
         let port = config.get(CONFIG_SECTION_NAME, CONFIG_PORT_PARAM);
-        if port.is_some() {
-            self.port = port.unwrap();
+        if let Some(port) = port {
+            self.port = port;
         }
 
         // Read username.
         let username = config.get(CONFIG_SECTION_NAME, CONFIG_USERNAME_PARAM);
-        if username.is_some() {
-            self.username = username.unwrap();
-        }
-    }
-}
-
-impl Default for ConfigManager {
-    fn default() -> Self {
-        Self {
-            server: String::new(),
-            port: String::new(),
-            username: String::new(),
+        if let Some(username) = username {
+            self.username = username;
         }
     }
 }

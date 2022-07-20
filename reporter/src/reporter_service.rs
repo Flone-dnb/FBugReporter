@@ -72,15 +72,11 @@ impl ReporterService {
         match received_message {
             ReporterAnswer::MaxAttachmentSize {
                 max_attachments_size_in_mb,
-            } => {
-                return Ok(max_attachments_size_in_mb);
-            }
-            _ => {
-                return Err(AppError::new(&format!(
-                    "received unexpected answer from the server ({:?})",
-                    received_message
-                )));
-            }
+            } => Ok(max_attachments_size_in_mb),
+            _ => Err(AppError::new(&format!(
+                "received unexpected answer from the server ({:?})",
+                received_message
+            ))),
         }
     }
 
@@ -151,17 +147,15 @@ impl ReporterService {
                         ))),
                     );
                 }
-                return (result_code, None);
+                (result_code, None)
             }
-            _ => {
-                return (
-                    ReportResult::InternalError,
-                    Some(AppError::new(&format!(
-                        "received unexpected answer from the server ({:?})",
-                        received_message
-                    ))),
-                );
-            }
+            _ => (
+                ReportResult::InternalError,
+                Some(AppError::new(&format!(
+                    "received unexpected answer from the server ({:?})",
+                    received_message
+                ))),
+            ),
         }
     }
 
@@ -179,8 +173,8 @@ impl ReporterService {
         let mut tcp_socket: Option<TcpStream> = None;
         for addr in addrs {
             let result = TcpStream::connect_timeout(&addr, Duration::from_secs(2));
-            if result.is_ok() {
-                tcp_socket = Some(result.unwrap());
+            if let Ok(socket) = result {
+                tcp_socket = Some(socket);
                 break;
             }
         }

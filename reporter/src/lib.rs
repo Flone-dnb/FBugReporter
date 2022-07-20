@@ -42,7 +42,7 @@ impl Reporter {
 
     #[export]
     fn get_last_error(&mut self, _owner: &Node) -> String {
-        return self.last_error.clone();
+        self.last_error.clone()
     }
 
     #[export]
@@ -69,6 +69,7 @@ impl Reporter {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[export]
     fn send_report(
         &mut self,
@@ -98,8 +99,8 @@ impl Reporter {
 
         // Check input length.
         let invalid_field = self.is_input_valid(&report);
-        if invalid_field.is_some() {
-            self.last_error = invalid_field.unwrap().id().to_string();
+        if let Some(report_limit_error) = invalid_field {
+            self.last_error = report_limit_error.id().to_string();
             return ReportResult::InvalidInput.value();
         }
 
@@ -166,17 +167,20 @@ impl Reporter {
             self.last_report = Some(report);
             logger.log("Successfully sent the report.");
         } else {
-            if error_message.is_none() {
-                self.last_error = String::from("An error occurred but the error message is empty.");
-                logger.log(&self.last_error);
-            } else {
-                let app_error = error_message.unwrap();
-                logger.log(&app_error.to_string());
-                self.last_error = app_error.get_message();
+            match error_message {
+                Some(app_error) => {
+                    logger.log(&app_error.to_string());
+                    self.last_error = app_error.get_message();
+                }
+                None => {
+                    self.last_error =
+                        String::from("An error occurred but the error message is empty.");
+                    logger.log(&self.last_error);
+                }
             }
         }
 
-        return result_code.value();
+        result_code.value()
     }
 
     /// Generates ReportAttachment from file paths.
@@ -266,7 +270,7 @@ impl Reporter {
             ));
         }
 
-        return Ok(attachments);
+        Ok(attachments)
     }
 
     /// Returns the id of the invalid field.
@@ -295,7 +299,7 @@ impl Reporter {
             return Some(ReportLimits::GameVersion);
         }
 
-        return None;
+        None
     }
 }
 

@@ -33,7 +33,7 @@ impl LogManager {
                 log_path += "/";
             }
 
-            return log_path + LOG_FILE_NAME;
+            log_path + LOG_FILE_NAME
         }
         #[cfg(target_os = "windows")]
         {
@@ -110,6 +110,6 @@ impl LogManager {
             panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
         }
 
-        return log_path;
+        log_path
     }
 }

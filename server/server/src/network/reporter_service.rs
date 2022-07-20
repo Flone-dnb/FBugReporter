@@ -171,7 +171,7 @@ impl ReporterService {
     fn handle_report_request(
         &mut self,
         reporter_net_protocol: u16,
-        game_report: GameReport,
+        game_report: Box<GameReport>,
         attachments: Vec<ReportAttachment>,
     ) -> Result<Option<String>, AppError> {
         // Check protocol version.
@@ -236,7 +236,7 @@ impl ReporterService {
                 .database
                 .lock()
                 .unwrap()
-                .save_report(game_report, attachments)
+                .save_report(*game_report, attachments)
             {
                 let result_code = ReportResult::InternalError;
 

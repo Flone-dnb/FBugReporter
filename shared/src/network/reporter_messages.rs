@@ -10,7 +10,7 @@ use crate::misc::report::*;
 pub enum ReporterRequest {
     Report {
         reporter_net_protocol: u16,
-        game_report: GameReport,
+        game_report: Box<GameReport>,
         attachments: Vec<ReportAttachment>,
     },
     /// Max attachment size (in total) in MB.

@@ -100,7 +100,7 @@ impl ReporterService {
         // Prepare message.
         let message = ReporterRequest::Report {
             reporter_net_protocol: NETWORK_PROTOCOL_VERSION,
-            game_report: report,
+            game_report: Box::new(report),
             attachments,
         };
 

@@ -204,20 +204,16 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     // Receive 2 values: p (BigUint), g (BigUint) values.
     // Get 'p' len.
     let mut p_len_buf = vec![0u8; std::mem::size_of::<u64>()];
-    loop {
-        match read_from_socket_fill_buf(socket, &mut p_len_buf, None) {
-            IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received"));
-            }
-            IoResult::Err(app_error) => {
-                return Err(app_error);
-            }
-            IoResult::Ok(_) => {
-                break;
-            }
-            IoResult::Timeout => {
-                return Err(AppError::new("read timeout"));
-            }
+    match read_from_socket_fill_buf(socket, &mut p_len_buf, None) {
+        IoResult::Fin => {
+            return Err(AppError::new("unexpected FIN received"));
+        }
+        IoResult::Err(app_error) => {
+            return Err(app_error);
+        }
+        IoResult::Ok(_) => {}
+        IoResult::Timeout => {
+            return Err(AppError::new("read timeout"));
         }
     }
     let p_len = bincode::deserialize::<u64>(&p_len_buf);
@@ -228,20 +224,16 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
 
     // Get 'p' value.
     let mut p_buf = vec![0u8; p_len as usize];
-    loop {
-        match read_from_socket_fill_buf(socket, &mut p_buf, None) {
-            IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received"));
-            }
-            IoResult::Err(app_error) => {
-                return Err(app_error);
-            }
-            IoResult::Ok(_) => {
-                break;
-            }
-            IoResult::Timeout => {
-                return Err(AppError::new("read timeout"));
-            }
+    match read_from_socket_fill_buf(socket, &mut p_buf, None) {
+        IoResult::Fin => {
+            return Err(AppError::new("unexpected FIN received"));
+        }
+        IoResult::Err(app_error) => {
+            return Err(app_error);
+        }
+        IoResult::Ok(_) => {}
+        IoResult::Timeout => {
+            return Err(AppError::new("read timeout"));
         }
     }
     let p_buf = bincode::deserialize::<BigUint>(&p_buf);
@@ -252,20 +244,16 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
 
     // Get 'g' len.
     let mut g_len_buf = vec![0u8; std::mem::size_of::<u64>()];
-    loop {
-        match read_from_socket_fill_buf(socket, &mut g_len_buf, None) {
-            IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received"));
-            }
-            IoResult::Err(app_error) => {
-                return Err(app_error);
-            }
-            IoResult::Ok(_) => {
-                break;
-            }
-            IoResult::Timeout => {
-                return Err(AppError::new("read timeout"));
-            }
+    match read_from_socket_fill_buf(socket, &mut g_len_buf, None) {
+        IoResult::Fin => {
+            return Err(AppError::new("unexpected FIN received"));
+        }
+        IoResult::Err(app_error) => {
+            return Err(app_error);
+        }
+        IoResult::Ok(_) => {}
+        IoResult::Timeout => {
+            return Err(AppError::new("read timeout"));
         }
     }
     let g_len = bincode::deserialize::<u64>(&g_len_buf);
@@ -276,20 +264,16 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
 
     // Get 'g' value.
     let mut g_buf = vec![0u8; g_len as usize];
-    loop {
-        match read_from_socket_fill_buf(socket, &mut g_buf, None) {
-            IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received"));
-            }
-            IoResult::Err(app_error) => {
-                return Err(app_error);
-            }
-            IoResult::Ok(_) => {
-                break;
-            }
-            IoResult::Timeout => {
-                return Err(AppError::new("read timeout"));
-            }
+    match read_from_socket_fill_buf(socket, &mut g_buf, None) {
+        IoResult::Fin => {
+            return Err(AppError::new("unexpected FIN received"));
+        }
+        IoResult::Err(app_error) => {
+            return Err(app_error);
+        }
+        IoResult::Ok(_) => {}
+        IoResult::Timeout => {
+            return Err(AppError::new("read timeout"));
         }
     }
     let g_buf = bincode::deserialize::<BigUint>(&g_buf);
@@ -303,20 +287,16 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
 
     // Receive the open key A size.
     let mut a_open_len_buf = vec![0u8; std::mem::size_of::<u64>()];
-    loop {
-        match read_from_socket_fill_buf(socket, &mut a_open_len_buf, None) {
-            IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received"));
-            }
-            IoResult::Err(app_error) => {
-                return Err(app_error);
-            }
-            IoResult::Ok(_) => {
-                break;
-            }
-            IoResult::Timeout => {
-                return Err(AppError::new("read timeout"));
-            }
+    match read_from_socket_fill_buf(socket, &mut a_open_len_buf, None) {
+        IoResult::Fin => {
+            return Err(AppError::new("unexpected FIN received"));
+        }
+        IoResult::Err(app_error) => {
+            return Err(app_error);
+        }
+        IoResult::Ok(_) => {}
+        IoResult::Timeout => {
+            return Err(AppError::new("read timeout"));
         }
     }
 
@@ -328,20 +308,16 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
 
     // Receive the open key A.
     let mut a_open_buf = vec![0u8; a_open_len as usize];
-    loop {
-        match read_from_socket_fill_buf(socket, &mut a_open_buf, None) {
-            IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received"));
-            }
-            IoResult::Err(app_error) => {
-                return Err(app_error);
-            }
-            IoResult::Ok(_) => {
-                break;
-            }
-            IoResult::Timeout => {
-                return Err(AppError::new("read timeout"));
-            }
+    match read_from_socket_fill_buf(socket, &mut a_open_buf, None) {
+        IoResult::Fin => {
+            return Err(AppError::new("unexpected FIN received"));
+        }
+        IoResult::Err(app_error) => {
+            return Err(app_error);
+        }
+        IoResult::Ok(_) => {}
+        IoResult::Timeout => {
+            return Err(AppError::new("read timeout"));
         }
     }
 
@@ -362,20 +338,16 @@ pub fn accept_secure_connection_establishment(socket: &mut TcpStream) -> Result<
     }
     let mut b_open_len_buf = b_open_len_buf.unwrap();
     b_open_len_buf.append(&mut b_open_buf);
-    loop {
-        match write_to_socket(socket, &mut b_open_len_buf) {
-            IoResult::Fin => {
-                return Err(AppError::new("unexpected FIN received"));
-            }
-            IoResult::Err(app_error) => {
-                return Err(app_error);
-            }
-            IoResult::Ok(_) => {
-                break;
-            }
-            IoResult::Timeout => {
-                return Err(AppError::new("write timeout"));
-            }
+    match write_to_socket(socket, &mut b_open_len_buf) {
+        IoResult::Fin => {
+            return Err(AppError::new("unexpected FIN received"));
+        }
+        IoResult::Err(app_error) => {
+            return Err(app_error);
+        }
+        IoResult::Ok(_) => {}
+        IoResult::Timeout => {
+            return Err(AppError::new("write timeout"));
         }
     }
 
@@ -735,7 +707,7 @@ fn write_to_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
             return IoResult::Timeout;
         }
 
-        match socket.write(&mut temp_buf) {
+        match socket.write(&temp_buf) {
             Ok(0) => {
                 return IoResult::Fin;
             }
@@ -795,14 +767,12 @@ fn read_from_socket_fill_buf(
     let mut temp_buf = vec![0u8; buf.len()];
 
     loop {
-        if timeout_in_ms.is_some() {
-            if total_wait_time_ms >= timeout_in_ms.unwrap() {
+        if let Some(timeout_in_ms) = timeout_in_ms {
+            if total_wait_time_ms >= timeout_in_ms {
                 return IoResult::Timeout;
             }
-        } else {
-            if total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
-                return IoResult::Timeout;
-            }
+        } else if total_wait_time_ms >= MAX_WAIT_TIME_IN_READ_WRITE_MS {
+            return IoResult::Timeout;
         }
 
         match socket.read(&mut temp_buf) {
@@ -811,9 +781,7 @@ fn read_from_socket_fill_buf(
             }
             Ok(n) => {
                 // Write received data to buf.
-                for i in 0..n {
-                    buf[filled_buf_count + i] = temp_buf[i];
-                }
+                buf[filled_buf_count..(n + filled_buf_count)].copy_from_slice(&temp_buf[..n]);
 
                 filled_buf_count += n;
                 total_wait_time_ms = 0;

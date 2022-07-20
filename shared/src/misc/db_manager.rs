@@ -49,7 +49,7 @@ const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                         abcdefghijklmnopqrstuvwxyz\
                         0123456789)(*&^%$#@!~";
 
-pub const USERNAME_CHARSET: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+pub const USERNAME_CHARSET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                         abcdefghijklmnopqrstuvwxyz\
                         0123456789.";
 
@@ -202,14 +202,15 @@ impl DatabaseManager {
         }
 
         let row = row.unwrap();
-        if row.is_none() {
-            return Err(AppError::new("database returned none"));
-        } else {
-            let count = row.unwrap().get(0);
-            if let Err(e) = count {
-                return Err(AppError::new(&e.to_string()));
+        match row {
+            Some(row) => {
+                let count = row.get(0);
+                if let Err(e) = count {
+                    return Err(AppError::new(&e.to_string()));
+                }
+                Ok(count.unwrap())
             }
-            return Ok(count.unwrap());
+            None => Err(AppError::new("database returned none")),
         }
     }
     /// Returns summary of reports from the database.
@@ -477,7 +478,6 @@ impl DatabaseManager {
         }
         let time: String = time.unwrap();
 
-        drop(row);
         drop(rows);
         drop(stmt);
 
@@ -677,7 +677,7 @@ impl DatabaseManager {
             return Err(AppError::new(&e.to_string()));
         }
         let exists = result.unwrap();
-        if exists == false {
+        if !exists {
             return Ok(false);
         }
 
@@ -905,14 +905,14 @@ impl DatabaseManager {
         let need_change_password: i32 = need_change_password.unwrap();
 
         if need_change_password == 1 {
-            return Ok(true);
+            Ok(true)
         } else if need_change_password == 0 {
-            return Ok(false);
+            Ok(false)
         } else {
-            return Err(AppError::new(&format!(
+            Err(AppError::new(&format!(
                 "database returned 'need_change_password' equal to '{}' for user {}",
                 need_change_password, username
-            )));
+            )))
         }
     }
     /// Check if a given user has admin privileges.
@@ -953,14 +953,14 @@ impl DatabaseManager {
         let is_admin: i32 = is_admin.unwrap();
 
         if is_admin == 1 {
-            return Ok(true);
+            Ok(true)
         } else if is_admin == 0 {
-            return Ok(false);
+            Ok(false)
         } else {
-            return Err(AppError::new(&format!(
+            Err(AppError::new(&format!(
                 "database returned 'is_admin' equal to '{}' for user {}",
                 is_admin, username
-            )));
+            )))
         }
     }
     /// Check if a given user needs to setup OTP (receive OTP QR code).
@@ -1001,14 +1001,14 @@ impl DatabaseManager {
         let need_setup_otp: i32 = need_setup_otp.unwrap();
 
         if need_setup_otp == 1 {
-            return Ok(true);
+            Ok(true)
         } else if need_setup_otp == 0 {
-            return Ok(false);
+            Ok(false)
         } else {
-            return Err(AppError::new(&format!(
+            Err(AppError::new(&format!(
                 "database returned 'need_setup_otp' equal to '{}' for user {}",
                 need_setup_otp, username
-            )));
+            )))
         }
     }
     /// Returns OTP secret key.
@@ -1045,7 +1045,7 @@ impl DatabaseManager {
         }
         let otp_secret = otp_secret.unwrap();
 
-        return Ok(otp_secret);
+        Ok(otp_secret)
     }
     /// Sets new password for user.
     ///
@@ -1064,7 +1064,7 @@ impl DatabaseManager {
             return Err(app_error);
         }
         let need_change_password = result.unwrap();
-        if need_change_password == false {
+        if !need_change_password {
             return Ok(true);
         }
 
@@ -1103,7 +1103,7 @@ impl DatabaseManager {
             return Err(app_error);
         }
         let need_change_password = result.unwrap();
-        if need_change_password == false {
+        if !need_change_password {
             return Err(AppError::new(&format!(
                 "user \"{}\" already setup OTP \
                     but we requested to finish OTP setup",
@@ -1433,7 +1433,6 @@ impl DatabaseManager {
             version, SUPPORTED_DATABASE_VERSION
         );
 
-        drop(row);
         drop(rows);
         drop(stmt);
 

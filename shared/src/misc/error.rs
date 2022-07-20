@@ -24,10 +24,10 @@ impl AppError {
 
 impl Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let error_message = String::from(format!(
+        let error_message = format!(
             "An error occurred: {}\nBacktrace:\n{:?}",
             self.message, self.backtrace
-        ));
+        );
 
         write!(f, "{}", error_message)
     }

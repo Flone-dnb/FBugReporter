@@ -105,6 +105,10 @@ impl Reporter {
 
         // Prepare logging.
         let mut logger = LogManager::new();
+        logger.log(&format!(
+            "FBugReporter (reporter) (v{})",
+            env!("CARGO_PKG_VERSION"),
+        ));
         logger.log(&format!("Received a report: {:?}", report));
 
         let mut reporter = ReporterService::new();

@@ -157,7 +157,7 @@ func _on_SendReportButton_pressed():
 		get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = "Please add a summary.";
 		return;
 	elif initial_report_text == get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text || get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text.length() == 0:
-		get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = "Please provide an issue description.";
+		get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = "Please provide a proper issue description.";
 		return;
 	else:
 		get_node("VBoxContainer/SendResultHBoxContainer2/SendResultLabel").text = "Sending your report. Please wait...";

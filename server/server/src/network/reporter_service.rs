@@ -120,9 +120,9 @@ impl ReporterService {
             return;
         }
         let result = result.unwrap();
-        if result.is_some() {
-            self.exit_error = Some(Ok(result.unwrap()));
-            return;
+        if let Some(soft_error) = result {
+            self.exit_error = Some(Ok(soft_error));
+            //return;
         }
     }
 
@@ -146,15 +146,13 @@ impl ReporterService {
                 reporter_net_protocol,
                 game_report,
                 attachments,
-            } => {
-                return self.handle_report_request(reporter_net_protocol, game_report, attachments);
-            }
+            } => self.handle_report_request(reporter_net_protocol, game_report, attachments),
             ReporterRequest::MaxAttachmentSize {} => {
                 let result = self.handle_attachment_size_query_request();
                 if let Some(app_error) = result {
                     return Err(app_error);
                 }
-                return Ok(None);
+                Ok(None)
             }
         }
     }
@@ -271,7 +269,7 @@ impl ReporterService {
             return Err(app_error);
         }
 
-        return Ok(None);
+        Ok(None)
     }
 
     /// Returns [`Ok`] if the fields have the correct length (amount of characters, not byte count),
@@ -328,32 +326,31 @@ impl ReporterService {
             return Some(app_error);
         }
 
-        return None;
+        None
     }
 }
 
 impl Drop for ReporterService {
     /// Logs information about connection being closed.
     fn drop(&mut self) {
-        let mut message = format!("closing connection with reporter {}", self.socket_addr);
+        let user_info = format!("closing connection with reporter {}", self.socket_addr);
 
+        let mut exit_reason = String::new();
         if self.exit_error.is_some() {
             let error = self.exit_error.as_ref().unwrap();
 
             if let Err(app_error) = error {
-                message += &format!(" due to internal error (bug):\n{}", app_error);
+                exit_reason = format!(" due to internal error (bug):\n{}", app_error);
             } else {
-                message += &format!(", reason: {}", error.as_ref().unwrap());
+                exit_reason = format!(", reason: {}", error.as_ref().unwrap());
             }
         }
 
-        message += "\n";
-
-        let mut guard = self.connected_count.lock().unwrap();
-        *guard -= 1;
-        message += &format!(
-            "------------------------- [connected: {}] -------------------------",
-            guard
+        let mut connected_count = self.connected_count.lock().unwrap();
+        *connected_count -= 1;
+        let message = format!(
+            "{}{}\n------------------------- [connected: {}] -------------------------",
+            user_info, exit_reason, connected_count
         );
 
         self.logger

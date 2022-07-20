@@ -87,8 +87,9 @@ impl BanManager {
         // Find in failed_ip_list.
         let found_pos = failed_ip_guard.iter().position(|x| x.ip == ip);
         let mut failed_attempts_made: u32 = 0;
-        if found_pos.is_some() {
-            failed_attempts_made = failed_ip_guard[found_pos.unwrap()].failed_attempts_made;
+
+        if let Some(i) = found_pos {
+            failed_attempts_made = failed_ip_guard[i].failed_attempts_made;
         }
 
         // Add current failed attempt.
@@ -96,9 +97,9 @@ impl BanManager {
 
         if failed_attempts_made > self.config.max_allowed_login_attempts {
             // Add to banned ips.
-            if found_pos.is_some() {
+            if let Some(i) = found_pos {
                 // Remove from failed ip list.
-                failed_ip_guard.remove(found_pos.unwrap());
+                failed_ip_guard.remove(i);
             }
 
             let mut banned_ips_guard = self.banned_ip_list.lock().unwrap();
@@ -121,8 +122,8 @@ impl BanManager {
 
             AttemptResult::Ban
         } else {
-            if found_pos.is_some() {
-                let failed_ip = failed_ip_guard.get_mut(found_pos.unwrap()).unwrap();
+            if let Some(i) = found_pos {
+                let failed_ip = failed_ip_guard.get_mut(i).unwrap();
                 failed_ip.failed_attempts_made = failed_attempts_made;
             } else {
                 failed_ip_guard.push(FailedIP {
@@ -204,43 +205,45 @@ impl BanManager {
         let mut banned_list_guard = self.banned_ip_list.lock().unwrap();
         let is_banned = banned_list_guard.iter().position(|x| x.ip == ip);
 
-        if is_banned.is_some() {
-            // This IP is banned, see if ban time is over.
-            let banned_ip_index = is_banned.unwrap();
-            let time_diff = Local::now() - banned_list_guard[banned_ip_index].ban_start_time;
+        match is_banned {
+            Some(banned_ip_index) => {
+                // This IP is banned, see if ban time is over.
+                let time_diff = Local::now() - banned_list_guard[banned_ip_index].ban_start_time;
 
-            if time_diff.num_minutes() < self.config.ban_time_duration_in_min {
-                self.logger.lock().unwrap().print_and_log(
-                    LogCategory::Info,
-                    &format!(
-                        "Banned IP address ({}) attempted to connect. \
+                if time_diff.num_minutes() < self.config.ban_time_duration_in_min {
+                    self.logger.lock().unwrap().print_and_log(
+                        LogCategory::Info,
+                        &format!(
+                            "Banned IP address ({}) attempted to connect. \
                             Connection was rejected.",
-                        ip
-                    ),
-                );
-                true // still banned
-            } else {
-                // Remove from banned ips.
-                banned_list_guard.remove(banned_ip_index);
-                false
-            }
-        } else {
-            // Check if user failed to login before.
-            let mut failed_list_guard = self.failed_ip_list.lock().unwrap();
-            let failed_before = failed_list_guard.iter().position(|x| x.ip == ip);
-
-            if failed_before.is_some() {
-                // See if we can remove this ip from failed ips
-                // if the last failed attempt was too long ago.
-                let failed_index = failed_before.unwrap();
-                let time_diff = Local::now() - failed_list_guard[failed_index].last_attempt_time;
-
-                if time_diff.num_minutes() >= self.config.ban_time_duration_in_min {
-                    failed_list_guard.remove(failed_index);
+                            ip
+                        ),
+                    );
+                    true // still banned
+                } else {
+                    // Remove from banned ips.
+                    banned_list_guard.remove(banned_ip_index);
+                    false
                 }
             }
+            None => {
+                // Check if user failed to login before.
+                let mut failed_list_guard = self.failed_ip_list.lock().unwrap();
+                let failed_before = failed_list_guard.iter().position(|x| x.ip == ip);
 
-            false
+                if let Some(failed_index) = failed_before {
+                    // See if we can remove this ip from failed ips
+                    // if the last failed attempt was too long ago.
+                    let time_diff =
+                        Local::now() - failed_list_guard[failed_index].last_attempt_time;
+
+                    if time_diff.num_minutes() >= self.config.ban_time_duration_in_min {
+                        failed_list_guard.remove(failed_index);
+                    }
+                }
+
+                false
+            }
         }
     }
     /// Removes the specified IP from the failed ips list.
@@ -332,7 +335,7 @@ impl BanManager {
                 &format!(
                     "failed to write banned ip {} to file, error: {}",
                     &ip.ip.to_string(),
-                    e.to_string()
+                    e
                 ),
             );
         }
@@ -372,7 +375,7 @@ impl BanManager {
                     "failed to update file {} after removing the banned ip {}, error: {}.",
                     BAN_FILE_NAME,
                     &ip.ip.to_string(),
-                    e.to_string()
+                    e
                 ),
             );
         }

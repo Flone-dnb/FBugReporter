@@ -135,8 +135,8 @@ impl ClientService {
             return;
         }
         let result = result.unwrap();
-        if result.is_some() {
-            self.exit_error = Some(Ok(result.unwrap()));
+        if let Some(soft_error) = result {
+            self.exit_error = Some(Ok(soft_error));
             return;
         }
 
@@ -147,9 +147,9 @@ impl ClientService {
             return;
         }
         let result = result.unwrap();
-        if result.is_some() {
-            self.exit_error = Some(Ok(result.unwrap()));
-            return;
+        if let Some(soft_error) = result {
+            self.exit_error = Some(Ok(soft_error));
+            //return;
         }
     }
 
@@ -356,13 +356,13 @@ impl ClientService {
             return Ok(None);
         }
 
-        if new_password.is_some() {
+        if let Some(new_password) = new_password {
             // Set first password.
             let result = self
                 .database
                 .lock()
                 .unwrap()
-                .update_user_password(&username, new_password.unwrap());
+                .update_user_password(&username, new_password);
             if let Err(app_error) = result {
                 return Err(app_error);
             }
@@ -712,9 +712,7 @@ impl ClientService {
         };
 
         // See if found.
-        if attachment.is_some() {
-            let attachment = attachment.unwrap();
-
+        if let Some(attachment) = attachment {
             message = ClientAnswer::Attachment {
                 is_found: true,
                 data: attachment.data,
@@ -945,36 +943,34 @@ impl ClientService {
 impl Drop for ClientService {
     /// Logs information about connection being closed.
     fn drop(&mut self) {
-        let mut _message = String::new();
-
+        let mut _user_info = String::new();
         if self.username.is_some() {
-            _message = format!("{} logged out", self.username.as_ref().unwrap());
+            _user_info = format!("client \"{}\" logged out", self.username.as_ref().unwrap());
         } else {
-            _message = format!("closing connection with client {}", self.socket_addr);
+            _user_info = format!("closing connection with client {}", self.socket_addr);
         }
 
+        let mut exit_reason = String::new();
         if self.exit_error.is_some() {
             let error = self.exit_error.as_ref().unwrap();
 
             if let Err(app_error) = error {
-                _message += &format!(" due to internal error (bug):\n{}", app_error);
+                exit_reason = format!(" due to internal error (bug):\n{}", app_error);
             } else {
-                _message += &format!(", reason: {}", error.as_ref().unwrap());
+                exit_reason = format!(", reason: {}", error.as_ref().unwrap());
             }
         }
 
-        _message += "\n";
-
-        let mut guard = self.connected_count.lock().unwrap();
-        *guard -= 1;
-        _message += &format!(
-            "------------------------- [connected: {}] -------------------------",
-            guard
+        let mut connected_count = self.connected_count.lock().unwrap();
+        *connected_count -= 1;
+        let message = format!(
+            "{}{}\n------------------------- [connected: {}] -------------------------",
+            _user_info, exit_reason, connected_count
         );
 
         self.logger
             .lock()
             .unwrap()
-            .print_and_log(LogCategory::Info, &_message);
+            .print_and_log(LogCategory::Info, &message);
     }
 }

@@ -224,22 +224,25 @@ impl ConfigManager {
         <T as FromStr>::Err: std::fmt::Display + std::fmt::Debug,
     {
         let value = config.get(section, key);
-        if value.is_none() {
-            *param = default_value;
-            true
-        } else {
-            let value = value.unwrap().parse::<T>();
-            if let Err(e) = value {
-                println!(
+        match value {
+            Some(value) => {
+                let value = value.parse::<T>();
+                if let Err(e) = value {
+                    println!(
                     "WARNING: could not parse \"{}\" value, using default value instead (error: {}).",
                     key,
                     e
                 );
+                    *param = default_value;
+                    true
+                } else {
+                    *param = value.unwrap();
+                    false
+                }
+            }
+            None => {
                 *param = default_value;
                 true
-            } else {
-                *param = value.unwrap();
-                false
             }
         }
     }

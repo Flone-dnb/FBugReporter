@@ -35,7 +35,11 @@ Here is the list of information you can send in the report:
 
 ### Attachments
 
-Once you run the server for the first time, the server will generate `server_config.ini` that you can customize. There is a specific setting for attachments `max_total_attachment_size_in_mb` which specifies the maximum size in megabytes of report attachments (in total - for all files, not per file). By default its value is 5 MB which means that you can attach any files as long as their total size is not bigger than 5 MB.
+Once you run the server for the first time, the server will generate `server_config.ini` that you can customize. There is a specific setting for attachments `max_total_attachment_size_in_mb` which specifies the maximum size in megabytes of report attachments (in total - for all files, not per file).
+
+By default its value is 5 MB which means that you can attach any files as long as their total size is not bigger than 5 MB.
+
+To tell if your attachments are too big or not, reporter's `send_report` function will ask the server for maximum allowed attachment size, calculate the total size of the specified attachments and if attachments exceed the maximum limit reporter's `send_report` function will return error code '9' (see `example` directory for more information).
 
 # How to Install
 

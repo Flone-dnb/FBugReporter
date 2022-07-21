@@ -326,9 +326,9 @@ func install_server_monitor_app(install_dir string, session *sh.Session) bool {
 	}
 
 	if runtime.GOOS == "windows" {
-		copy(filepath.Join(session.Getwd(), "target", "release", "server_monitor.exe"), filepath.Join(install_dir, "monitor.exe"))
+		copy(filepath.Join(session.Getwd(), "target", "release", "server_monitor.exe"), filepath.Join(install_dir, "server_monitor.exe"))
 	} else {
-		copy(filepath.Join(session.Getwd(), "target", "release", "server_monitor"), filepath.Join(install_dir, "monitor"))
+		copy(filepath.Join(session.Getwd(), "target", "release", "server_monitor"), filepath.Join(install_dir, "server_monitor"))
 	}
 
 	session.SetDir(root_dir)

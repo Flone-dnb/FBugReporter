@@ -10,6 +10,7 @@ pub struct ReportSummary {
     pub time: String,
 }
 
+/// Represents a report that the reporter sends.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GameReport {
     pub report_name: String,
@@ -23,6 +24,22 @@ pub struct GameReport {
     // also add its limit to the ReportLimits enum (in reporter and server)
     // and update the NETWORK_PROTOCOL_VERSION
     // and maybe update table structure in the database (backwards compatibility)?
+}
+
+/// Represents a report that we store in the database and send
+/// to clients.
+pub struct ReportData {
+    pub id: u64,
+    pub title: String,
+    pub game_name: String,
+    pub game_version: String,
+    pub text: String,
+    pub date: String,
+    pub time: String,
+    pub sender_name: String,
+    pub sender_email: String,
+    pub os_info: String,
+    pub attachments: Vec<ReportAttachmentSummary>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

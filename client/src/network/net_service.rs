@@ -9,8 +9,8 @@ use sha2::{Digest, Sha512};
 
 // Custom.
 use crate::io::config_manager::ConfigManager;
-use shared::misc::db_manager::ReportData;
 use shared::misc::error::AppError;
+use shared::misc::report::ReportData;
 use shared::misc::report::ReportSummary;
 use shared::network::client_messages::*;
 use shared::network::messaging::*;

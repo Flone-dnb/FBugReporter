@@ -60,20 +60,6 @@ pub enum AddUserResult {
     Error(AppError),
 }
 
-pub struct ReportData {
-    pub id: u64,
-    pub title: String,
-    pub game_name: String,
-    pub game_version: String,
-    pub text: String,
-    pub date: String,
-    pub time: String,
-    pub sender_name: String,
-    pub sender_email: String,
-    pub os_info: String,
-    pub attachments: Vec<ReportAttachmentSummary>,
-}
-
 pub struct DatabaseManager {
     connection: Connection,
     database_disk_mount_point: String,

@@ -13,7 +13,7 @@ use native_dialog::{FileDialog, MessageDialog, MessageType};
 use super::main_layout::REPORT_COUNT_PER_PAGE;
 use crate::misc::report_attachment_button::*;
 use crate::{ApplicationState, Layout};
-use shared::misc::db_manager::ReportData;
+use shared::misc::report::ReportData;
 
 // Layout customization.
 const TEXT_SIZE: f64 = 18.0;

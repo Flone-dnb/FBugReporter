@@ -19,3 +19,6 @@ aes = "0.8.1"
 cbc = {version = "0.1.2", features = ["alloc"]}
 backtrace = "0.3.66"
 sysinfo = "0.24.6"
+
+[features]
+database = []

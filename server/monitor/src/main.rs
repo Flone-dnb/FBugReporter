@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 // Std.
 use std::env;
 use std::fs;

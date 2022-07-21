@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 // Std.
 use backtrace::Backtrace;
 use std::fs::File;

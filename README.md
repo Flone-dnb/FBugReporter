@@ -20,6 +20,23 @@ The usual workflow goes like this:
 - Run `client.exe` (`server_monitor.exe` needs to be running), in order to login you need to enter server's IP and port. For local usage put `localhost` as IP. For port look for `server_config.ini` (that will be generated once the `server_monitor.exe` is started), look at `port_for_clients` line that will contain the port you need to use. Now login using the specified earlier name and the password you received, after this you will change the password and setup OTP. After everything is done you will see received reports.
 - To generate new reports, open Godot project with FBugReporter integrated (build version from `releases` already has a project with FBugReporter integrated) and send a report (while `server_monitor.exe` is running). You can then see new reports in `client.exe` (if you don't see new reports, use `Refresh Report List` button).
 
+# Contents of the Report
+
+Here is the list of information you can send in the report:
+
+- report name (summary),
+- report text (description),
+- sender name,
+- sender e-mail,
+- sender OS info,
+- game name,
+- game version,
+- attachments (any files).
+
+### Attachments
+
+Once you run the server for the first time, the server will generate `server_config.ini` that you can customize. There is a specific setting for attachments `max_total_attachment_size_in_mb` which specifies the maximum size in megabytes of report attachments (in total - for all files, not per file). By default its value is 5 MB which means that you can attach any files as long as their total size is not bigger than 5 MB.
+
 # How to Install
 
 If you tried the built version from `releases` and now want to integrate FBugReporter into your Godot game follow this section.

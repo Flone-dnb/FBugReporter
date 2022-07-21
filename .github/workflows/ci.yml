@@ -1,0 +1,121 @@
+name: Rust
+
+on: [push, pull_request, pull_request_review]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  client-build-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Install GTK
+      run: |
+        sudo apt-get update
+        sudo apt-get install libgtk-3-dev
+    - name: Client (build)
+      run: cargo build
+      working-directory: client
+    - name: Client (clippy)
+      run: cargo clippy
+      working-directory: client
+
+  client-build-windows:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Client (build)
+      run: cargo build
+      working-directory: client
+    - name: Client (clippy)
+      run: cargo clippy
+      working-directory: client
+
+  reporter-build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Client (build)
+      run: cargo build
+      working-directory: reporter
+    - name: Client (clippy)
+      run: cargo clippy
+      working-directory: reporter
+
+  database-manager-build-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Client (build)
+      run: cargo build
+      working-directory: server/database_manager
+    - name: Client (clippy)
+      run: cargo clippy
+      working-directory: server/database_manager
+
+  database-manager-build-windows:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Copy sqlite3 lib
+      run: |
+        cp ../sqlite3-windows/sqlite3.lib .
+      working-directory: server/database_manager
+    - name: Client (build)
+      run: cargo build
+      working-directory: server/database_manager
+    - name: Client (clippy)
+      run: cargo clippy
+      working-directory: server/database_manager
+
+  server-build-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Client (build)
+      run: cargo build
+      working-directory: server/server
+    - name: Client (clippy)
+      run: cargo clippy
+      working-directory: server/server
+
+  server-build-windows:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Copy sqlite3 lib
+      run: |
+        cp ../sqlite3-windows/sqlite3.lib .
+      working-directory: server/server
+    - name: Client (build)
+      run: cargo build
+      working-directory: server/server
+    - name: Client (clippy)
+      run: cargo clippy
+      working-directory: server/server
+
+  server-monitor-build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Client (build)
+      run: cargo build
+      working-directory: server/monitor
+    - name: Client (clippy)
+      run: cargo clippy
+      working-directory: server/monitor

@@ -39,8 +39,8 @@ func main() {
 	fmt.Println("The server consists of 3 programs:")
 	fmt.Println("- server: the actual server")
 	fmt.Println("- database manager: used to add/remove users (even when the server is running)")
-	fmt.Println("- monitor: simple helper app that will restart the server if it crashed, " +
-		"you don't need to explicitly start the 'server' program, instead, run 'monitor' " +
+	fmt.Println("- server_monitor: simple helper app that will restart the server if it crashed, " +
+		"you don't need to explicitly start the 'server' program, instead, run 'server_monitor' " +
 		"it will run the 'server'.")
 
 	fmt.Println()
@@ -176,14 +176,14 @@ func install_server(install_dir string, session *sh.Session) {
 		return
 	}
 
-	if install_monitor_app(install_dir, session) {
+	if install_server_monitor_app(install_dir, session) {
 		return
 	}
 
 	fmt.Println()
 	fmt.Println("Installation is finished.")
 	fmt.Println("Note that you should not run the 'server' explicitly, instead, " +
-		"run the 'monitor' it will run the 'server'.")
+		"run the 'server_monitor' it will run the 'server'.")
 	fmt.Println()
 
 	if runtime.GOOS != "windows" {
@@ -193,7 +193,7 @@ func install_server(install_dir string, session *sh.Session) {
 			return
 		}
 
-		err = session.Command("chmod", "+x", filepath.Join(install_dir, "monitor")).Run()
+		err = session.Command("chmod", "+x", filepath.Join(install_dir, "server_monitor")).Run()
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -206,7 +206,7 @@ func install_server(install_dir string, session *sh.Session) {
 		}
 
 		var yes, ok = ask_user("Do you want to install systemd service to autostart the " +
-			"'monitor'? (y/n)").Get()
+			"'server_monitor'? (y/n)").Get()
 		if !ok {
 			return
 		}
@@ -220,7 +220,7 @@ func install_server(install_dir string, session *sh.Session) {
 		fmt.Println()
 		fmt.Println("Finished installation.")
 	} else {
-		fmt.Println("Note that the 'monitor' is not added to autostart, it's up to you to do so.")
+		fmt.Println("Note that the 'server_monitor' is not added to autostart, it's up to you to do so.")
 	}
 }
 
@@ -304,20 +304,20 @@ func install_database_manager_app(install_dir string, session *sh.Session) bool 
 
 // Expects to be in the root server directory that contains all 3 programs
 // Returns 'true' if an error occurred.
-func install_monitor_app(install_dir string, session *sh.Session) bool {
+func install_server_monitor_app(install_dir string, session *sh.Session) bool {
 	var root_dir = session.Getwd()
 
-	session.SetDir(filepath.Join(root_dir, "monitor"))
+	session.SetDir(filepath.Join(root_dir, "server_monitor"))
 
 	// Check that Cargo.toml exists here.
 	var _, err = os.Stat(filepath.Join(session.Getwd(), "Cargo.toml"))
 	if err == os.ErrNotExist {
-		fmt.Println("Could not find monitor source code and 'Cargo.toml' file at", session.Getwd())
+		fmt.Println("Could not find server monitor source code and 'Cargo.toml' file at", session.Getwd())
 		return true
 	}
 
-	fmt.Println("Found monitor source code at", session.Getwd())
-	fmt.Println("Starting to compile monitor source code...")
+	fmt.Println("Found server monitor source code at", session.Getwd())
+	fmt.Println("Starting to compile server monitor source code...")
 
 	err = session.Command("cargo", "build", "--release").Run()
 	if err != nil {
@@ -326,9 +326,9 @@ func install_monitor_app(install_dir string, session *sh.Session) bool {
 	}
 
 	if runtime.GOOS == "windows" {
-		copy(filepath.Join(session.Getwd(), "target", "release", "monitor.exe"), filepath.Join(install_dir, "monitor.exe"))
+		copy(filepath.Join(session.Getwd(), "target", "release", "server_monitor.exe"), filepath.Join(install_dir, "monitor.exe"))
 	} else {
-		copy(filepath.Join(session.Getwd(), "target", "release", "monitor"), filepath.Join(install_dir, "monitor"))
+		copy(filepath.Join(session.Getwd(), "target", "release", "server_monitor"), filepath.Join(install_dir, "monitor"))
 	}
 
 	session.SetDir(root_dir)
@@ -390,7 +390,7 @@ func install_systemd_service(install_dir string, session *sh.Session) bool {
 	}
 
 	section.NewKey("WorkingDirectory", install_dir)
-	section.NewKey("ExecStart", filepath.Join(install_dir, "monitor"))
+	section.NewKey("ExecStart", filepath.Join(install_dir, "server_monitor"))
 
 	section, err = cfg.NewSection("Install")
 	if err != nil {
@@ -419,7 +419,7 @@ func install_systemd_service(install_dir string, session *sh.Session) bool {
 	}
 
 	fmt.Println()
-	fmt.Println("The 'monitor' was added as a service. It will autostart on boot.")
+	fmt.Println("The 'server_monitor' was added as a service. It will autostart on boot.")
 	fmt.Println("Use \"sudo systemctl start fbugreporter.service\" to start it right now.")
 	fmt.Println("Use \"sudo systemctl status fbugreporter.service\" to view current status/logs.")
 	fmt.Println()

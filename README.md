@@ -11,14 +11,14 @@
 
 # Try It Out
 
-Windows users can find built versions of FBugReporter in the [releases](https://github.com/Flone-dnb/FBugReporter/releases) section (with `*_Build.zip` suffix). This archive contains an example Godot project with FBugReporter already integrated, using this example you can send reports. In order to receive reports this archive also has `monitor.exe` (that will start the `server.exe`) that you need to start in order to receive reports. To view received reports you can use `client.exe` but it requires an account which you can create after starting the `monitor.exe` using the `database_manager.exe` (type `add-user *your name*` to create an account).
+Windows users can find built versions of FBugReporter in the [releases](https://github.com/Flone-dnb/FBugReporter/releases) section (with `*_Build.zip` suffix). This archive contains an example Godot project with FBugReporter already integrated, using this example you can send reports. In order to receive reports this archive also has `server_monitor.exe` (that will start the `server.exe`) that you need to start in order to receive reports. To view received reports you can use `client.exe` but it requires an account which you can create after starting the `server_monitor.exe` using the `database_manager.exe` (type `add-user *your name*` to create an account).
 
 The usual workflow goes like this:
 
-- Start the `monitor.exe`, it will start the `server.exe` and will restart it if it crashed (thus we should start `monitor.exe` instead of explicitly starting the `server.exe`).
-- After `monitor.exe` was started, run `database_manager.exe` and type command `add-user *your name*` to add a new user (for example: `add-user john`), you will receive new user's password, copy it somewhere.
-- Run `client.exe` (`monitor.exe` needs to be running), in order to login you need to enter server's IP and port. For local usage put `localhost` as IP. For port look for `server_config.ini` (that will be generated once the `monitor.exe` is started), look at `port_for_clients` line that will contain the port you need to use. Now login using the specified earlier name and the password you received, after this you will change the password and setup OTP. After everything is done you will see received reports.
-- To generate new reports, open Godot project with FBugReporter integrated (build version from `releases` already has a project with FBugReporter integrated) and send a report (while `monitor.exe` is running). You can then see new reports in `client.exe` (if you don't see new reports, use `Refresh Report List` button).
+- Start the `server_monitor.exe`, it will start the `server.exe` and will restart it if it crashed (thus we should start `server_monitor.exe` instead of explicitly starting the `server.exe`).
+- After `server_monitor.exe` was started, run `database_manager.exe` and type command `add-user *your name*` to add a new user (for example: `add-user john`), you will receive new user's password, copy it somewhere.
+- Run `client.exe` (`server_monitor.exe` needs to be running), in order to login you need to enter server's IP and port. For local usage put `localhost` as IP. For port look for `server_config.ini` (that will be generated once the `server_monitor.exe` is started), look at `port_for_clients` line that will contain the port you need to use. Now login using the specified earlier name and the password you received, after this you will change the password and setup OTP. After everything is done you will see received reports.
+- To generate new reports, open Godot project with FBugReporter integrated (build version from `releases` already has a project with FBugReporter integrated) and send a report (while `server_monitor.exe` is running). You can then see new reports in `client.exe` (if you don't see new reports, use `Refresh Report List` button).
 
 # How to Install
 
@@ -30,7 +30,7 @@ In order to run these scripts you need to have [Go](https://go.dev/dl/) installe
 
 - `install_client.go` this script will ask you where you want the client to be installed and will compile the client. It will also check if needed dependencies are installed and if not will prompt you to install them.
 - `install_reporter.go` this script will ask you where your Godot project is located and will compile and integrate reporter into your project (with premade UI scene to send reports). It will also check if needed dependencies are installed and if not will prompt you to install them.
-- `install_server.go` this script will ask you where you want the server to be installed and will compile the server, monitor and database manager for you. It will also check if needed dependencies are installed and if not will prompt you to install them.
+- `install_server.go` this script will ask you where you want the server to be installed and will compile the server, server monitor and database manager for you. It will also check if needed dependencies are installed and if not will prompt you to install them.
 
 If you want to integrate FBugReporter into your Godot game, just clone/download this repository and run each script (the order does not matter), they will setup everything for you.
 
@@ -101,9 +101,9 @@ The server consists of 3 applications:
 
 - `server`: the actual server
 - `database_manager`: used to add/remove users (even when the server is running)
-- `monitor`: simple helper app that will restart the server if it crashed
+- `server_monitor`: simple helper app that will restart the server if it crashed
 
-You need to build each application and put resulting executable files in the same directory (so that you will have `server`, `database_manager` and `monitor` all in the same directory).
+You need to build each application and put resulting executable files in the same directory (so that you will have `server`, `database_manager` and `server_monitor` all in the same directory).
 
 In order to build an app you need to enter its directory and run:
 
@@ -113,7 +113,7 @@ cargo build --release
 
 The compiled executable be located at `/target/release/`.
 
-Note that Windows users also need to have `sqlite3.dll` library next to the compiled programs, put compiled `server.exe`, `database_manager.exe` and `monitor.exe` to the same directory and copy `sqlite3.dll` from `server/sqlite3-windows` in this directory.
+Note that Windows users also need to have `sqlite3.dll` library next to the compiled programs, put compiled `server.exe`, `database_manager.exe` and `server_monitor.exe` to the same directory and copy `sqlite3.dll` from `server/sqlite3-windows` in this directory.
 
 ## Build: Client
 

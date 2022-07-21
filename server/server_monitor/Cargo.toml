@@ -1,5 +1,5 @@
 [package]
-name = "monitor"
+name = "server_monitor"
 authors = ["Aleksandr Tretyakov"]
 version = "1.0.0"
 edition = "2021"

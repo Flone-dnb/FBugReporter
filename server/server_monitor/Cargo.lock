@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "monitor"
+name = "server_monitor"
 version = "1.0.0"

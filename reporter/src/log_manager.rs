@@ -66,7 +66,7 @@ impl LogManager {
             }
 
             log_path += LOG_FILE_NAME;
-            return log_path;
+            log_path
         }
         #[cfg(not(any(target_os = "windows", target_os = "linux")))]
         {

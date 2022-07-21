@@ -104,7 +104,7 @@ impl ConfigManager {
             }
 
             config_path += CONFIG_FILE_NAME;
-            return config_path;
+            config_path
         }
         #[cfg(not(any(target_os = "windows", target_os = "linux")))]
         {

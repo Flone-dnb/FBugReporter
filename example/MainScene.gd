@@ -12,6 +12,10 @@ func _ready():
 	reporter.set_server("localhost", 21580);
 	initial_report_text = get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text;
 	
+	# set game data
+	reporter.set_game_name(game_name);
+	reporter.set_game_version(game_version);
+	
 	# set length limits
 	# get_field_limit() values are from server/shared/src/report.rs
 	get_node("VBoxContainer/ReportNameHBoxContainer/ReportNameLineEdit").max_length = reporter.get_field_limit(0);
@@ -24,9 +28,50 @@ func send_report(
 		report_text: String, # report text
 		sender_name: String, # optional sender name
 		sender_email: String, # optional sender email
-		report_attachments): # an array of strings that contain paths to the files to attach to report, it's safer to specify absolute paths
-	var result_code: int = reporter.send_report(
-		report_name, report_text, sender_name, sender_email, game_name, game_version, report_attachments);
+		report_attachments, # an array of strings that contain paths to the files to attach to report, it's safer to specify absolute paths
+		take_screenshot: bool): # whether to send game screenshot or not 
+	# Set report data.
+	reporter.set_report_name(report_name);
+	reporter.set_report_text(report_text);
+	reporter.set_sender_name(sender_name);
+	reporter.set_sender_email(sender_email);
+	reporter.set_report_attachments(report_attachments);
+	
+	if take_screenshot:
+		# Take a screenshot.
+		var old_clear_mode = get_viewport().get_clear_mode();
+		get_viewport().set_clear_mode(Viewport.CLEAR_MODE_ONLY_NEXT_FRAME);
+		
+		# Hide our widget.
+		get_node(".").visible = false;
+		
+		# Wait until the frame has finished before getting the texture.
+		yield(VisualServer, "frame_post_draw")
+		
+		# Retrieve the captured image.
+		var img: Image = get_viewport().get_texture().get_data();
+		
+		get_viewport().set_clear_mode(old_clear_mode);
+		
+		# Show our widget.
+		get_node(".").visible = true;
+		
+		# Draw another frame with our widget back.
+		yield(VisualServer, "frame_post_draw")
+
+		# Flip it on the y-axis (because it's flipped).
+		img.flip_y();
+		
+		# Scale image.
+		img.resize(1920, 1080);
+		
+		# Save screenshot.
+		reporter.set_screenshot(img);
+	else:
+		reporter.set_clear_screenshot();
+	
+	# Send report.
+	var result_code: int = reporter.send_report();
 	if result_code != 0: # if result_code == 0 then everything is OK and the server received your report, otherwise:
 		# (it's up to you whether you want to handle all error codes or not, you could ignore the result code or just check if it's equal to 0)
 		# (by handling all possible result codes you can provide more information to your user)
@@ -164,13 +209,16 @@ func _on_SendReportButton_pressed():
 		
 	yield(VisualServer, "frame_post_draw"); # wait for one frame to be drawn
 	
+	var include_screenshot = get_node("VBoxContainer/ScreenshotHBoxContainer/ScreenshotCheckBox").pressed;
+	
 	# Send report.
 	send_report(
 		get_node("VBoxContainer/ReportNameHBoxContainer/ReportNameLineEdit").text,
 		get_node("VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit").text,
 		get_node("VBoxContainer/SenderNameHBoxContainer/SenderNameLineEdit").text,
 		get_node("VBoxContainer/SenderEMailHBoxContainer/SenderEMailLineEdit").text,
-		[]); # developer specified attachments
+		[],
+		include_screenshot);
 
 # text edit character limit
 var current_text = ''

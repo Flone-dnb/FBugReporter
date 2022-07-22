@@ -287,8 +287,9 @@ func install_reporter(binary_dst_win string, binary_dst_linux string, project_ro
 	fmt.Println()
 	fmt.Println("Installation is finished.")
 	fmt.Println("Now, edit the file", filepath.Join(script_dir, "reporter.gd"),
-		"and change the line \"reporter.set_server(127, 0, 0, 1, 50123)\" in \"_ready()\" "+
-			"according to your server's IP/port.")
+		"and change the line \"reporter.set_server(\"localhost\", 21580);\" in \"_ready()\" "+
+			"according to your server's IP/port.\n"+
+			"It's also highly recommended to look at reporter.gd file and understand how it works.")
 }
 
 // Returns empty if an error occurred.

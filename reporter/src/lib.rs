@@ -2,24 +2,33 @@
 
 // Std.
 use backtrace::Backtrace;
-use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::{env, fs::File};
 
 // External.
 use gdnative::prelude::*;
+use image::{ImageBuffer, RgbaImage};
 
 // Custom.
 mod log_manager;
 mod reporter_service;
 use log_manager::*;
 use reporter_service::*;
-use shared::misc::report::*;
+use shared::misc::{error::AppError, report::*};
 
-#[derive(NativeClass)]
+#[derive(NativeClass, Default)]
 #[inherit(Node)]
 struct Reporter {
+    report_name: String,
+    report_text: String,
+    sender_name: String,
+    sender_email: String,
+    game_name: String,
+    game_version: String,
+    attachments: Vec<String>,
     server_addr: Option<String>,
+    screenshot_path: Option<String>,
     last_report: Option<GameReport>,
     last_error: String,
 }
@@ -27,15 +36,51 @@ struct Reporter {
 #[methods]
 impl Reporter {
     fn new(_owner: &Node) -> Self {
-        Reporter {
-            server_addr: None,
-            last_report: None,
-            last_error: String::new(),
-        }
+        Self::default()
     }
 
     #[export]
     fn _ready(&self, _owner: &Node) {}
+
+    #[export]
+    fn set_report_name(&mut self, _owner: &Node, report_name: String) {
+        self.report_name = report_name;
+    }
+
+    #[export]
+    fn set_report_text(&mut self, _owner: &Node, report_text: String) {
+        self.report_text = report_text;
+    }
+
+    #[export]
+    fn set_sender_name(&mut self, _owner: &Node, sender_name: String) {
+        self.sender_name = sender_name;
+    }
+
+    #[export]
+    fn set_sender_email(&mut self, _owner: &Node, sender_email: String) {
+        self.sender_email = sender_email;
+    }
+
+    #[export]
+    fn set_game_name(&mut self, _owner: &Node, game_name: String) {
+        self.game_name = game_name;
+    }
+
+    #[export]
+    fn set_game_version(&mut self, _owner: &Node, game_version: String) {
+        self.game_version = game_version;
+    }
+
+    #[export]
+    fn set_report_attachments(&mut self, _owner: &Node, attachments: Vec<String>) {
+        self.attachments = attachments;
+    }
+
+    #[export]
+    fn set_clear_screenshot(&mut self, _owner: &Node) {
+        self.screenshot_path = None;
+    }
 
     #[export]
     fn get_log_file_path(&self, _owner: &Node) -> String {
@@ -50,6 +95,65 @@ impl Reporter {
     #[export]
     fn set_server(&mut self, _owner: &Node, server: String, port: u16) {
         self.server_addr = Some(format!("{}:{}", server, port));
+    }
+
+    #[export]
+    fn set_screenshot(&mut self, _owner: &Node, viewport_image: Ref<Image>) {
+        // Prepare screenshot path.
+        let mut screenshot_path_buf = env::temp_dir();
+        screenshot_path_buf.push("FBugReporter");
+        screenshot_path_buf.push("reporter");
+
+        if let Err(e) = std::fs::create_dir_all(screenshot_path_buf.as_path()) {
+            godot_warn!("{}", AppError::new(&e.to_string()).to_string());
+            return;
+        }
+
+        screenshot_path_buf.push("screenshot.jpg");
+
+        // Prepare image.
+        let viewport_image: TRef<Image> = unsafe { viewport_image.assume_safe() };
+
+        let mut img: RgbaImage = ImageBuffer::new(
+            viewport_image.get_width() as u32,
+            viewport_image.get_height() as u32,
+        );
+
+        // Write pixels from viewport image.
+        viewport_image.lock();
+        for row in 0..viewport_image.get_height() {
+            for column in 0..viewport_image.get_width() {
+                let color: Color = viewport_image.get_pixel(column, row);
+                let new_pixel = image::Rgba([
+                    (color.r * 255.0) as u8,
+                    (color.g * 255.0) as u8,
+                    (color.b * 255.0) as u8,
+                    (color.a * 255.0) as u8,
+                ]);
+
+                img.put_pixel(column as u32, row as u32, new_pixel);
+            }
+        }
+        viewport_image.unlock();
+
+        // Save image.
+        if let Err(e) = img.save(screenshot_path_buf.as_path()) {
+            godot_warn!("{}", AppError::new(&e.to_string()).to_string());
+            return;
+        } else {
+            let screenshot_path = screenshot_path_buf.as_path().to_str();
+            match screenshot_path {
+                Some(screenshot_path) => {
+                    self.screenshot_path = Some(String::from(screenshot_path));
+                }
+                None => {
+                    godot_warn!(
+                        "{}",
+                        AppError::new("unable to convert screenshot path to string")
+                    );
+                }
+            }
+        }
     }
 
     #[export]
@@ -71,31 +175,20 @@ impl Reporter {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     #[export]
-    fn send_report(
-        &mut self,
-        _owner: &Node,
-        report_name: String,
-        report_text: String,
-        sender_name: String,
-        sender_email: String,
-        game_name: String,
-        game_version: String,
-        attachments: Vec<String>,
-    ) -> i32 {
+    fn send_report(&mut self, _owner: &Node) -> i32 {
         if self.server_addr.is_none() {
             return ReportResult::ServerNotSet.value();
         }
 
         // Construct report object.
         let report = GameReport {
-            report_name,
-            report_text,
-            sender_name,
-            sender_email,
-            game_name,
-            game_version,
+            report_name: self.report_name.clone(),
+            report_text: self.report_text.clone(),
+            sender_name: self.sender_name.clone(),
+            sender_email: self.sender_email.clone(),
+            game_name: self.game_name.clone(),
+            game_version: self.game_version.clone(),
             client_os_info: os_info::get(),
         };
 
@@ -114,13 +207,34 @@ impl Reporter {
         ));
         logger.log(&format!("Received a report: {:?}", report));
 
+        // Add screenshot as an attachment.
+        if let Some(screenshot_path) = &self.screenshot_path {
+            if !Path::new(&screenshot_path).exists() {
+                godot_warn!(
+                    "{}",
+                    AppError::new("previously saved screenshot no longer exists")
+                );
+            } else {
+                if self
+                    .attachments
+                    .iter()
+                    .find(|&path| path == screenshot_path)
+                    == None
+                {
+                    self.attachments.push(screenshot_path.clone());
+                }
+            }
+        } else {
+            logger.log("No screenshot provided.");
+        }
+
         let mut reporter = ReporterService::new();
 
-        // Generate report attachments (if needed).
+        // Process other attachments.
         let mut report_attachments: Vec<ReportAttachment> = Vec::new();
-        if !attachments.is_empty() {
+        if !self.attachments.is_empty() {
             // Check that the specified paths exist.
-            for path in attachments.iter() {
+            for path in self.attachments.iter() {
                 if !Path::new(&path).exists() {
                     return ReportResult::AttachmentDoesNotExist.value();
                 }
@@ -145,7 +259,7 @@ impl Reporter {
 
             // Generate attachments from paths.
             let result = Self::generate_attachments_from_paths(
-                attachments,
+                self.attachments.clone(),
                 max_attachments_size_in_mb,
                 &mut logger,
             );

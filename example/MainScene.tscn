@@ -1,15 +1,41 @@
-[gd_scene load_steps=3 format=2]
+[gd_scene load_steps=5 format=2]
 
 [ext_resource path="res://MainScene.gd" type="Script" id=1]
 
+[sub_resource type="PlaneMesh" id=3]
+
+[sub_resource type="CubeMesh" id=2]
+
 [sub_resource type="Theme" id=1]
 
-[node name="Control" type="Control"]
+[node name="Spatial" type="Spatial"]
+
+[node name="Camera" type="Camera" parent="."]
+transform = Transform( 1, 0, 0, 0, 0.980615, 0.195946, 0, -0.195946, 0.980615, 0, 0.843378, 1.92067 )
+
+[node name="MeshInstance2" type="MeshInstance" parent="."]
+transform = Transform( 11.0705, 0, 0, 0, 1, 0, 0, 0, 11.0705, 0, -0.508433, -5.32876 )
+mesh = SubResource( 3 )
+skeleton = NodePath("../MeshInstance")
+material/0 = null
+
+[node name="MeshInstance" type="MeshInstance" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.154572, -2.66438 )
+mesh = SubResource( 2 )
+material/0 = null
+
+[node name="Control" type="Control" parent="."]
 anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource( 1 )
 
-[node name="TitleLabel" type="Label" parent="."]
+[node name="Background" type="Panel" parent="Control"]
+self_modulate = Color( 0, 0, 0, 0.784314 )
+anchor_right = 1.0
+anchor_bottom = 1.003
+margin_bottom = 0.200012
+
+[node name="TitleLabel" type="Label" parent="Control"]
 anchor_top = 0.05
 anchor_right = 1.001
 anchor_bottom = 0.158
@@ -21,7 +47,7 @@ text = "Report a bug"
 align = 1
 valign = 1
 
-[node name="DescriptionLabel" type="Label" parent="."]
+[node name="DescriptionLabel" type="Label" parent="Control"]
 anchor_top = 0.175
 anchor_right = 1.0
 anchor_bottom = 0.268
@@ -36,7 +62,7 @@ __meta__ = {
 "_edit_use_anchors_": false
 }
 
-[node name="WarningLabel" type="Label" parent="."]
+[node name="WarningLabel" type="Label" parent="Control"]
 anchor_top = 0.278
 anchor_right = 1.001
 anchor_bottom = 0.315
@@ -50,7 +76,7 @@ valign = 1
 autowrap = true
 uppercase = true
 
-[node name="VBoxContainer" type="VBoxContainer" parent="."]
+[node name="VBoxContainer" type="VBoxContainer" parent="Control"]
 anchor_left = 0.009
 anchor_top = 0.285
 anchor_right = 0.988
@@ -60,87 +86,87 @@ margin_top = -37.0
 margin_right = 0.288025
 margin_bottom = -0.799988
 
-[node name="ReportNameHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
-margin_right = 1003.0
+[node name="ReportNameHBoxContainer" type="HBoxContainer" parent="Control/VBoxContainer"]
+margin_right = 1253.0
 margin_bottom = 24.0
 
-[node name="ReporNameLabel" type="Label" parent="VBoxContainer/ReportNameHBoxContainer"]
+[node name="ReporNameLabel" type="Label" parent="Control/VBoxContainer/ReportNameHBoxContainer"]
 margin_top = 5.0
-margin_right = 99.0
+margin_right = 124.0
 margin_bottom = 19.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 10.0
 text = "Summary:"
 
-[node name="ReportNameLineEdit" type="LineEdit" parent="VBoxContainer/ReportNameHBoxContainer"]
-margin_left = 103.0
-margin_right = 1003.0
+[node name="ReportNameLineEdit" type="LineEdit" parent="Control/VBoxContainer/ReportNameHBoxContainer"]
+margin_left = 128.0
+margin_right = 1253.0
 margin_bottom = 24.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 90.0
 placeholder_text = "Short description of your issue... For example: \"Crash on level 2\"."
 
-[node name="SenderNameHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+[node name="SenderNameHBoxContainer" type="HBoxContainer" parent="Control/VBoxContainer"]
 margin_top = 28.0
-margin_right = 1003.0
+margin_right = 1253.0
 margin_bottom = 52.0
 
-[node name="SenderNameLabel" type="Label" parent="VBoxContainer/SenderNameHBoxContainer"]
+[node name="SenderNameLabel" type="Label" parent="Control/VBoxContainer/SenderNameHBoxContainer"]
 margin_top = 5.0
-margin_right = 99.0
+margin_right = 124.0
 margin_bottom = 19.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 10.0
 text = "Your name:"
 
-[node name="SenderNameLineEdit" type="LineEdit" parent="VBoxContainer/SenderNameHBoxContainer"]
-margin_left = 103.0
-margin_right = 1003.0
+[node name="SenderNameLineEdit" type="LineEdit" parent="Control/VBoxContainer/SenderNameHBoxContainer"]
+margin_left = 128.0
+margin_right = 1253.0
 margin_bottom = 24.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 90.0
 placeholder_text = "How should we call you? This field is optional and could be empty."
 
-[node name="SenderEMailHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+[node name="SenderEMailHBoxContainer" type="HBoxContainer" parent="Control/VBoxContainer"]
 margin_top = 56.0
-margin_right = 1003.0
+margin_right = 1253.0
 margin_bottom = 80.0
 
-[node name="SenderEMailLabel" type="Label" parent="VBoxContainer/SenderEMailHBoxContainer"]
+[node name="SenderEMailLabel" type="Label" parent="Control/VBoxContainer/SenderEMailHBoxContainer"]
 margin_top = 5.0
-margin_right = 99.0
+margin_right = 124.0
 margin_bottom = 19.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 10.0
 text = "Your email:"
 
-[node name="SenderEMailLineEdit" type="LineEdit" parent="VBoxContainer/SenderEMailHBoxContainer"]
-margin_left = 103.0
-margin_right = 1003.0
+[node name="SenderEMailLineEdit" type="LineEdit" parent="Control/VBoxContainer/SenderEMailHBoxContainer"]
+margin_left = 128.0
+margin_right = 1253.0
 margin_bottom = 24.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 90.0
 placeholder_text = "Sometimes we could contact you for more details about the issue. This field is optional and could be empty."
 
-[node name="ReportTextHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+[node name="ReportTextHBoxContainer" type="HBoxContainer" parent="Control/VBoxContainer"]
 margin_top = 84.0
-margin_right = 1003.0
-margin_bottom = 293.0
+margin_right = 1253.0
+margin_bottom = 353.0
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="ReportTextLabel" type="Label" parent="VBoxContainer/ReportTextHBoxContainer"]
-margin_top = 97.0
-margin_right = 99.0
-margin_bottom = 111.0
+[node name="ReportTextLabel" type="Label" parent="Control/VBoxContainer/ReportTextHBoxContainer"]
+margin_top = 127.0
+margin_right = 124.0
+margin_bottom = 141.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 10.0
 text = "Issue report:"
 
-[node name="ReportTextTextEdit" type="TextEdit" parent="VBoxContainer/ReportTextHBoxContainer"]
-margin_left = 103.0
-margin_right = 1003.0
-margin_bottom = 209.0
+[node name="ReportTextTextEdit" type="TextEdit" parent="Control/VBoxContainer/ReportTextHBoxContainer"]
+margin_left = 128.0
+margin_right = 1253.0
+margin_bottom = 269.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 90.0
 text = "Describe your issue here! English is preferred, but any other language will work.
@@ -159,21 +185,42 @@ Have you tried to reproduce this issue? Do you know exact steps to reproduce thi
 
 Got anything else to say?"
 
-[node name="EmptyHBoxContainer3" type="HBoxContainer" parent="VBoxContainer"]
-margin_top = 297.0
-margin_right = 1003.0
-margin_bottom = 297.0
+[node name="EmptyHBoxContainer3" type="HBoxContainer" parent="Control/VBoxContainer"]
+margin_top = 357.0
+margin_right = 1253.0
+margin_bottom = 357.0
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/EmptyHBoxContainer3"]
+[node name="MarginContainer" type="MarginContainer" parent="Control/VBoxContainer/EmptyHBoxContainer3"]
 
-[node name="NoticeHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
-margin_top = 301.0
-margin_right = 1003.0
-margin_bottom = 349.0
+[node name="ScreenshotHBoxContainer" type="HBoxContainer" parent="Control/VBoxContainer"]
+margin_top = 361.0
+margin_right = 1253.0
+margin_bottom = 385.0
 
-[node name="NoticeLabel" type="Label" parent="VBoxContainer/NoticeHBoxContainer"]
-margin_right = 1003.0
-margin_bottom = 48.0
+[node name="ScreenshotLabel" type="Label" parent="Control/VBoxContainer/ScreenshotHBoxContainer"]
+margin_top = 5.0
+margin_right = 1225.0
+margin_bottom = 19.0
+size_flags_horizontal = 3
+text = "Include game screenshot in this report (this menu will not be visible):"
+align = 2
+valign = 1
+autowrap = true
+
+[node name="ScreenshotCheckBox" type="CheckBox" parent="Control/VBoxContainer/ScreenshotHBoxContainer"]
+margin_left = 1229.0
+margin_right = 1253.0
+margin_bottom = 24.0
+pressed = true
+
+[node name="NoticeHBoxContainer" type="HBoxContainer" parent="Control/VBoxContainer"]
+margin_top = 389.0
+margin_right = 1253.0
+margin_bottom = 420.0
+
+[node name="NoticeLabel" type="Label" parent="Control/VBoxContainer/NoticeHBoxContainer"]
+margin_right = 1253.0
+margin_bottom = 31.0
 size_flags_horizontal = 3
 size_flags_vertical = 6
 text = "All information that you specify here will be transferred in the encrypted form, no one except the developers will be able to read your name / email / report. 
@@ -182,53 +229,53 @@ align = 1
 valign = 1
 autowrap = true
 
-[node name="EmptyHBoxContainer2" type="HBoxContainer" parent="VBoxContainer"]
-margin_top = 353.0
-margin_right = 1003.0
-margin_bottom = 353.0
+[node name="EmptyHBoxContainer2" type="HBoxContainer" parent="Control/VBoxContainer"]
+margin_top = 424.0
+margin_right = 1253.0
+margin_bottom = 424.0
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/EmptyHBoxContainer2"]
+[node name="MarginContainer" type="MarginContainer" parent="Control/VBoxContainer/EmptyHBoxContainer2"]
 
-[node name="SendReportHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
-margin_top = 357.0
-margin_right = 1003.0
-margin_bottom = 377.0
+[node name="SendReportHBoxContainer" type="HBoxContainer" parent="Control/VBoxContainer"]
+margin_top = 428.0
+margin_right = 1253.0
+margin_bottom = 448.0
 
-[node name="MarginContainer2" type="MarginContainer" parent="VBoxContainer/SendReportHBoxContainer"]
-margin_right = 398.0
+[node name="MarginContainer2" type="MarginContainer" parent="Control/VBoxContainer/SendReportHBoxContainer"]
+margin_right = 498.0
 margin_bottom = 20.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 40.0
 
-[node name="SendReportButton" type="Button" parent="VBoxContainer/SendReportHBoxContainer"]
-margin_left = 402.0
-margin_right = 601.0
+[node name="SendReportButton" type="Button" parent="Control/VBoxContainer/SendReportHBoxContainer"]
+margin_left = 502.0
+margin_right = 751.0
 margin_bottom = 20.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 20.0
 text = "Send Report"
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/SendReportHBoxContainer"]
-margin_left = 605.0
-margin_right = 1003.0
+[node name="MarginContainer" type="MarginContainer" parent="Control/VBoxContainer/SendReportHBoxContainer"]
+margin_left = 755.0
+margin_right = 1253.0
 margin_bottom = 20.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 40.0
 
-[node name="SendResultHBoxContainer2" type="HBoxContainer" parent="VBoxContainer"]
-margin_top = 381.0
-margin_right = 1003.0
-margin_bottom = 395.0
+[node name="SendResultHBoxContainer2" type="HBoxContainer" parent="Control/VBoxContainer"]
+margin_top = 452.0
+margin_right = 1253.0
+margin_bottom = 466.0
 
-[node name="MarginContainer2" type="MarginContainer" parent="VBoxContainer/SendResultHBoxContainer2"]
-margin_right = 99.0
+[node name="MarginContainer2" type="MarginContainer" parent="Control/VBoxContainer/SendResultHBoxContainer2"]
+margin_right = 124.0
 margin_bottom = 14.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 10.0
 
-[node name="SendResultLabel" type="Label" parent="VBoxContainer/SendResultHBoxContainer2"]
-margin_left = 103.0
-margin_right = 899.0
+[node name="SendResultLabel" type="Label" parent="Control/VBoxContainer/SendResultHBoxContainer2"]
+margin_left = 128.0
+margin_right = 1124.0
 margin_bottom = 14.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 80.0
@@ -236,12 +283,12 @@ align = 1
 valign = 1
 autowrap = true
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/SendResultHBoxContainer2"]
-margin_left = 903.0
-margin_right = 1003.0
+[node name="MarginContainer" type="MarginContainer" parent="Control/VBoxContainer/SendResultHBoxContainer2"]
+margin_left = 1128.0
+margin_right = 1253.0
 margin_bottom = 14.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 10.0
 
-[connection signal="text_changed" from="VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit" to="." method="_on_ReportTextTextEdit_text_changed"]
-[connection signal="pressed" from="VBoxContainer/SendReportHBoxContainer/SendReportButton" to="." method="_on_SendReportButton_pressed"]
+[connection signal="text_changed" from="Control/VBoxContainer/ReportTextHBoxContainer/ReportTextTextEdit" to="Control" method="_on_ReportTextTextEdit_text_changed"]
+[connection signal="pressed" from="Control/VBoxContainer/SendReportHBoxContainer/SendReportButton" to="Control" method="_on_SendReportButton_pressed"]

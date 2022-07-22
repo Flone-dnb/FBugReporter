@@ -139,7 +139,6 @@ impl Reporter {
         // Save image.
         if let Err(e) = img.save(screenshot_path_buf.as_path()) {
             godot_warn!("{}", AppError::new(&e.to_string()).to_string());
-            return;
         } else {
             let screenshot_path = screenshot_path_buf.as_path().to_str();
             match screenshot_path {
@@ -214,15 +213,13 @@ impl Reporter {
                     "{}",
                     AppError::new("previously saved screenshot no longer exists")
                 );
-            } else {
-                if self
-                    .attachments
-                    .iter()
-                    .find(|&path| path == screenshot_path)
-                    == None
-                {
-                    self.attachments.push(screenshot_path.clone());
-                }
+            } else if self
+                .attachments
+                .iter()
+                .find(|&path| path == screenshot_path)
+                == None
+            {
+                self.attachments.push(screenshot_path.clone());
             }
         } else {
             logger.log("No screenshot provided.");

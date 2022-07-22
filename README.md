@@ -31,6 +31,7 @@ Here is the list of information you can send in the report:
 - sender OS info,
 - game name,
 - game version,
+- game screenshot,
 - attachments (any files).
 
 ### Attachments

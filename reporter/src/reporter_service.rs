@@ -100,10 +100,15 @@ impl ReporterService {
             attachments,
         };
 
+        logger.log("Sending report message to the server.");
+
         // Send message.
         if let Some(app_error) = send_message(&mut tcp_socket, &secret_key, message) {
             return (ReportResult::InternalError, Some(app_error));
         }
+
+        logger.log("Sent report message.");
+        logger.log("Waiting for server to answer.");
 
         let mut is_fin = false;
         let result = receive_message(
@@ -124,6 +129,8 @@ impl ReporterService {
         }
 
         let result = result.unwrap();
+
+        logger.log("Received an answer from the server.");
 
         // Deserialize.
         let received_message = bincode::deserialize::<ReporterAnswer>(&result);

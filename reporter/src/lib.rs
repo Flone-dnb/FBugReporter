@@ -2,8 +2,10 @@
 
 // Std.
 use backtrace::Backtrace;
+use std::fs::metadata;
 use std::io::Read;
 use std::path::Path;
+use std::path::PathBuf;
 use std::{env, fs::File};
 
 // External.
@@ -153,6 +155,75 @@ impl Reporter {
                 }
             }
         }
+    }
+
+    #[export]
+    fn get_last_modified_files(
+        &self,
+        _owner: &Node,
+        path: String,
+        file_count: usize,
+    ) -> Vec<String> {
+        let paths = std::fs::read_dir(path);
+        if let Err(ref e) = paths {
+            godot_warn!("{}", AppError::new(&e.to_string()));
+            return Vec::new();
+        }
+        let paths = paths.unwrap();
+
+        let mut files: Vec<(PathBuf, u64)> = Vec::new();
+
+        // Read files modification date.
+        for path in paths {
+            if let Err(ref e) = path {
+                godot_warn!("{}", AppError::new(&e.to_string()));
+                continue;
+            }
+            let path = path.unwrap();
+
+            if path.file_type().unwrap().is_file() {
+                let metadata = metadata(path.path());
+                if let Err(ref e) = metadata {
+                    godot_warn!("{}", AppError::new(&e.to_string()));
+                    continue;
+                }
+                let metadata = metadata.unwrap();
+
+                let last_modified = metadata.modified();
+                if let Err(e) = last_modified {
+                    godot_warn!("{}", AppError::new(&e.to_string()));
+                    continue;
+                }
+
+                let elapsed_seconds = last_modified.unwrap().elapsed();
+                if let Err(e) = elapsed_seconds {
+                    godot_warn!("{}", AppError::new(&e.to_string()));
+                    continue;
+                }
+
+                files.push((path.path(), elapsed_seconds.unwrap().as_secs()));
+            }
+        }
+
+        files.sort_by(|a, b| a.1.cmp(&b.1));
+
+        let mut out_paths: Vec<String> = Vec::new();
+        for file in files {
+            let path = file.0.as_path().to_str();
+            match path {
+                Some(path) => {
+                    out_paths.push(String::from(path));
+                    if out_paths.len() == file_count {
+                        break;
+                    }
+                }
+                None => {
+                    godot_warn!("{}", AppError::new("unable to convert path to string"));
+                }
+            }
+        }
+
+        out_paths
     }
 
     #[export]

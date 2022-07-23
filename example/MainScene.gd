@@ -30,6 +30,11 @@ func send_report(
 		sender_email: String, # optional sender email
 		report_attachments, # an array of strings that contain paths to the files to attach to report, it's safer to specify absolute paths
 		take_screenshot: bool): # whether to send game screenshot or not 
+	# Add last 3 log files as attachments.
+	var log_path = OS.get_user_data_dir() + "/logs";
+	var last_logs = reporter.get_last_modified_files(log_path, 3);
+	report_attachments += last_logs;
+	
 	# Set report data.
 	reporter.set_report_name(report_name);
 	reporter.set_report_text(report_text);
@@ -37,8 +42,8 @@ func send_report(
 	reporter.set_sender_email(sender_email);
 	reporter.set_report_attachments(report_attachments);
 	
+	# Take a screenshot.
 	if take_screenshot:
-		# Take a screenshot.
 		var old_clear_mode = get_viewport().get_clear_mode();
 		get_viewport().set_clear_mode(Viewport.CLEAR_MODE_ONLY_NEXT_FRAME);
 		

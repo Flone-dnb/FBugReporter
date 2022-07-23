@@ -31,8 +31,9 @@ Here is the list of information you can send in the report:
 - sender OS info,
 - game name,
 - game version,
-- game screenshot,
+- game screenshot (enabled by default for `example` project),
 - attachments (any files).
+    - last 3 log files (enabled by default for `example` project).
 
 ### Attachments
 

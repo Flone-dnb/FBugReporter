@@ -22,7 +22,7 @@ Here is the list of information you can send in the report:
 - game version,
 - game screenshot (enabled by default for `example` project),
 - attachments (any files).
-    - last 3 log files (enabled by default for `example` project).
+    - (last 3 log files enabled by default for `example` project).
 
 # Try It Out
 

@@ -1106,7 +1106,7 @@ checksum = "49b3de9ec5dc0a3417da371aab17d729997c15010e7fd24ff707773a33bddb64"
 
 [[package]]
 name = "reporter"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "backtrace",
  "bincode",
@@ -1213,7 +1213,7 @@ dependencies = [
 
 [[package]]
 name = "shared"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "aes",
  "backtrace",

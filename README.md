@@ -9,7 +9,7 @@
 - Windows
 - Linux
 
-# Contents of the Report
+# Report Contents
 
 Here is the list of information you can send in the report:
 

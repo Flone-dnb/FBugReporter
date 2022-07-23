@@ -279,6 +279,18 @@ impl Reporter {
             // Save report.
             self.last_report = Some(report);
             logger.log("Successfully sent the report.");
+
+            // Cleanup.
+            if let Some(screenshot_path) = self.screenshot_path.take() {
+                if Path::new(&screenshot_path).exists() {
+                    if let Err(e) = std::fs::remove_file(&screenshot_path) {
+                        logger.log(&format!(
+                            "failed to delete screenshot from \"{}\" (error: {})",
+                            &screenshot_path, e
+                        ));
+                    }
+                }
+            }
         } else {
             match error_message {
                 Some(app_error) => {

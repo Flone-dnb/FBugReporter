@@ -134,20 +134,11 @@ impl ReportLayout {
                                     && data.report_layout.report.sender_email.is_empty()
                                 {
                                     String::from("Sender: no information provided")
-                                } else if !data.report_layout.report.sender_name.is_empty()
-                                    && data.report_layout.report.sender_email.is_empty()
-                                {
+                                } else if data.report_layout.report.sender_email.is_empty() {
                                     format!("Sender: {}", data.report_layout.report.sender_name)
-                                } else if data.report_layout.report.sender_name.is_empty()
-                                    && !data.report_layout.report.sender_email.is_empty()
-                                {
-                                    format!(
-                                        "Sender: email: {}",
-                                        data.report_layout.report.sender_name
-                                    )
                                 } else {
                                     format!(
-                                        "Sender: {} (email: {})",
+                                        "Sender: {} ({})",
                                         data.report_layout.report.sender_name,
                                         data.report_layout.report.sender_email
                                     )

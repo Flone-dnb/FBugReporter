@@ -57,6 +57,14 @@ In order to run these scripts you need to have [Go](https://go.dev/dl/) installe
 
 If you want to integrate FBugReporter into your Godot game, just clone/download this repository and run each script (the order does not matter), they will setup everything for you.
 
+Once everything is done. Your project will have new files, our main interest is `reporter.gd` file, it uses premade `reporter.tscn` scene to send reports, you can customize everything as you want, you can even delete these files and start making all from scratch. But now let's focus on sending your first report.
+
+First up, start `server_monitor` that was installed using `install_server.go`, it will generate `server_config.ini` file. This file contains server configuration that can be customized. Note that in order for changed values to be applied `server_monitor` restart is required. Now, in `server_config.ini` look for the parameter `port_for_reporters`. You need to put this value into `reporter.gd` file. In your Godot project find `reporter.gd` and look for `_ready()` function inside of it. There will be a line that looks something like this: `reporter.set_server("localhost", 21580)`. Now change the second argument of `set_server` function to your `port_for_reporters` from `server_config.ini`. That's it! Start `server_monitor`, run generated `reporter.tscn` scene from your project and send your first report!
+
+In order to view reports you first need an account. Run `database_manager` that was installed using `install_server.go`. After `database_manager` is started, type command `add-user <your name>` (for example, `add-user john`). You will then be asked about new user's privileges and will receive new user's password, remember it. Exit from `database_manager` using `exit` command. Open up `client` application that was installed using `install_client.go`. We now need to enter server information. For `server` type `localhost`, for `port` type value `port_for_clients` from `server_config.ini` (not `port_for_reporters`!), for `username` type the username you used in `add-user` command, for `password` use password that you received in `database_manager`. Now try to login, you will go through the first login process and will setup your new password and OTP. After everything is done you will see reports that the server received from your game!
+
+The database that stores all information (reports, registered users, attachments and etc.) is called `database.db3` and it was generated when you run `server_moninor` for the first time. If you want to backup your database you just need to copy this `database.db3` file - there are no other dependencies, just make a copy of your `database.db3` file and that's it - that's your backup.
+
 # How to Update
 
 If you want to update FBugReporter you need to update everything (reporter, client, server). For this just clone/download this repository with updated code and run each script again,

@@ -33,8 +33,8 @@ fn main() {
     if !under_monitor {
         println!();
         println!("---------------------------------------");
-        println!("WARNING: you should only run the server using the 'monitor' app");
-        println!("WARNING: please, run the 'monitor' app to launch the server");
+        println!("WARNING: you should only run the server using the 'server_monitor' app");
+        println!("WARNING: please, run the 'server_monitor' app to launch the server");
         println!("---------------------------------------");
         println!();
     }

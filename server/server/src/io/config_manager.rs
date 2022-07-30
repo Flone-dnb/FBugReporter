@@ -1,8 +1,9 @@
 // Std.
-use std::{ops::Range, str::FromStr};
+use std::{fs::create_dir_all, ops::Range, path::PathBuf, str::FromStr};
 
 // External.
 use configparser::ini::Ini;
+use platform_dirs::{AppDirs, UserDirs};
 use rand::Rng;
 
 // Custom.
@@ -15,6 +16,7 @@ const DEFAULT_MAX_ALLOWED_LOGIN_ATTEMPTS: u32 = 3;
 const DEFAULT_BAN_TIME_DURATION_IN_MIN: i64 = 5;
 const DEFAULT_MAX_ATTACHMENT_SIZE_IN_MB: usize = 5;
 
+const CONFIG_FILE_DIR: &str = "FBugReporter";
 const CONFIG_FILE_NAME: &str = "server_config.ini";
 
 // --------------- server section start ---------------
@@ -36,8 +38,8 @@ pub struct ConfigManager {
     pub max_attachment_size_in_mb: usize,
     pub max_allowed_login_attempts: u32,
     pub ban_time_duration_in_min: i64,
-    pub config_file_path: String,
-    pub log_file_path: String,
+    pub config_file_path: PathBuf,
+    pub log_file_path: PathBuf,
 }
 
 impl ConfigManager {
@@ -48,7 +50,7 @@ impl ConfigManager {
 
         // Try reading config from .ini file.
         let mut config = Ini::new();
-        let map = config.load(CONFIG_FILE_NAME);
+        let map = config.load(&server_config.config_file_path);
         if map.is_err() {
             println!(
                 "INFO: could not open the config file \"{0}\", using default values \
@@ -130,7 +132,7 @@ impl ConfigManager {
         );
 
         // Write to disk.
-        if let Err(e) = config.write(CONFIG_FILE_NAME) {
+        if let Err(e) = config.write(&self.config_file_path) {
             return Err(AppError::new(&e.to_string()));
         }
 
@@ -247,44 +249,60 @@ impl ConfigManager {
         }
     }
     /// Returns path used to store configuration.
-    fn get_config_file_path() -> String {
-        let mut config_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
-
-        // Check ending.
-        #[cfg(target_os = "linux")]
+    fn get_config_file_path() -> PathBuf {
+        #[cfg(any(windows, unix))]
         {
-            if !config_path.ends_with('/') {
-                config_path += "/";
-            }
-        }
-        #[cfg(target_os = "windows")]
-        {
-            if !config_path.ends_with('\\') {
-                config_path += "\\";
-            }
-        }
+            let app_dirs = AppDirs::new(Some(CONFIG_FILE_DIR), true).expect(&format!(
+                "An error occurred at [{}, {}]: can't read user dirs.",
+                file!(),
+                line!(),
+            ));
 
-        config_path + CONFIG_FILE_NAME
+            let mut config_path = app_dirs.config_dir;
+
+            // Create directory if not exists.
+            if !config_path.exists() {
+                if let Err(e) = create_dir_all(&config_path) {
+                    panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
+                }
+            }
+
+            config_path.push(CONFIG_FILE_NAME);
+            config_path
+        }
+        #[cfg(not(any(windows, unix)))]
+        {
+            compile_error!("Reporter is not implemented for this OS.");
+        }
     }
     /// Returns path used to store log file.
-    fn get_log_file_path() -> String {
-        let mut log_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
-
-        // Check ending.
-        #[cfg(target_os = "linux")]
+    fn get_log_file_path() -> PathBuf {
+        #[cfg(any(windows, unix))]
         {
-            if !log_path.ends_with('/') {
-                log_path += "/";
-            }
-        }
-        #[cfg(target_os = "windows")]
-        {
-            if !log_path.ends_with('\\') {
-                log_path += "\\";
-            }
-        }
+            let app_dirs = UserDirs::new().expect(&format!(
+                "An error occurred at [{}, {}]: can't read user dirs.",
+                file!(),
+                line!(),
+            ));
 
-        log_path + LOG_FILE_NAME
+            let mut log_path = app_dirs.document_dir;
+
+            log_path.push(CONFIG_FILE_DIR);
+
+            // Create directory if not exists.
+            if !log_path.exists() {
+                if let Err(e) = create_dir_all(&log_path) {
+                    panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
+                }
+            }
+
+            log_path.push(LOG_FILE_NAME);
+            log_path
+        }
+        #[cfg(not(any(windows, unix)))]
+        {
+            compile_error!("Reporter is not implemented for this OS.");
+        }
     }
     /// Generates random port value.
     fn generate_random_port(exclude_port: u16) -> u16 {

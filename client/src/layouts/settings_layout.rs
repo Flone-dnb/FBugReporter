@@ -52,7 +52,7 @@ impl SettingsLayout {
                 .with_flex_child(
                     Label::new(format!(
                         "Log file location: {}.",
-                        LogManager::get_log_file_path()
+                        LogManager::get_log_file_path().to_string_lossy()
                     ))
                     .with_text_size(TEXT_SIZE),
                     1.0,

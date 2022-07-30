@@ -86,7 +86,7 @@ impl Reporter {
 
     #[export]
     fn get_log_file_path(&self, _owner: &Node) -> String {
-        LogManager::get_log_file_path()
+        LogManager::get_log_file_path().to_str().unwrap().to_owned()
     }
 
     #[export]

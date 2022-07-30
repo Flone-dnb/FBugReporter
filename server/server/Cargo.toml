@@ -15,5 +15,5 @@ configparser = "3.0.0"
 totp-rs = {version = "2.0.0", features = ["qr"]}
 shared = {path = "../../shared", features = ["database"]}
 
-[target.'cfg(windows)'.dependencies]
+[target.'cfg(any(windows,unix))'.dependencies]
 platform-dirs = "0.3.0"

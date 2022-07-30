@@ -19,5 +19,5 @@ image = "0.24.3"
 [lib]
 crate-type = ["cdylib"]
 
-[target.'cfg(windows)'.dependencies]
+[target.'cfg(any(windows, unix))'.dependencies]
 platform-dirs = "0.3.0"

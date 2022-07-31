@@ -65,11 +65,13 @@ impl LogManager {
 
         #[cfg(any(unix, windows))]
         {
-            let user_dirs = UserDirs::new().expect(&format!(
-                "An error occurred at [{}, {}]: can't read user dirs.",
-                file!(),
-                line!(),
-            ));
+            let user_dirs = UserDirs::new().unwrap_or_else(|| {
+                panic!(
+                    "An error occurred at [{}, {}]: can't read user dirs.",
+                    file!(),
+                    line!(),
+                )
+            });
 
             log_path = user_dirs.document_dir;
         }

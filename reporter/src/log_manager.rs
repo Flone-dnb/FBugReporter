@@ -24,11 +24,13 @@ impl LogManager {
     pub fn get_log_file_path() -> PathBuf {
         #[cfg(any(windows, unix))]
         {
-            let user_dirs = UserDirs::new().expect(&format!(
-                "An error occurred at [{}, {}]: can't read user dirs.",
-                file!(),
-                line!(),
-            ));
+            let user_dirs = UserDirs::new().unwrap_or_else(|| {
+                panic!(
+                    "An error occurred at [{}, {}]: can't read user dirs.",
+                    file!(),
+                    line!(),
+                )
+            });
 
             let mut log_path = user_dirs.document_dir;
 

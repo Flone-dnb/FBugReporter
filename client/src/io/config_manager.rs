@@ -61,11 +61,13 @@ impl ConfigManager {
     pub fn get_config_file_path() -> PathBuf {
         #[cfg(any(windows, unix))]
         {
-            let app_dirs = AppDirs::new(Some(CONFIG_FILE_DIR), true).expect(&format!(
-                "An error occurred at [{}, {}]: can't read user dirs.",
-                file!(),
-                line!(),
-            ));
+            let app_dirs = AppDirs::new(Some(CONFIG_FILE_DIR), true).unwrap_or_else(|| {
+                panic!(
+                    "An error occurred at [{}, {}]: can't read user dirs.",
+                    file!(),
+                    line!(),
+                )
+            });
 
             let mut config_path = app_dirs.config_dir;
 

@@ -78,7 +78,7 @@ impl LogManager {
 
         #[cfg(not(any(unix, windows)))]
         {
-            log_path = std::env::current_dir().unwrap();
+            compile_error!("Server is not implemented for this OS.");
         }
 
         log_path.push(LOG_DIR);

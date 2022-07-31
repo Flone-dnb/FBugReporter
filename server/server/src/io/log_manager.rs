@@ -8,6 +8,7 @@ use chrono::Local;
 use platform_dirs::UserDirs;
 
 pub const LOG_FILE_NAME: &str = "server.log";
+const LOG_DIR_PREFIX: &str = "FBugReporter";
 const LOG_DIR: &str = "logs";
 const MAX_LOG_FILE_COUNT: usize = 10;
 
@@ -81,6 +82,7 @@ impl LogManager {
             compile_error!("Server is not implemented for this OS.");
         }
 
+        log_path.push(LOG_DIR_PREFIX);
         log_path.push(LOG_DIR);
 
         if !log_path.exists() {

@@ -1223,6 +1223,7 @@ dependencies = [
  "cmac",
  "num-bigint",
  "os_info",
+ "platform-dirs",
  "rand",
  "rusqlite",
  "serde",

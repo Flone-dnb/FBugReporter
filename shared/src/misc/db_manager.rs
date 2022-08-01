@@ -1,8 +1,10 @@
 // Std.
 use core::panic;
+use std::path::PathBuf;
 
 // External.
 use chrono::prelude::*;
+use platform_dirs::AppDirs;
 use rand::Rng;
 use rusqlite::{params, Connection, Result};
 use sha2::{Digest, Sha512};
@@ -12,6 +14,7 @@ use sysinfo::{DiskExt, System, SystemExt};
 use super::report::*;
 use crate::misc::error::AppError;
 
+pub const DATABASE_DIR: &str = "FBugReporter";
 pub const DATABASE_NAME: &str = "database.db3";
 
 const REPORT_TABLE_NAME: &str = "report";
@@ -78,13 +81,8 @@ impl DatabaseManager {
                 rusqlite::version()
             )
         }
-
-        let result = Connection::open(DATABASE_NAME);
-        if let Err(e) = result {
-            return Err(AppError::new(&e.to_string()));
-        }
-
-        let mut connection = result.unwrap();
+        
+        let mut connection = Connection::open(&Self::get_database_location()).map_err(|e| AppError::new(&e.to_string()))?;
 
         // Enable foreign keys.
         if let Some(app_error) = Self::enable_foreign_keys(&mut connection) {
@@ -1468,5 +1466,20 @@ impl DatabaseManager {
         }
 
         Ok(())
+    }
+
+    pub fn get_database_location() -> PathBuf {
+        #[cfg(any(windows, unix))]
+        {
+            let mut database_location = AppDirs::new(Some(DATABASE_DIR), true).unwrap()
+                                    .data_dir;
+            database_location.push(DATABASE_NAME);
+            database_location
+        }
+        #[cfg(not(any(windows, unix)))]
+        {
+            compile_error!("DatabaseManager is not implemented for this OS.");
+        }
+
     }
 }

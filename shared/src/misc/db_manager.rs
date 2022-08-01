@@ -81,8 +81,9 @@ impl DatabaseManager {
                 rusqlite::version()
             )
         }
-        
-        let mut connection = Connection::open(&Self::get_database_location()).map_err(|e| AppError::new(&e.to_string()))?;
+
+        let mut connection = Connection::open(&Self::get_database_location())
+            .map_err(|e| AppError::new(&e.to_string()))?;
 
         // Enable foreign keys.
         Self::enable_foreign_keys(&mut connection)?;
@@ -1459,8 +1460,7 @@ impl DatabaseManager {
     pub fn get_database_location() -> PathBuf {
         #[cfg(any(windows, unix))]
         {
-            let mut database_location = AppDirs::new(Some(DATABASE_DIR), true).unwrap()
-                                    .data_dir;
+            let mut database_location = AppDirs::new(Some(DATABASE_DIR), true).unwrap().data_dir;
             database_location.push(DATABASE_NAME);
             database_location
         }
@@ -1468,6 +1468,5 @@ impl DatabaseManager {
         {
             compile_error!("DatabaseManager is not implemented for this OS.");
         }
-
     }
 }

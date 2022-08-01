@@ -9,7 +9,7 @@ use platform_dirs::UserDirs;
 
 pub const LOG_FILE_NAME: &str = "server.log";
 const LOG_DIR_PREFIX: &str = "FBugReporter";
-const LOG_DIR: &str = "logs";
+const LOG_DIR: &str = "server_logs";
 const MAX_LOG_FILE_COUNT: usize = 10;
 
 pub enum LogCategory {

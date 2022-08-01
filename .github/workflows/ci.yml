@@ -21,6 +21,9 @@ jobs:
     - name: Client (clippy)
       run: cargo clippy
       working-directory: client
+    - name: Client (fmt)
+      run: cargo fmt --check --all
+      working-directory: client
 
   client-build-windows:
     runs-on: windows-latest
@@ -33,6 +36,9 @@ jobs:
     - name: Client (clippy)
       run: cargo clippy
       working-directory: client
+    - name: Client (fmt)
+      run: cargo fmt --check --all
+      working-directory: client
 
   reporter-build:
     strategy:
@@ -42,11 +48,14 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-    - name: Client (build)
+    - name: Reporter (build)
       run: cargo build
       working-directory: reporter
-    - name: Client (clippy)
+    - name: Reporter (clippy)
       run: cargo clippy
+      working-directory: reporter
+    - name: Reporter (fmt)
+      run: cargo fmt --check --all
       working-directory: reporter
 
   database-manager-build-linux:
@@ -54,11 +63,14 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-    - name: Client (build)
+    - name: Database Manager (build)
       run: cargo build
       working-directory: server/database_manager
-    - name: Client (clippy)
+    - name: Database Manager (clippy)
       run: cargo clippy
+      working-directory: server/database_manager
+    - name: Database Manager (fmt)
+      run: cargo fmt --check --all
       working-directory: server/database_manager
 
   database-manager-build-windows:
@@ -67,14 +79,16 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
     - name: Copy sqlite3 lib
-      run: |
-        cp ../sqlite3-windows/sqlite3.lib .
+      run: cp ../sqlite3-windows/sqlite3.lib .
       working-directory: server/database_manager
-    - name: Client (build)
+    - name: Database Manager (build)
       run: cargo build
       working-directory: server/database_manager
-    - name: Client (clippy)
+    - name: Database Manager (clippy)
       run: cargo clippy
+      working-directory: server/database_manager
+    - name: Database Manager (fmt)
+      run: cargo fmt --check --all
       working-directory: server/database_manager
 
   server-build-linux:
@@ -82,11 +96,14 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-    - name: Client (build)
+    - name: Server (build)
       run: cargo build
       working-directory: server/server
-    - name: Client (clippy)
+    - name: Server (clippy)
       run: cargo clippy
+      working-directory: server/server
+    - name: Server (fmt)
+      run: cargo fmt --check --all
       working-directory: server/server
 
   server-build-windows:
@@ -98,11 +115,14 @@ jobs:
       run: |
         cp ../sqlite3-windows/sqlite3.lib .
       working-directory: server/server
-    - name: Client (build)
+    - name: Server (build)
       run: cargo build
       working-directory: server/server
-    - name: Client (clippy)
+    - name: Server (clippy)
       run: cargo clippy
+      working-directory: server/server
+    - name: Server (fmt)
+      run: cargo fmt --check --all
       working-directory: server/server
 
   server-monitor-build:
@@ -113,9 +133,12 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-    - name: Client (build)
+    - name: Server Monitor (build)
       run: cargo build
       working-directory: server/server_monitor
-    - name: Client (clippy)
+    - name: Server Monitor (clippy)
       run: cargo clippy
+      working-directory: server/server_monitor
+    - name: Server Monitor (fmt)
+      run: cargo fmt --check --all
       working-directory: server/server_monitor

@@ -1,6 +1,6 @@
 // Std.
 use core::panic;
-use std::path::PathBuf;
+use std::{fs::create_dir_all, path::PathBuf};
 
 // External.
 use chrono::prelude::*;
@@ -1461,6 +1461,11 @@ impl DatabaseManager {
         #[cfg(any(windows, unix))]
         {
             let mut database_location = AppDirs::new(Some(DATABASE_DIR), true).unwrap().data_dir;
+            if !database_location.exists() {
+                if let Err(e) = create_dir_all(&database_location) {
+                    panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
+                }
+            }
             database_location.push(DATABASE_NAME);
             database_location
         }

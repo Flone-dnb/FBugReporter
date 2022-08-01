@@ -18,18 +18,23 @@ fn main() {
     let database_location = DatabaseManager::get_database_location();
 
     println!(
-        "Looking for database in '{}'...",
+        "INFO: Looking for database in '{}'...",
         database_location.to_string_lossy()
     );
 
     if !(database_location.exists() && database_location.is_file()) {
         println!(
-            "No database file found at '{}', make sure \
+            "ERROR: No database file found at '{}', make sure \
             the database is created (the server will create it once it's started \
             for the first time).",
             database_location.to_string_lossy()
         );
         return;
+    } else {
+        println!(
+            "INFO: Found database at '{}'",
+            database_location.to_string_lossy()
+        );
     }
 
     let database_manager = DatabaseManager::new().unwrap_or_else(|e| panic!("{e}"));

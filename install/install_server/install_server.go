@@ -382,10 +382,18 @@ func install_systemd_service(install_dir string, session *sh.Session) bool {
 		log.Fatalf(err.Error())
 	}
 
+	if currentUser.Name == "" {
+		log.Fatalf("can't get current user name")
+	}
+
 	var group *user.Group
 	group, err = user.LookupGroup(currentUser.Username)
 	if err != nil {
 		log.Fatalf(err.Error())
+	}
+
+	if group.Name == "" {
+		log.Fatalf("can't get current user group name")
 	}
 
 	var section *ini.Section
@@ -422,6 +430,10 @@ func install_systemd_service(install_dir string, session *sh.Session) bool {
 		return true
 	}
 
+	// Stop the old service (if running).
+	fmt.Println("Trying to stop old FBugReporter service (if running)...")
+	session.Command("sudo", "systemctl", "stop", "fbugreporter.service").Run()
+
 	err = session.Command("sudo", "mv", filepath.Join(install_dir, "fbugreporter.service"), "/etc/systemd/system").Run()
 	if err != nil {
 		fmt.Println(err)
@@ -445,6 +457,7 @@ func install_systemd_service(install_dir string, session *sh.Session) bool {
 		"It will autostart on boot.")
 	fmt.Println("Use \"systemctl status fbugreporter.service\" to view current status/logs.")
 	fmt.Println()
+	fmt.Println("Use \"sudo systemctl stop fbugreporter.service\" to stop the service.")
 	fmt.Println("Use \"sudo systemctl disable fbugreporter.service\" to disable autostart.")
 	fmt.Println("And \"sudo rm /etc/systemd/system/fbugreporter.service\" to remove it.")
 

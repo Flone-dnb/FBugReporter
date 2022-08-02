@@ -32,7 +32,7 @@ The usual workflow goes like this:
 
 - Start the `server_monitor.exe`, it will start the `server.exe` and will restart it if it crashed (thus we should start `server_monitor.exe` instead of explicitly starting the `server.exe`).
 - After `server_monitor.exe` was started, run `database_manager.exe` and type command `add-user *your name*` to add a new user (for example: `add-user john`), you will receive new user's password, copy it somewhere.
-- Run `client.exe` (`server_monitor.exe` needs to be running), in order to login you need to enter server's IP and port. For local usage put `localhost` as IP. For port look for `server_config.ini` (that will be generated once the `server_monitor.exe` is started), look at `port_for_clients` line that will contain the port you need to use. Now login using the specified earlier name and the password you received, after this you will change the password and setup OTP. After everything is done you will see received reports.
+- Run `client.exe` (`server_monitor.exe` needs to be running), in order to login you need to enter server's IP and port. For local usage put `localhost` as IP. For port look for `server_config.ini` (that will be generated once the `server_monitor.exe` is started) (it's located in `%APPDATA%\FBugReporter\` on Windows and in `$XDG_CONFIG_HOME/FBugReporter/` on Linux/BSD/MacOS), look at `port_for_clients` line that will contain the port you need to use. Now login using the specified earlier name and the password you received, after this you will change the password and setup OTP. After everything is done you will see received reports.
 - To generate new reports, open Godot project with FBugReporter integrated (build version from `releases` already has a project with FBugReporter integrated) and send a report (while `server_monitor.exe` is running). You can then see new reports in `client.exe` (if you don't see new reports, use `Refresh Report List` button).
 
 # Attachments
@@ -59,7 +59,7 @@ If you want to integrate FBugReporter into your Godot game, just clone/download 
 
 Once everything is done. Your project will have new files, our main interest is `reporter.gd` file, it uses premade `reporter.tscn` scene to send reports, you can customize everything as you want, you can even delete these files and start making all from scratch. But now let's focus on sending your first report.
 
-First up, start `server_monitor` that was installed using `install_server.go`, it will generate `server_config.ini` file. This file contains server configuration that can be customized. Note that in order for changed values to be applied `server_monitor` restart is required. Now, in `server_config.ini` look for the parameter `port_for_reporters`. You need to put this value into `reporter.gd` file. In your Godot project find `reporter.gd` and look for `_ready()` function inside of it. There will be a line that looks something like this: `reporter.set_server("localhost", 21580)`. Now change the second argument of `set_server` function to your `port_for_reporters` from `server_config.ini`. That's it! Start `server_monitor`, run generated `reporter.tscn` scene from your project and send your first report!
+First up, start `server_monitor` that was installed using `install_server.go`, it will generate `server_config.ini` file (it's located in `%APPDATA%\FBugReporter\` on Windows and in `$XDG_CONFIG_HOME/FBugReporter/` on Linux/BSD/MacOS). This file contains server configuration that can be customized. Note that in order for changed values to be applied `server_monitor` restart is required. Now, in `server_config.ini` look for the parameter `port_for_reporters`. You need to put this value into `reporter.gd` file. In your Godot project find `reporter.gd` and look for `_ready()` function inside of it. There will be a line that looks something like this: `reporter.set_server("localhost", 21580)`. Now change the second argument of `set_server` function to your `port_for_reporters` from `server_config.ini`. That's it! Start `server_monitor`, run generated `reporter.tscn` scene from your project and send your first report!
 
 In order to view reports you first need an account. Run `database_manager` that was installed using `install_server.go`. After `database_manager` is started, type command `add-user <your name>` (for example, `add-user john`). You will then be asked about new user's privileges and will receive new user's password, remember it. Exit from `database_manager` using `exit` command. Open up `client` application that was installed using `install_client.go`. We now need to enter server information. For `server` type `localhost`, for `port` type value `port_for_clients` from `server_config.ini` (not `port_for_reporters`!), for `username` type the username you used in `add-user` command, for `password` use password that you received in `database_manager`. Now try to login, you will go through the first login process and will setup your new password and OTP. After everything is done you will see reports that the server received from your game!
 
@@ -79,7 +79,7 @@ they will ask you to overwrite the files. Make sure to specify the same paramete
 # Information: Server
 
 ### Configuration
-On first start, the server will create a server configuration file `server_config.ini` next to the executable file.
+On first start, the server will create a server configuration file `server_config.ini` (it's located in `%APPDATA%\FBugReporter\` on Windows and in `$XDG_CONFIG_HOME/FBugReporter/` on Linux/BSD/MacOS).
 You can customize values in this config file. In order for them to be applied, restart the server.
 
 The server processes reporters and clients on different ports (see your generated `server_config.ini`).
@@ -94,7 +94,7 @@ The server will store logs in the `server_logs` directory (located in `Documents
 When you will login for the first time, the server will request you to scan a QR code with OTP. You have to use an app to scan a QR code for OTPs, for example, Google Authenticator and FreeOTP were confirmed to work correctly with FBugReporter.
 
 ### Theme Customization
-On the first start, the client will create a theme file `theme.ini` (it's located in `%LOCALAPPDATA%\FBugReporter\` on Windows and in `$XDG_CONFIG_HOME/FBugReporter/` on Linux/BSD/MacOS). You can customize values in this theme file. In order for them to be applied, restart the client.
+On the first start, the client will create a theme file `theme.ini` (it's located in `%APPDATA%\FBugReporter\` on Windows and in `$XDG_CONFIG_HOME/FBugReporter/` on Linux/BSD/MacOS). You can customize values in this theme file. In order for them to be applied, restart the client.
 
 # Build (Manual Installation)
 

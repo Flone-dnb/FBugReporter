@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -375,7 +377,19 @@ func copy(src string, dst string) bool {
 func install_systemd_service(install_dir string, session *sh.Session) bool {
 	var cfg = ini.Empty()
 
-	var section, err = cfg.NewSection("Unit")
+	var currentUser, err = user.Current()
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+
+	var group *user.Group
+	group, err = user.LookupGroup(currentUser.Username)
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+
+	var section *ini.Section
+	section, err = cfg.NewSection("Unit")
 	if err != nil {
 		fmt.Println(err)
 		return true
@@ -391,6 +405,8 @@ func install_systemd_service(install_dir string, session *sh.Session) bool {
 
 	section.NewKey("WorkingDirectory", install_dir)
 	section.NewKey("ExecStart", filepath.Join(install_dir, "server_monitor"))
+	section.NewKey("User", currentUser.Name)
+	section.NewKey("Group", group.Name)
 
 	section, err = cfg.NewSection("Install")
 	if err != nil {
@@ -418,10 +434,16 @@ func install_systemd_service(install_dir string, session *sh.Session) bool {
 		return true
 	}
 
+	err = session.Command("sudo", "systemctl", "start", "fbugreporter.service").Run()
+	if err != nil {
+		fmt.Println(err)
+		return true
+	}
+
 	fmt.Println()
-	fmt.Println("The 'server_monitor' was added as a service. It will autostart on boot.")
-	fmt.Println("Use \"sudo systemctl start fbugreporter.service\" to start it right now.")
-	fmt.Println("Use \"sudo systemctl status fbugreporter.service\" to view current status/logs.")
+	fmt.Println("The 'server_monitor' was started and added as a service. " +
+		"It will autostart on boot.")
+	fmt.Println("Use \"systemctl status fbugreporter.service\" to view current status/logs.")
 	fmt.Println()
 	fmt.Println("Use \"sudo systemctl disable fbugreporter.service\" to disable autostart.")
 	fmt.Println("And \"sudo rm /etc/systemd/system/fbugreporter.service\" to remove it.")

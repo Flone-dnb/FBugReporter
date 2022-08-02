@@ -5,9 +5,11 @@ use std::path::{Path, PathBuf};
 
 // External.
 use chrono::Local;
+use platform_dirs::UserDirs;
 
 pub const LOG_FILE_NAME: &str = "server.log";
-const LOG_DIR: &str = "logs";
+const LOG_DIR_PREFIX: &str = "FBugReporter";
+const LOG_DIR: &str = "server_logs";
 const MAX_LOG_FILE_COUNT: usize = 10;
 
 pub enum LogCategory {
@@ -17,7 +19,7 @@ pub enum LogCategory {
 }
 
 pub struct LogManager {
-    current_log_file: String,
+    current_log_file: PathBuf,
 }
 
 impl LogManager {
@@ -59,37 +61,32 @@ impl LogManager {
     }
     /// Removes log file (if exists) and creates a new one.
     /// Returns path to the new log file.
-    fn recreate_log_file() -> String {
-        let mut log_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
+    fn recreate_log_file() -> PathBuf {
+        let mut log_path;
 
-        // Check ending.
-        #[cfg(target_os = "linux")]
+        #[cfg(any(unix, windows))]
         {
-            if !log_path.ends_with('/') {
-                log_path += "/";
-            }
-        }
-        #[cfg(target_os = "windows")]
-        {
-            if !log_path.ends_with('\\') {
-                log_path += "\\";
-            }
-        }
+            let user_dirs = UserDirs::new().unwrap_or_else(|| {
+                panic!(
+                    "An error occurred at [{}, {}]: can't read user dirs.",
+                    file!(),
+                    line!(),
+                )
+            });
 
-        log_path += LOG_DIR;
-
-        // Ending.
-        #[cfg(target_os = "linux")]
-        {
-            log_path += "/";
-        }
-        #[cfg(target_os = "windows")]
-        {
-            log_path += "\\";
+            log_path = user_dirs.document_dir;
         }
 
-        if !Path::new(&log_path).exists() {
-            if let Err(e) = create_dir(&log_path) {
+        #[cfg(not(any(unix, windows)))]
+        {
+            compile_error!("Server is not implemented for this OS.");
+        }
+
+        log_path.push(LOG_DIR_PREFIX);
+        log_path.push(LOG_DIR);
+
+        if !log_path.exists() {
+            if let Err(e) = create_dir_all(&log_path) {
                 panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
             }
         } else {
@@ -100,10 +97,10 @@ impl LogManager {
 
         let filename = format!("{}_{}", local.format("%Y-%m-%d_%H-%M-%S"), LOG_FILE_NAME);
 
-        log_path += &filename;
+        log_path.push(&filename);
 
         // Remove log file if exists.
-        if Path::new(&log_path).exists() {
+        if log_path.exists() {
             if let Err(e) = remove_file(&log_path) {
                 panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
             }
@@ -118,7 +115,7 @@ impl LogManager {
         log_path
     }
     /// Removes the oldest log file if there are `MAX_LOG_FILE_COUNT` log files or more.
-    fn remove_oldest_log_if_needed(log_path: &str) {
+    fn remove_oldest_log_if_needed(log_path: &Path) {
         let paths = std::fs::read_dir(log_path);
         if let Err(ref e) = paths {
             println!("ERROR: {} at [{}, {}]", e, file!(), line!());

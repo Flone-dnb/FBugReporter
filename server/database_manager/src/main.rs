@@ -2,37 +2,11 @@
 
 // Std.
 use std::env;
-use std::fs;
 use std::io;
 use std::io::*;
 
 // Custom.
 use shared::misc::db_manager::*;
-
-/// Looks if there is a database file in the current directory.
-/// Returns `true` if a database was found, `false` if not.
-fn find_database() -> bool {
-    let paths = fs::read_dir(".");
-    if let Err(e) = paths {
-        panic!("{}", e);
-    }
-    let paths = paths.unwrap();
-
-    for path in paths {
-        if let Err(e) = path {
-            panic!("{}", e);
-        }
-        let path = path.unwrap();
-
-        if path.file_type().unwrap().is_file()
-            && path.file_name().to_str().unwrap() == DATABASE_NAME
-        {
-            return true;
-        }
-    }
-
-    false
-}
 
 fn main() {
     println!(
@@ -41,21 +15,29 @@ fn main() {
     );
     println!("Type 'help' to see commands...\n");
 
-    if !find_database() {
+    let database_location = DatabaseManager::get_database_location();
+
+    println!(
+        "INFO: Looking for database in '{}'...",
+        database_location.to_string_lossy()
+    );
+
+    if !(database_location.exists() && database_location.is_file()) {
         println!(
-            "No '{}' file was found in the current directory, make sure \
+            "ERROR: No database file found at '{}', make sure \
             the database is created (the server will create it once it's started \
             for the first time).",
-            DATABASE_NAME
+            database_location.to_string_lossy()
         );
         return;
+    } else {
+        println!(
+            "INFO: Found database at '{}'",
+            database_location.to_string_lossy()
+        );
     }
 
-    let database_manager = DatabaseManager::new();
-    if let Err(app_error) = database_manager {
-        panic!("{}", app_error);
-    }
-    let database_manager = database_manager.unwrap();
+    let database_manager = DatabaseManager::new().unwrap_or_else(|e| panic!("{e}"));
 
     loop {
         if let Err(e) = io::stdout().flush() {

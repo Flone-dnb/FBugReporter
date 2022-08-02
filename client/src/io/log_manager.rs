@@ -1,19 +1,17 @@
 // Std.
 use std::fs::{File, *};
 use std::io::prelude::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 // External.
 use chrono::Local;
-#[cfg(target_os = "windows")]
 use platform_dirs::UserDirs;
 
 const LOG_FILE_NAME: &str = "client.log";
-#[cfg(target_os = "windows")]
 const LOG_FILE_DIR: &str = "FBugReporter";
 
 pub struct LogManager {
-    log_file_path: String,
+    log_file_path: PathBuf,
 }
 
 impl LogManager {
@@ -21,52 +19,32 @@ impl LogManager {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn get_log_file_path() -> String {
-        #[cfg(target_os = "linux")]
+    pub fn get_log_file_path() -> PathBuf {
+        #[cfg(any(windows, unix))]
         {
-            let mut log_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
-
-            // Check ending.
-            if !log_path.ends_with('/') {
-                log_path += "/";
-            }
-
-            log_path + LOG_FILE_NAME
-        }
-        #[cfg(target_os = "windows")]
-        {
-            let user_dirs = UserDirs::new();
-            if user_dirs.is_none() {
+            let user_dirs = UserDirs::new().unwrap_or_else(|| {
                 panic!(
                     "An error occurred at [{}, {}]: can't read user dirs.",
                     file!(),
                     line!(),
-                );
-            }
-            let user_dirs = user_dirs.unwrap();
+                )
+            });
 
-            // Get Documents folder.
-            let mut log_path = String::from(user_dirs.document_dir.to_str().unwrap());
+            let mut log_path = user_dirs.document_dir;
 
-            // Check ending.
-            if !log_path.ends_with('\\') {
-                log_path += "\\";
-            }
-
-            log_path += LOG_FILE_DIR;
-            log_path += "\\";
+            log_path.push(LOG_FILE_DIR);
 
             // Create directory if not exists.
-            if !Path::new(&log_path).exists() {
-                if let Err(e) = create_dir(&log_path) {
+            if !log_path.exists() {
+                if let Err(e) = create_dir_all(&log_path) {
                     panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
                 }
             }
 
-            log_path += LOG_FILE_NAME;
+            log_path.push(LOG_FILE_NAME);
             log_path
         }
-        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+        #[cfg(not(any(windows, unix)))]
         {
             compile_error!("Reporter is not implemented for this OS.");
         }
@@ -92,7 +70,7 @@ impl LogManager {
         log_file.unwrap()
     }
     /// Returns new log file path.
-    fn recreate_log_file() -> String {
+    fn recreate_log_file() -> PathBuf {
         let log_path = LogManager::get_log_file_path();
 
         // Remove log file if exists.

@@ -1,16 +1,12 @@
 // Std.
-#[cfg(target_os = "windows")]
-use std::fs::create_dir;
-#[cfg(target_os = "windows")]
-use std::path::Path;
+use std::fs::create_dir_all;
+use std::path::PathBuf;
 
 // External.
 use configparser::ini::Ini;
-#[cfg(target_os = "windows")]
-use platform_dirs::UserDirs;
+use platform_dirs::AppDirs;
 
 const CONFIG_FILE_NAME: &str = "client_config.ini";
-#[cfg(target_os = "windows")]
 const CONFIG_FILE_DIR: &str = "FBugReporter";
 
 const CONFIG_SECTION_NAME: &str = "client";
@@ -57,58 +53,37 @@ impl ConfigManager {
         if let Err(e) = config_file.write(&config_path) {
             println!(
                 "WARNING: failed to save configuration to the file \"{}\" (error: {}).",
-                &config_path, e
+                &config_path.to_string_lossy(),
+                e
             );
         }
     }
-    pub fn get_config_file_path() -> String {
-        #[cfg(target_os = "linux")]
+    pub fn get_config_file_path() -> PathBuf {
+        #[cfg(any(windows, unix))]
         {
-            let mut config_path = String::from(std::env::current_dir().unwrap().to_str().unwrap());
-
-            // Check ending.
-            if !config_path.ends_with('/') {
-                config_path += "/";
-            }
-
-            config_path + CONFIG_FILE_NAME
-        }
-        #[cfg(target_os = "windows")]
-        {
-            let user_dirs = UserDirs::new();
-            if user_dirs.is_none() {
+            let app_dirs = AppDirs::new(Some(CONFIG_FILE_DIR), true).unwrap_or_else(|| {
                 panic!(
                     "An error occurred at [{}, {}]: can't read user dirs.",
                     file!(),
                     line!(),
-                );
-            }
-            let user_dirs = user_dirs.unwrap();
+                )
+            });
 
-            // Get Documents folder.
-            let mut config_path = String::from(user_dirs.document_dir.to_str().unwrap());
-
-            // Check ending.
-            if !config_path.ends_with('\\') {
-                config_path += "\\";
-            }
-
-            config_path += CONFIG_FILE_DIR;
-            config_path += "\\";
+            let mut config_path = app_dirs.config_dir;
 
             // Create directory if not exists.
-            if !Path::new(&config_path).exists() {
-                if let Err(e) = create_dir(&config_path) {
+            if !config_path.exists() {
+                if let Err(e) = create_dir_all(&config_path) {
                     panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
                 }
             }
 
-            config_path += CONFIG_FILE_NAME;
+            config_path.push(CONFIG_FILE_NAME);
             config_path
         }
-        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+        #[cfg(not(any(windows, unix)))]
         {
-            compile_error!("Client is not implemented for this OS.");
+            compile_error!("Reporter is not implemented for this OS.");
         }
     }
     fn read_config_file(&mut self, config: &Ini) {

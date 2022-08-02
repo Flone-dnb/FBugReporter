@@ -1,8 +1,10 @@
 // Std.
 use core::panic;
+use std::{fs::create_dir_all, path::PathBuf};
 
 // External.
 use chrono::prelude::*;
+use platform_dirs::AppDirs;
 use rand::Rng;
 use rusqlite::{params, Connection, Result};
 use sha2::{Digest, Sha512};
@@ -12,6 +14,7 @@ use sysinfo::{DiskExt, System, SystemExt};
 use super::report::*;
 use crate::misc::error::AppError;
 
+pub const DATABASE_DIR: &str = "FBugReporter";
 pub const DATABASE_NAME: &str = "database.db3";
 
 const REPORT_TABLE_NAME: &str = "report";
@@ -79,42 +82,26 @@ impl DatabaseManager {
             )
         }
 
-        let result = Connection::open(DATABASE_NAME);
-        if let Err(e) = result {
-            return Err(AppError::new(&e.to_string()));
-        }
-
-        let mut connection = result.unwrap();
+        let mut connection = Connection::open(&Self::get_database_location())
+            .map_err(|e| AppError::new(&e.to_string()))?;
 
         // Enable foreign keys.
-        if let Some(app_error) = Self::enable_foreign_keys(&mut connection) {
-            return Err(app_error);
-        }
+        Self::enable_foreign_keys(&mut connection)?;
 
         // Check 'version' table.
-        if let Err(app_error) = Self::create_version_table_if_not_found(&mut connection) {
-            return Err(app_error);
-        }
+        Self::create_version_table_if_not_found(&mut connection)?;
 
         // Check 'report' table.
-        if let Err(app_error) = Self::create_report_table_if_not_found(&mut connection) {
-            return Err(app_error);
-        }
+        Self::create_report_table_if_not_found(&mut connection)?;
 
         // Check 'user' table.
-        if let Err(app_error) = Self::create_user_table_if_not_found(&mut connection) {
-            return Err(app_error);
-        }
+        Self::create_user_table_if_not_found(&mut connection)?;
 
         // Check 'attachment' table.
-        if let Err(app_error) = Self::create_attachment_table_if_not_found(&mut connection) {
-            return Err(app_error);
-        }
+        Self::create_attachment_table_if_not_found(&mut connection)?;
 
         // Handle old database version.
-        if let Err(app_error) = Self::handle_old_database_version(&mut connection) {
-            return Err(app_error);
-        }
+        Self::handle_old_database_version(&mut connection)?;
 
         Ok(Self {
             connection,
@@ -1143,13 +1130,13 @@ impl DatabaseManager {
     }
     /// Enabling foreign keys protects us from violating foreign key constraints
     /// and also enables ON DELETE CASCADE logic.
-    fn enable_foreign_keys(connection: &mut Connection) -> Option<AppError> {
+    fn enable_foreign_keys(connection: &mut Connection) -> Result<(), AppError> {
         let result = connection.execute("PRAGMA foreign_keys=on;", []);
         if let Err(e) = result {
-            return Some(AppError::new(&e.to_string()));
+            return Err(AppError::new(&e.to_string()));
         }
 
-        None
+        Ok(())
     }
     /// Creates the `report` table if it was not found in the database.
     fn create_report_table_if_not_found(connection: &mut Connection) -> Result<(), AppError> {
@@ -1468,5 +1455,23 @@ impl DatabaseManager {
         }
 
         Ok(())
+    }
+
+    pub fn get_database_location() -> PathBuf {
+        #[cfg(any(windows, unix))]
+        {
+            let mut database_location = AppDirs::new(Some(DATABASE_DIR), true).unwrap().data_dir;
+            if !database_location.exists() {
+                if let Err(e) = create_dir_all(&database_location) {
+                    panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
+                }
+            }
+            database_location.push(DATABASE_NAME);
+            database_location
+        }
+        #[cfg(not(any(windows, unix)))]
+        {
+            compile_error!("DatabaseManager is not implemented for this OS.");
+        }
     }
 }

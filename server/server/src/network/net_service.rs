@@ -32,6 +32,12 @@ impl NetService {
     pub fn new(logger: LogManager) -> Result<Self, AppError> {
         let config = Arc::new(ConfigManager::new());
 
+        if config.port_for_clients == config.port_for_reporters {
+            return Err(AppError::new(
+                "client and reporter ports should not be equal",
+            ));
+        }
+
         let db = DatabaseManager::new();
         if let Err(app_error) = db {
             return Err(app_error);

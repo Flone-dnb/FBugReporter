@@ -86,7 +86,7 @@ The server processes reporters and clients on different ports (see your generate
 
 ### Logs
 
-The server will store logs in the `logs` directory. This directory is localed in the directory where `server.exe` is located.
+The server will store logs in the `server_logs` directory (located in `Documents/FBugReporter` directory). This directory is localed in the directory where `server.exe` is located.
 
 # Information: Client
 

@@ -1,12 +1,18 @@
+// Std.
+use std::fs::create_dir_all;
+use std::path::PathBuf;
+
 // External.
 use configparser::ini::Ini;
 use druid::widget::prelude::*;
 use druid::{Color, Lens};
+use platform_dirs::AppDirs;
 
 // Custom.
 use shared::misc::error::AppError;
 
-const CONFIG_THEME_FILE_NAME: &str = "theme.ini";
+const CONFIG_THEME_DIR_NAME: &str = "FBugReporter";
+const CONFIG_THEME_FILE_NAME: &str = "client_theme.ini";
 const CONFIG_THEME_SECTION_NAME: &str = "theme";
 const CONFIG_THEME_BACKGROUND_COLOR_PARAM: &str = "background_color";
 const CONFIG_THEME_PLACEHOLDER_COLOR_PARAM: &str = "placeholder_color";
@@ -37,12 +43,14 @@ impl ApplicationTheme {
 
         // Try reading theme from .ini file.
         let mut config = Ini::new();
-        let map = config.load("theme.ini");
+        let theme_config_path = Self::get_theme_config_file_path();
+        let map = config.load(&theme_config_path);
         if map.is_err() {
             println!(
                 "INFO: could not open the theme file \"{0}\", using default values \
-                and creating a new \"{0}\" theme file.",
-                CONFIG_THEME_FILE_NAME
+                and creating a new \"{0}\" theme file at \"{1}\".",
+                CONFIG_THEME_FILE_NAME,
+                theme_config_path.to_string_lossy()
             );
             // No file found, create a new file.
             if let Err(e) = theme.save_theme() {
@@ -176,11 +184,39 @@ impl ApplicationTheme {
             Some(&self.border_radius.to_string()),
         );
 
-        if let Err(e) = config.write(CONFIG_THEME_FILE_NAME) {
+        if let Err(e) = config.write(Self::get_theme_config_file_path()) {
             return Err(AppError::new(&e.to_string()));
         }
 
         Ok(())
+    }
+    pub fn get_theme_config_file_path() -> PathBuf {
+        #[cfg(any(windows, unix))]
+        {
+            let app_dirs = AppDirs::new(Some(CONFIG_THEME_DIR_NAME), true).unwrap_or_else(|| {
+                panic!(
+                    "An error occurred at [{}, {}]: can't read user dirs.",
+                    file!(),
+                    line!(),
+                )
+            });
+
+            let mut config_path = app_dirs.config_dir;
+
+            // Create directory if not exists.
+            if !config_path.exists() {
+                if let Err(e) = create_dir_all(&config_path) {
+                    panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
+                }
+            }
+
+            config_path.push(CONFIG_THEME_FILE_NAME);
+            config_path
+        }
+        #[cfg(not(any(windows, unix)))]
+        {
+            compile_error!("Client is not implemented for this OS.");
+        }
     }
 }
 

@@ -1,17 +1,21 @@
+use std::fs::create_dir_all;
 // Std.
 use std::net::IpAddr;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 // External.
 use chrono::{DateTime, Local};
 use configparser::ini::Ini;
+use platform_dirs::AppDirs;
 
 // Custom.
 use crate::io::{config_manager::ConfigManager, log_manager::*};
 
-const BAN_FILE_NAME: &str = "banned_ips.ini";
+const BAN_FILE_NAME: &str = "server_banned_ips.ini";
 const BAN_SECTION_NAME: &str = "ban";
+const BAN_DIR_NAME: &str = "FBugReporter";
 
 pub enum AttemptResult {
     Fail { attempts_made: u32 },
@@ -214,7 +218,7 @@ impl BanManager {
                     self.logger.lock().unwrap().print_and_log(
                         LogCategory::Info,
                         &format!(
-                            "Banned IP address ({}) attempted to connect. \
+                            "banned IP address ({}) attempted to connect. \
                             Connection was rejected.",
                             ip
                         ),
@@ -261,7 +265,7 @@ impl BanManager {
     /// Returns the number of IP addresses added.
     fn load_banned_ips(&mut self) -> usize {
         let mut config = Ini::new();
-        let map = config.load(BAN_FILE_NAME);
+        let map = config.load(Self::get_ban_file_path());
         if map.is_err() {
             return 0;
         }
@@ -322,14 +326,14 @@ impl BanManager {
     /// Saves the banned IP address to the disk.
     fn store_banned_ip(ip: &BannedIP, logger: &Arc<Mutex<LogManager>>) {
         let mut config = Ini::new();
-        let _map = config.load(BAN_FILE_NAME);
+        let _map = config.load(Self::get_ban_file_path());
 
         config.set(
             BAN_SECTION_NAME,
             &ip.ip.to_string(),
             Some(ip.ban_start_time.to_string()),
         );
-        if let Err(e) = config.write(BAN_FILE_NAME) {
+        if let Err(e) = config.write(Self::get_ban_file_path()) {
             logger.lock().unwrap().print_and_log(
                 LogCategory::Error,
                 &format!(
@@ -343,7 +347,7 @@ impl BanManager {
     /// Removes the banned IP from the .ini file.
     fn remove_banned_ip_from_disk(ip: &BannedIP, logger: &Arc<Mutex<LogManager>>) {
         let mut config = Ini::new();
-        let map = config.load(BAN_FILE_NAME);
+        let map = config.load(Self::get_ban_file_path());
         if map.is_err() {
             logger.lock().unwrap().print_and_log(
                 LogCategory::Warning,
@@ -368,7 +372,7 @@ impl BanManager {
             return;
         }
 
-        if let Err(e) = config.write(BAN_FILE_NAME) {
+        if let Err(e) = config.write(Self::get_ban_file_path()) {
             logger.lock().unwrap().print_and_log(
                 LogCategory::Error,
                 &format!(
@@ -378,6 +382,35 @@ impl BanManager {
                     e
                 ),
             );
+        }
+    }
+    /// Returns path used to store ban file.
+    fn get_ban_file_path() -> PathBuf {
+        #[cfg(any(windows, unix))]
+        {
+            let app_dirs = AppDirs::new(Some(BAN_DIR_NAME), true).unwrap_or_else(|| {
+                panic!(
+                    "An error occurred at [{}, {}]: can't read user dirs.",
+                    file!(),
+                    line!(),
+                )
+            });
+
+            let mut config_path = app_dirs.config_dir;
+
+            // Create directory if not exists.
+            if !config_path.exists() {
+                if let Err(e) = create_dir_all(&config_path) {
+                    panic!("An error occurred at [{}, {}]: {:?}", file!(), line!(), e);
+                }
+            }
+
+            config_path.push(BAN_FILE_NAME);
+            config_path
+        }
+        #[cfg(not(any(windows, unix)))]
+        {
+            compile_error!("Reporter is not implemented for this OS.");
         }
     }
 }

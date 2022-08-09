@@ -9,7 +9,7 @@ license = "MIT"
 rand = "0.8.5"
 serde = {version = "1.0.137", features = ["derive"]}
 bincode = "1.3.3"
-chrono = "0.4.20"
+chrono = "0.4.21"
 sha2 = "0.10.2"
 configparser = "3.0.0"
 totp-rs = {version = "2.0.0", features = ["qr"]}

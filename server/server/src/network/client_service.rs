@@ -849,7 +849,7 @@ impl ClientService {
             }
         }
 
-        return Ok(format!("wrong credentials (login username: {})", username));
+        Ok(format!("wrong credentials (login username: {})", username))
     }
     /// Waits for new requests from the client.
     ///

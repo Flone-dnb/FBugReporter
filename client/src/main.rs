@@ -33,7 +33,7 @@ mod misc;
 mod network;
 mod widgets;
 
-#[derive(Clone, Copy, Data, PartialEq)]
+#[derive(Clone, Copy, Data, PartialEq, Eq)]
 pub enum Layout {
     Connect,
     Settings,

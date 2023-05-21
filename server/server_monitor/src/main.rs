@@ -48,7 +48,7 @@ fn main() {
 
     loop {
         let mut process = match Command::new(path.clone())
-            .args(&["--start", "--under-monitor"])
+            .args(["--start", "--under-monitor"])
             .spawn()
         {
             Ok(process) => process,

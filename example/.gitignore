@@ -1,2 +1,4 @@
-reporter.log
-bin/*
+# Godot 4+ specific ignores
+.godot/*
+
+!.godot/extension_list.cfg

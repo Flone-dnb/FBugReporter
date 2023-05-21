@@ -1,7 +1,7 @@
 #![deny(warnings)]
 
 // Std.
-use backtrace::Backtrace;
+use godot::engine::Image;
 use std::fs::metadata;
 use std::io::Read;
 use std::path::Path;
@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::{env, fs::File};
 
 // External.
-use gdnative::prelude::*;
+use godot::prelude::*;
 use image::{ImageBuffer, RgbaImage};
 
 // Custom.
@@ -19,9 +19,14 @@ use log_manager::*;
 use reporter_service::*;
 use shared::misc::{error::AppError, report::*};
 
-#[derive(NativeClass, Default)]
-#[inherit(Node)]
-struct Reporter {
+struct FBugReporterExtension;
+
+#[gdextension]
+unsafe impl ExtensionLibrary for FBugReporterExtension {}
+
+#[derive(GodotClass)]
+#[class(base=Node)]
+struct FBugReporter {
     report_name: String,
     report_text: String,
     sender_name: String,
@@ -33,74 +38,77 @@ struct Reporter {
     screenshot_path: Option<String>,
     last_report: Option<GameReport>,
     last_error: String,
+
+    #[base]
+    base: Base<Node>,
 }
 
-#[methods]
-impl Reporter {
-    fn new(_owner: &Node) -> Self {
-        Self::default()
+#[godot_api]
+impl NodeVirtual for FBugReporter {
+    fn init(base: Base<Node>) -> Self {
+        Self {
+            report_name: String::new(),
+            report_text: String::new(),
+            sender_name: String::new(),
+            sender_email: String::new(),
+            game_name: String::new(),
+            game_version: String::new(),
+            attachments: Vec::new(),
+            server_addr: None,
+            screenshot_path: None,
+            last_report: None,
+            last_error: String::new(),
+            base,
+        }
+    }
+}
+
+#[godot_api]
+impl FBugReporter {
+    #[func]
+    fn initialize(
+        &mut self,
+        game_name: GodotString,
+        game_version: GodotString,
+        server: GodotString,
+        port: u16,
+    ) {
+        self.game_name = game_name.into();
+        self.game_version = game_version.into();
+        self.server_addr = Some(format!("{}:{}", Into::<String>::into(server), port));
     }
 
-    #[export]
-    fn _ready(&self, _owner: &Node) {}
-
-    #[export]
-    fn set_report_name(&mut self, _owner: &Node, report_name: String) {
-        self.report_name = report_name;
+    #[func]
+    fn set_report_name(&mut self, report_name: GodotString) {
+        self.report_name = report_name.into();
     }
 
-    #[export]
-    fn set_report_text(&mut self, _owner: &Node, report_text: String) {
-        self.report_text = report_text;
+    #[func]
+    fn set_report_text(&mut self, report_text: GodotString) {
+        self.report_text = report_text.into();
     }
 
-    #[export]
-    fn set_sender_name(&mut self, _owner: &Node, sender_name: String) {
-        self.sender_name = sender_name;
+    #[func]
+    fn set_sender_name(&mut self, sender_name: GodotString) {
+        self.sender_name = sender_name.into();
     }
 
-    #[export]
-    fn set_sender_email(&mut self, _owner: &Node, sender_email: String) {
-        self.sender_email = sender_email;
+    #[func]
+    fn set_sender_email(&mut self, sender_email: GodotString) {
+        self.sender_email = sender_email.into();
     }
 
-    #[export]
-    fn set_game_name(&mut self, _owner: &Node, game_name: String) {
-        self.game_name = game_name;
+    #[func]
+    fn set_report_attachments(&mut self, attachments: Array<GodotString>) {
+        self.attachments.clear();
+
+        for path in attachments.iter_shared() {
+            self.attachments.push(path.into());
+        }
     }
 
-    #[export]
-    fn set_game_version(&mut self, _owner: &Node, game_version: String) {
-        self.game_version = game_version;
-    }
-
-    #[export]
-    fn set_report_attachments(&mut self, _owner: &Node, attachments: Vec<String>) {
-        self.attachments = attachments;
-    }
-
-    #[export]
-    fn set_clear_screenshot(&mut self, _owner: &Node) {
-        self.screenshot_path = None;
-    }
-
-    #[export]
-    fn get_log_file_path(&self, _owner: &Node) -> String {
-        LogManager::get_log_file_path().to_str().unwrap().to_owned()
-    }
-
-    #[export]
-    fn get_last_error(&mut self, _owner: &Node) -> String {
-        self.last_error.clone()
-    }
-
-    #[export]
-    fn set_server(&mut self, _owner: &Node, server: String, port: u16) {
-        self.server_addr = Some(format!("{}:{}", server, port));
-    }
-
-    #[export]
-    fn set_screenshot(&mut self, _owner: &Node, viewport_image: Ref<Image>) {
+    #[func]
+    fn set_screenshot(&mut self, viewport_image: Gd<Image>) {
         // Prepare screenshot path.
         let mut screenshot_path_buf = env::temp_dir();
         screenshot_path_buf.push("FBugReporter");
@@ -113,16 +121,12 @@ impl Reporter {
 
         screenshot_path_buf.push("screenshot.jpg");
 
-        // Prepare image.
-        let viewport_image: TRef<Image> = unsafe { viewport_image.assume_safe() };
-
         let mut img: RgbaImage = ImageBuffer::new(
             viewport_image.get_width() as u32,
             viewport_image.get_height() as u32,
         );
 
         // Write pixels from viewport image.
-        viewport_image.lock();
         for row in 0..viewport_image.get_height() {
             for column in 0..viewport_image.get_width() {
                 let color: Color = viewport_image.get_pixel(column, row);
@@ -136,7 +140,6 @@ impl Reporter {
                 img.put_pixel(column as u32, row as u32, new_pixel);
             }
         }
-        viewport_image.unlock();
 
         // Save image.
         if let Err(e) = img.save(screenshot_path_buf.as_path()) {
@@ -157,96 +160,13 @@ impl Reporter {
         }
     }
 
-    #[export]
-    fn get_last_modified_files(
-        &self,
-        _owner: &Node,
-        path: String,
-        file_count: usize,
-    ) -> Vec<String> {
-        let paths = std::fs::read_dir(path);
-        if let Err(ref e) = paths {
-            godot_warn!("{}", AppError::new(&e.to_string()));
-            return Vec::new();
-        }
-        let paths = paths.unwrap();
-
-        let mut files: Vec<(PathBuf, u64)> = Vec::new();
-
-        // Read files modification date.
-        for path in paths {
-            if let Err(ref e) = path {
-                godot_warn!("{}", AppError::new(&e.to_string()));
-                continue;
-            }
-            let path = path.unwrap();
-
-            if path.file_type().unwrap().is_file() {
-                let metadata = metadata(path.path());
-                if let Err(ref e) = metadata {
-                    godot_warn!("{}", AppError::new(&e.to_string()));
-                    continue;
-                }
-                let metadata = metadata.unwrap();
-
-                let last_modified = metadata.modified();
-                if let Err(e) = last_modified {
-                    godot_warn!("{}", AppError::new(&e.to_string()));
-                    continue;
-                }
-
-                let elapsed_seconds = last_modified.unwrap().elapsed();
-                if let Err(e) = elapsed_seconds {
-                    godot_warn!("{}", AppError::new(&e.to_string()));
-                    continue;
-                }
-
-                files.push((path.path(), elapsed_seconds.unwrap().as_secs()));
-            }
-        }
-
-        files.sort_by(|a, b| a.1.cmp(&b.1));
-
-        let mut out_paths: Vec<String> = Vec::new();
-        for file in files {
-            let path = file.0.as_path().to_str();
-            match path {
-                Some(path) => {
-                    out_paths.push(String::from(path));
-                    if out_paths.len() == file_count {
-                        break;
-                    }
-                }
-                None => {
-                    godot_warn!("{}", AppError::new("unable to convert path to string"));
-                }
-            }
-        }
-
-        out_paths
+    #[func]
+    fn set_clear_screenshot(&mut self) {
+        self.screenshot_path = None;
     }
 
-    #[export]
-    fn get_field_limit(&mut self, _owner: &Node, field_id: u64) -> i32 {
-        if ReportLimits::ReportName.id() == field_id {
-            ReportLimits::ReportName.max_length() as i32
-        } else if ReportLimits::ReportText.id() == field_id {
-            ReportLimits::ReportText.max_length() as i32
-        } else if ReportLimits::SenderName.id() == field_id {
-            ReportLimits::SenderName.max_length() as i32
-        } else if ReportLimits::SenderEMail.id() == field_id {
-            ReportLimits::SenderEMail.max_length() as i32
-        } else if ReportLimits::GameName.id() == field_id {
-            ReportLimits::GameName.max_length() as i32
-        } else if ReportLimits::GameVersion.id() == field_id {
-            ReportLimits::GameVersion.max_length() as i32
-        } else {
-            0
-        }
-    }
-
-    #[export]
-    fn send_report(&mut self, _owner: &Node) -> i32 {
+    #[func]
+    fn send_report(&mut self) -> i32 {
         if self.server_addr.is_none() {
             return ReportResult::ServerNotSet.value();
         }
@@ -265,7 +185,7 @@ impl Reporter {
         // Check input length.
         let invalid_field = self.is_input_valid(&report);
         if let Some(report_limit_error) = invalid_field {
-            self.last_error = report_limit_error.id().to_string();
+            self.last_error = report_limit_error.to_string();
             return ReportResult::InvalidInput.value();
         }
 
@@ -284,12 +204,7 @@ impl Reporter {
                     "{}",
                     AppError::new("previously saved screenshot no longer exists")
                 );
-            } else if self
-                .attachments
-                .iter()
-                .find(|&path| path == screenshot_path)
-                == None
-            {
+            } else if !self.attachments.iter().any(|path| path == screenshot_path) {
                 self.attachments.push(screenshot_path.clone());
             }
         } else {
@@ -379,9 +294,148 @@ impl Reporter {
         result_code.value()
     }
 
-    /// Generates ReportAttachment from file paths.
-    ///
-    /// Expects file path to exist.
+    #[func]
+    fn get_log_file_path(&self) -> GodotString {
+        LogManager::get_log_file_path()
+            .to_str()
+            .unwrap()
+            .to_owned()
+            .into()
+    }
+
+    #[func]
+    fn get_last_error(&self) -> GodotString {
+        self.last_error.clone().into()
+    }
+
+    /// Returns the maximum allowed length of a report field.
+    #[func]
+    fn get_field_limit(&self, field_name: GodotString) -> i32 {
+        let name: String = field_name.into();
+
+        let result = ReportLimits::from_string(name.as_str());
+        if result.is_none() {
+            godot_error!("the specified report field name \"{}\" is unknown", name);
+            return 0;
+        }
+
+        result.unwrap().max_length() as i32
+    }
+
+    /// Returns N most recently modified files from the specified directory.
+    #[func]
+    fn get_last_modified_files(&self, path: GodotString, file_count: i32) -> Array<GodotString> {
+        // Get all files/directories from the specified path.
+        let paths = std::fs::read_dir(Into::<String>::into(path));
+        if let Err(ref e) = paths {
+            godot_warn!("{}", AppError::new(&e.to_string()));
+            return Array::new();
+        }
+        let paths = paths.unwrap();
+
+        let mut files: Vec<(PathBuf, u64)> = Vec::new();
+
+        // Read files modification date.
+        for path in paths {
+            if let Err(ref e) = path {
+                godot_warn!("{}", AppError::new(&e.to_string()));
+                continue;
+            }
+            let path = path.unwrap();
+
+            // Get type of the path entry.
+            let path_type = path.file_type();
+            if let Err(e) = path_type {
+                godot_warn!("{}", AppError::new(&e.to_string()));
+                continue;
+            }
+
+            // Look only for files.
+            if !path_type.unwrap().is_file() {
+                continue;
+            }
+
+            // Get file metadata.
+            let metadata = metadata(path.path());
+            if let Err(ref e) = metadata {
+                godot_warn!("{}", AppError::new(&e.to_string()));
+                continue;
+            }
+            let metadata = metadata.unwrap();
+
+            // Get modification datetime.
+            let last_modified = metadata.modified();
+            if let Err(e) = last_modified {
+                godot_warn!("{}", AppError::new(&e.to_string()));
+                continue;
+            }
+
+            // Count seconds since the last modification.
+            let elapsed_seconds = last_modified.unwrap().elapsed();
+            if let Err(e) = elapsed_seconds {
+                godot_warn!("{}", AppError::new(&e.to_string()));
+                continue;
+            }
+
+            // Add to be considered later.
+            files.push((path.path(), elapsed_seconds.unwrap().as_secs()));
+        }
+
+        // Sort all found files by modification date.
+        files.sort_by(|a, b| a.1.cmp(&b.1));
+
+        // Collect the output array.
+        let mut out_paths: Array<GodotString> = Array::new();
+        for file in files {
+            let path = file.0.as_path().to_str();
+            match path {
+                Some(path) => {
+                    out_paths.push(path.into());
+                    if out_paths.len() as i32 == file_count {
+                        // No more files required.
+                        break;
+                    }
+                }
+                None => {
+                    godot_warn!("{}", AppError::new("unable to convert path to string"));
+                }
+            }
+        }
+
+        out_paths
+    }
+
+    /// Returns the id of the invalid field.
+    fn is_input_valid(&self, report: &GameReport) -> Option<ReportLimits> {
+        if report.report_name.chars().count() > ReportLimits::ReportName.max_length() {
+            return Some(ReportLimits::ReportName);
+        }
+
+        if report.report_text.chars().count() > ReportLimits::ReportText.max_length() {
+            return Some(ReportLimits::ReportText);
+        }
+
+        if report.sender_name.chars().count() > ReportLimits::SenderName.max_length() {
+            return Some(ReportLimits::SenderName);
+        }
+
+        if report.sender_email.chars().count() > ReportLimits::SenderEmail.max_length() {
+            return Some(ReportLimits::SenderEmail);
+        }
+
+        if report.game_name.chars().count() > ReportLimits::GameName.max_length() {
+            return Some(ReportLimits::GameName);
+        }
+
+        if report.game_version.chars().count() > ReportLimits::GameVersion.max_length() {
+            return Some(ReportLimits::GameVersion);
+        }
+
+        None
+    }
+
+    /// Converts paths to files to report attachments.
+    /// Expects file paths to be valid and exist.
     fn generate_attachments_from_paths(
         paths: Vec<String>,
         max_attachments_size_in_mb: usize,
@@ -468,85 +522,4 @@ impl Reporter {
 
         Ok(attachments)
     }
-
-    /// Returns the id of the invalid field.
-    fn is_input_valid(&self, report: &GameReport) -> Option<ReportLimits> {
-        if report.report_name.chars().count() > ReportLimits::ReportName.max_length() {
-            return Some(ReportLimits::ReportName);
-        }
-
-        if report.report_text.chars().count() > ReportLimits::ReportText.max_length() {
-            return Some(ReportLimits::ReportText);
-        }
-
-        if report.sender_name.chars().count() > ReportLimits::SenderName.max_length() {
-            return Some(ReportLimits::SenderName);
-        }
-
-        if report.sender_email.chars().count() > ReportLimits::SenderEMail.max_length() {
-            return Some(ReportLimits::SenderEMail);
-        }
-
-        if report.game_name.chars().count() > ReportLimits::GameName.max_length() {
-            return Some(ReportLimits::GameName);
-        }
-
-        if report.game_version.chars().count() > ReportLimits::GameVersion.max_length() {
-            return Some(ReportLimits::GameVersion);
-        }
-
-        None
-    }
-}
-
-fn init(handle: InitHandle) {
-    handle.add_class::<Reporter>();
-
-    init_panic_hook();
-}
-
-godot_init!(init);
-
-pub fn init_panic_hook() {
-    // To enable backtrace, you will need the `backtrace` crate to be included in your cargo.toml, or
-    // a version of Rust where backtrace is included in the standard library (e.g. Rust nightly as of the date of publishing)
-    // use backtrace::Backtrace;
-    // use std::backtrace::Backtrace;
-    let old_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic_info| {
-        let loc_string;
-        if let Some(location) = panic_info.location() {
-            loc_string = format!("file '{}' at line {}", location.file(), location.line());
-        } else {
-            loc_string = "unknown location".to_owned()
-        }
-
-        let error_message;
-        if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
-            error_message = format!("[RUST] {}: panic occurred: {:?}", loc_string, s);
-        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
-            error_message = format!("[RUST] {}: panic occurred: {:?}", loc_string, s);
-        } else {
-            error_message = format!("[RUST] {}: unknown panic occurred", loc_string);
-        }
-        godot_error!("{}", error_message);
-
-        // Uncomment the following line if backtrace crate is included as a dependency
-        godot_error!("Backtrace:\n{:?}", Backtrace::new());
-        (*(old_hook.as_ref()))(panic_info);
-
-        // don't call the actual assert (plus less work for devs)
-        // FBugReporter should never crash the game
-
-        // unsafe {
-        //     if let Some(gd_panic_hook) =
-        //         gdnative::api::utils::autoload::<gdnative::api::Node>("rust_panic_hook")
-        //     {
-        //         gd_panic_hook.call(
-        //             "rust_panic_hook",
-        //             &[GodotString::from_str(error_message).to_variant()],
-        //         );
-        //     }
-        // }
-    }));
 }

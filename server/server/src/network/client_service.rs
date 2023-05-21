@@ -181,12 +181,9 @@ impl ClientService {
                     password,
                     otp,
                     None,
-                );
-                if let Err(app_error) = result {
-                    return Err(app_error);
-                }
+                )?;
 
-                Ok(result.unwrap())
+                Ok(result)
             }
             ClientRequest::SetFirstPassword {
                 client_net_protocol,
@@ -200,19 +197,12 @@ impl ClientService {
                     old_password,
                     String::new(),
                     Some(new_password),
-                );
-                if let Err(app_error) = result {
-                    return Err(app_error);
-                }
+                )?;
 
-                Ok(result.unwrap())
+                Ok(result)
             }
             ClientRequest::QueryReportsSummary { page, amount } => {
-                let result = self.handle_client_reports_request(page, amount);
-                if let Err(app_error) = result {
-                    return Err(app_error);
-                }
-
+                self.handle_client_reports_request(page, amount)?;
                 Ok(None)
             }
             ClientRequest::QueryReport { report_id } => {
@@ -232,11 +222,7 @@ impl ClientService {
                 Ok(None)
             }
             ClientRequest::DeleteReport { report_id } => {
-                let result = self.handle_client_delete_report_request(report_id);
-                if let Err(app_error) = result {
-                    return Err(app_error);
-                }
-
+                self.handle_client_delete_report_request(report_id)?;
                 Ok(None)
             }
         }
@@ -282,23 +268,15 @@ impl ClientService {
 
         // Get user's password and salt.
         let database_guard = self.database.lock().unwrap();
-        let result = database_guard.get_user_password_and_salt(&username);
+        let (db_password, salt) = database_guard.get_user_password_and_salt(&username)?;
         drop(database_guard);
 
-        if let Err(app_error) = result {
-            return Err(app_error);
-        }
-
         // Check if user exists.
-        let (db_password, salt) = result.unwrap();
         if db_password.is_empty() {
             // No user was found for this username.
-            let result = self.answer_client_wrong_credentials(&username);
-            if let Err(app_error) = result {
-                return Err(app_error);
-            }
+            let result = self.answer_client_wrong_credentials(&username)?;
 
-            return Ok(Some(result.unwrap()));
+            return Ok(Some(result));
         }
 
         // Compare passwords.
@@ -312,26 +290,19 @@ impl ClientService {
 
         if password_hash != db_password {
             // Wrong password.
-            let result = self.answer_client_wrong_credentials(&username);
-            if let Err(app_error) = result {
-                return Err(app_error);
-            }
+            let result = self.answer_client_wrong_credentials(&username)?;
 
-            return Ok(Some(result.unwrap()));
+            return Ok(Some(result));
         }
 
         // See if user needs to set first password.
         let mut _need_change_password = false;
         {
-            let result = self
+            _need_change_password = self
                 .database
                 .lock()
                 .unwrap()
-                .is_user_needs_to_change_password(&username);
-            if let Err(app_error) = result {
-                return Err(app_error);
-            }
-            _need_change_password = result.unwrap();
+                .is_user_needs_to_change_password(&username)?;
         }
 
         if _need_change_password && new_password.is_none() {
@@ -362,11 +333,7 @@ impl ClientService {
                 .database
                 .lock()
                 .unwrap()
-                .update_user_password(&username, new_password);
-            if let Err(app_error) = result {
-                return Err(app_error);
-            }
-            let result = result.unwrap();
+                .update_user_password(&username, new_password)?;
             if result {
                 return Ok(Some(format!(
                     "received new password from user {}, but \
@@ -384,18 +351,10 @@ impl ClientService {
         // Check if user needs to setup OTP (receive OTP QR code).
         {
             let db_guard = self.database.lock().unwrap();
-            let result = db_guard.is_user_needs_setup_otp(&username);
-            if let Err(app_error) = result {
-                return Err(app_error);
-            }
-            let _need_setup_otp = result.unwrap();
+            let _need_setup_otp = db_guard.is_user_needs_setup_otp(&username)?;
 
             // Get OTP secret.
-            let result = db_guard.get_otp_secret_key_for_user(&username);
-            if let Err(app_error) = result {
-                return Err(app_error);
-            }
-            let otp_secret = result.unwrap();
+            let otp_secret = db_guard.get_otp_secret_key_for_user(&username)?;
 
             drop(db_guard);
 
@@ -479,21 +438,14 @@ impl ClientService {
                         LogCategory::Info,
                         &format!("{} tried to login using wrong OTP code.", &username),
                     );
-                    let result = self.answer_client_wrong_credentials(&username);
-                    if let Err(app_error) = result {
-                        return Err(app_error);
-                    }
+                    let result = self.answer_client_wrong_credentials(&username)?;
 
-                    return Ok(Some(result.unwrap()));
+                    return Ok(Some(result));
                 } else if _need_setup_otp {
-                    let result = self
-                        .database
+                    self.database
                         .lock()
                         .unwrap()
-                        .set_user_finished_otp_setup(&username);
-                    if let Err(app_error) = result {
-                        return Err(app_error);
-                    }
+                        .set_user_finished_otp_setup(&username)?;
                     self.logger.lock().unwrap().print_and_log(
                         LogCategory::Info,
                         &format!("{} finished OTP setup.", &username),
@@ -507,19 +459,13 @@ impl ClientService {
             let guard = self.database.lock().unwrap();
 
             // Update last login time/date/ip.
-            if let Err(app_error) = guard.update_user_last_login(
+            guard.update_user_last_login(
                 &username,
                 &self.socket.peer_addr().unwrap().ip().to_string(),
-            ) {
-                return Err(app_error);
-            }
+            )?;
 
             // Check if user is admin.
-            let result = guard.is_user_admin(&username);
-            if let Err(app_error) = result {
-                return Err(app_error);
-            }
-            _is_admin = result.unwrap();
+            _is_admin = guard.is_user_admin(&username)?;
         }
 
         {
@@ -561,21 +507,9 @@ impl ClientService {
     fn handle_client_reports_request(&mut self, page: u64, amount: u64) -> Result<(), AppError> {
         // Get reports from database.
         let guard = self.database.lock().unwrap();
-        let result = guard.get_reports(page, amount);
-        let report_count = guard.get_report_count();
+        let reports = guard.get_reports(page, amount)?;
+        let report_count = guard.get_report_count()?;
         drop(guard);
-
-        // Check reports.
-        if let Err(app_error) = result {
-            return Err(app_error);
-        }
-        let reports = result.unwrap();
-
-        // Check report count.
-        if let Err(app_error) = report_count {
-            return Err(app_error);
-        }
-        let report_count = report_count.unwrap();
 
         // Get disk space.
         let (mut _total_disk_space_mb, mut _used_disk_space_mb) = (0u64, 0u64);
@@ -641,11 +575,7 @@ impl ClientService {
         }
 
         // Remove report from database.
-        let result = self.database.lock().unwrap().remove_report(report_id);
-        if let Err(app_error) = result {
-            return Err(app_error);
-        }
-        let found = result.unwrap();
+        let found = self.database.lock().unwrap().remove_report(report_id)?;
         if !found {
             let mut username = String::new();
             if self.username.is_some() {
@@ -868,20 +798,16 @@ impl ClientService {
         self.time_of_last_received_message = Local::now();
 
         loop {
-            let result = receive_message(
+            let message = receive_message(
                 &mut self.socket,
                 &self.secret_key,
                 Some(KEEP_ALIVE_CHECK_INTERVAL_MS),
                 MAX_MESSAGE_SIZE_IN_BYTES_WITHOUT_ATTACHMENTS,
                 &mut is_fin,
-            );
+            )?;
             if is_fin {
                 return Ok(None);
             }
-            if let Err(app_error) = result {
-                return Err(app_error);
-            }
-            let message = result.unwrap();
 
             if message.is_empty() {
                 // Timeout.
@@ -902,11 +828,7 @@ impl ClientService {
             let message = message.unwrap();
 
             // Handle message.
-            let result = self.handle_client_message(message);
-            if let Err(app_error) = result {
-                return Err(app_error);
-            }
-            let result = result.unwrap();
+            let result = self.handle_client_message(message)?;
             if result.is_some() {
                 return Ok(result);
             }

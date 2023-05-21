@@ -184,8 +184,8 @@ func install_server(install_dir string, session *sh.Session) {
 
 	fmt.Println()
 	fmt.Println("Installation is finished.")
-	fmt.Println("Note that you should not run the 'server' explicitly, instead, " +
-		"run the 'server_monitor' it will run the 'server'.")
+	fmt.Println("You can now start the 'server' to setup the initial configuration but later you should not run " +
+		"the 'server' explicitly, instead, run the 'server_monitor' it will run the 'server'.")
 	fmt.Println()
 
 	if runtime.GOOS != "windows" {

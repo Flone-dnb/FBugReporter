@@ -625,10 +625,10 @@ impl DatabaseManager {
                 1, // have not received OTP QR code
                 otp_secret,
                 is_admin,
-                datetime.date().naive_local().to_string(),
+                datetime.date_naive().to_string(),
                 datetime.time().format("%H:%M:%S").to_string(),
                 "",
-                datetime.date().naive_local().to_string(),
+                datetime.date_naive().to_string(),
                 datetime.time().format("%H:%M:%S").to_string()
             ],
         ) {
@@ -753,7 +753,7 @@ impl DatabaseManager {
                 USER_TABLE_NAME
             ),
             params![
-                datetime.date().naive_local().to_string(),
+                datetime.date_naive().to_string(),
                 datetime.time().format("%H:%M:%S").to_string(),
                 ip,
                 username
@@ -799,7 +799,7 @@ impl DatabaseManager {
                 game_report.game_name,
                 game_report.game_version,
                 game_report.client_os_info.to_string(),
-                datetime.date().naive_local().to_string(),
+                datetime.date_naive().to_string(),
                 datetime.time().format("%H:%M:%S").to_string(),
             ],
             |row| row.get(0),

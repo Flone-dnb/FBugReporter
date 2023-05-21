@@ -287,9 +287,9 @@ impl ReporterService {
             return Err((ReportLimits::SenderName, report.sender_name.chars().count()));
         }
 
-        if report.sender_email.chars().count() > ReportLimits::SenderEMail.max_length() {
+        if report.sender_email.chars().count() > ReportLimits::SenderEmail.max_length() {
             return Err((
-                ReportLimits::SenderEMail,
+                ReportLimits::SenderEmail,
                 report.sender_email.chars().count(),
             ));
         }

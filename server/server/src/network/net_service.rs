@@ -38,10 +38,7 @@ impl NetService {
             ));
         }
 
-        let db = DatabaseManager::new();
-        if let Err(app_error) = db {
-            return Err(app_error);
-        }
+        let db = DatabaseManager::new()?;
 
         let logger = Arc::new(Mutex::new(logger));
 
@@ -49,7 +46,7 @@ impl NetService {
             server_config: config.clone(),
             logger: logger.clone(),
             connected_socket_count: Arc::new(Mutex::new(0)),
-            database: Arc::new(Mutex::new(db.unwrap())),
+            database: Arc::new(Mutex::new(db)),
             ban_manager: Arc::new(Mutex::new(BanManager::new(logger, config))),
         })
     }

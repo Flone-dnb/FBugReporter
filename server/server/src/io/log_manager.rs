@@ -47,6 +47,7 @@ impl LogManager {
             println!("[{}] {}", datetime, message);
         }
     }
+
     /// Opens log file for writing.
     fn open_log_file(&self) -> std::fs::File {
         let log_file = OpenOptions::new()
@@ -114,7 +115,9 @@ impl LogManager {
 
         log_path
     }
+
     /// Removes the oldest log file if there are `MAX_LOG_FILE_COUNT` log files or more.
+    #[allow(clippy::print_literal)] // TODO: remove when https://github.com/rust-lang/rust-clippy/issues/2768 is fixed
     fn remove_oldest_log_if_needed(log_path: &Path) {
         let paths = std::fs::read_dir(log_path);
         if let Err(ref e) = paths {

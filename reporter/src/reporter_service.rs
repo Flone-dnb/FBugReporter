@@ -30,11 +30,8 @@ impl ReporterService {
         server_addr: String,
         logger: &mut LogManager,
     ) -> Result<usize, AppError> {
-        let result = Self::establish_secure_connection_with_server(server_addr, logger);
-        if let Err(app_error) = result {
-            return Err(app_error);
-        }
-        let (mut tcp_socket, secret_key) = result.unwrap();
+        let (mut tcp_socket, secret_key) =
+            Self::establish_secure_connection_with_server(server_addr, logger)?;
 
         // Prepare message.
         let message = ReporterRequest::MaxAttachmentSize {};
@@ -51,15 +48,10 @@ impl ReporterService {
             None,
             std::usize::MAX,
             &mut is_fin,
-        );
+        )?;
         if is_fin {
             return Err(AppError::new("the server closed connection unexpectedly"));
         }
-        if let Err(app_error) = result {
-            return Err(app_error);
-        }
-
-        let result = result.unwrap();
 
         // Deserialize.
         let received_message = bincode::deserialize::<ReporterAnswer>(&result);

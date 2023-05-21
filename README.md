@@ -83,6 +83,7 @@ they will ask you to overwrite the files. Make sure to specify the same paramete
 # Information: Server
 
 ### Configuration
+
 On first start, the server will create a server configuration file `server_config.ini` (it's located in `%APPDATA%\FBugReporter\` on Windows and in `$XDG_CONFIG_HOME/FBugReporter/` on Linux/BSD/MacOS).
 You can customize values in this config file. In order for them to be applied, restart the server.
 
@@ -132,7 +133,7 @@ See the example project in the `example` directory and `example/MainScene.gd` fo
 To build the server you will need [Rust](https://www.rust-lang.org/tools/install).
 The server uses SQLite to store data. In order to build the server you also need have `sqlite3` installed.
 
-For Windows users we have a built version of `sqlite3` in `server/sqlite3-windows`. In order to use it, create an environment variable with the name `SQLITE3_LIB_DIR` that points to this directory before building the `server` or `database_manager`.
+For Windows users we have a built version of `sqlite3` in `server/sqlite3-windows` that will be automatically used.
 
 **Build:**
 

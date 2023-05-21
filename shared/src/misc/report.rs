@@ -1,5 +1,9 @@
+// Std.
+use std::str::FromStr;
+
 // External.
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 
 #[derive(Serialize, Deserialize)]
 pub struct ReportSummary {
@@ -55,12 +59,12 @@ pub struct ReportAttachment {
     pub data: Vec<u8>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, EnumString, Display)]
 pub enum ReportLimits {
     ReportName,
     ReportText,
     SenderName,
-    SenderEMail,
+    SenderEmail,
     GameName,
     GameVersion,
 }
@@ -71,7 +75,7 @@ impl ReportLimits {
             ReportLimits::ReportName => 50,   // the server also checks the limits
             ReportLimits::ReportText => 5120, // so if changing any values here
             ReportLimits::SenderName => 50,   // also change them in the server
-            ReportLimits::SenderEMail => 50,
+            ReportLimits::SenderEmail => 50,
             ReportLimits::GameName => 50,
             ReportLimits::GameVersion => 50,
             // if adding new fields, update is_input_valid() in lib.rs (in reporter)
@@ -79,16 +83,13 @@ impl ReportLimits {
             // also update/add get_field_limit() calls in 'example'
         }
     }
-    pub fn id(&self) -> u64 {
-        match *self {
-            ReportLimits::ReportName => 0,
-            ReportLimits::ReportText => 1,
-            ReportLimits::SenderName => 2,
-            ReportLimits::SenderEMail => 3,
-            ReportLimits::GameName => 4,
-            ReportLimits::GameVersion => 5,
-            // add new fields here, continue 6, 7... (don't add stuff before existing values)
+    pub fn from_string(name: &str) -> Option<ReportLimits> {
+        let result = ReportLimits::from_str(name);
+        if let Err(_) = result {
+            return None;
         }
+
+        return Some(result.unwrap());
     }
 }
 

@@ -1,9 +1,10 @@
 [package]
 name = "database_manager"
 authors = ["Aleksandr Tretyakov"]
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
 license = "MIT"
+build = "build.rs"
 
 [dependencies]
 shared = {path = "../../shared", features = ["database"]}

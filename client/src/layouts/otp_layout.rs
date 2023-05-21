@@ -1,4 +1,5 @@
 // External.
+use base64::{engine::general_purpose, Engine as _};
 use druid::widget::{prelude::*, LineBreaking, SizedBox};
 use druid::widget::{Button, Flex, Label, MainAxisAlignment, TextBox};
 use druid::{
@@ -36,7 +37,9 @@ impl OtpLayout {
         let mut qr_code_item = Flex::column();
         if self.qr_code.is_some() {
             // Decode base64.
-            let decoded = base64::decode(self.qr_code.as_ref().unwrap()).unwrap();
+            let decoded = general_purpose::STANDARD
+                .decode(self.qr_code.as_ref().unwrap())
+                .unwrap();
 
             // Convert to image pixels.
             let mut img = image::load_from_memory(decoded.as_slice()).unwrap();

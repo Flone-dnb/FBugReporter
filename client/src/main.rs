@@ -109,7 +109,7 @@ pub fn main() {
 fn apply_theme(env: &mut Env, data: &ApplicationState) {
     env.set(
         druid::theme::WINDOW_BACKGROUND_COLOR,
-        data.theme.background_color.clone(),
+        data.theme.background_color,
     );
     env.set(
         druid::theme::TEXTBOX_BORDER_RADIUS,
@@ -118,32 +118,20 @@ fn apply_theme(env: &mut Env, data: &ApplicationState) {
     env.set(druid::theme::BUTTON_BORDER_RADIUS, data.theme.border_radius);
     env.set(
         druid::theme::PLACEHOLDER_COLOR,
-        data.theme.placeholder_color.clone(),
+        data.theme.placeholder_color,
     );
     env.set(
         druid::theme::BACKGROUND_LIGHT,
-        data.theme.textbox_background_color.clone(),
+        data.theme.textbox_background_color,
     );
-    env.set(
-        druid::theme::BORDER_DARK,
-        data.theme.inactive_border_color.clone(),
-    );
+    env.set(druid::theme::BORDER_DARK, data.theme.inactive_border_color);
     env.set(
         druid::theme::SELECTED_TEXT_BACKGROUND_COLOR,
-        data.theme.text_selection_color.clone(),
+        data.theme.text_selection_color,
     );
-    env.set(
-        druid::theme::PRIMARY_LIGHT,
-        data.theme.active_border_color.clone(),
-    );
-    env.set(
-        druid::theme::BUTTON_DARK,
-        data.theme.button_dark_color.clone(),
-    );
-    env.set(
-        druid::theme::BUTTON_LIGHT,
-        data.theme.button_light_color.clone(),
-    );
+    env.set(druid::theme::PRIMARY_LIGHT, data.theme.active_border_color);
+    env.set(druid::theme::BUTTON_DARK, data.theme.button_dark_color);
+    env.set(druid::theme::BUTTON_LIGHT, data.theme.button_light_color);
 }
 
 fn build_root_widget() -> impl Widget<ApplicationState> {

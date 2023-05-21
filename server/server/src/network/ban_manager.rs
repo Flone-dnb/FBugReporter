@@ -360,7 +360,10 @@ impl BanManager {
             return;
         }
 
-        if config.remove_key(BAN_SECTION_NAME, &ip.ip.to_string()) == None {
+        if config
+            .remove_key(BAN_SECTION_NAME, &ip.ip.to_string())
+            .is_none()
+        {
             logger.lock().unwrap().print_and_log(
                 LogCategory::Warning,
                 &format!(

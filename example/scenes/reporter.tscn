@@ -1,0 +1,220 @@
+[gd_scene load_steps=8 format=3 uid="uid://0eifp2yhmtgp"]
+
+[ext_resource type="Script" path="res://scenes/reporter.gd" id="1_6ftrt"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_ksbr1"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_bc30v"]
+albedo_color = Color(0.2, 0, 0.298039, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_08dvp"]
+albedo_color = Color(0.619608, 0.345098, 0, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_l7dxo"]
+font_size = 18
+
+[sub_resource type="LabelSettings" id="LabelSettings_fl5l7"]
+font_size = 14
+
+[sub_resource type="LabelSettings" id="LabelSettings_dtvml"]
+font_size = 12
+
+[node name="Root" type="Node3D"]
+script = ExtResource("1_6ftrt")
+
+[node name="Scene" type="Node3D" parent="."]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="Scene"]
+transform = Transform3D(0.694072, -0.0117548, -0.71981, 0.612885, 0.53419, 0.582248, 0.377671, -0.845282, 0.377971, 0, 3.01647, 1.87624)
+light_energy = 2.999
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="Scene"]
+transform = Transform3D(1, 0, 0, 0, 0.995307, 0.0967665, 0, -0.0967665, 0.995307, 0, 0.856301, 3.15373)
+
+[node name="Floor" type="MeshInstance3D" parent="Scene"]
+transform = Transform3D(9.32762, 0, 0, 0, 0.367391, 0, 0, 0, 9.32762, 0, -0.588153, 0)
+mesh = SubResource("BoxMesh_ksbr1")
+skeleton = NodePath("../..")
+surface_material_override/0 = SubResource("StandardMaterial3D_bc30v")
+
+[node name="Cube" type="MeshInstance3D" parent="Scene"]
+mesh = SubResource("BoxMesh_ksbr1")
+skeleton = NodePath("../..")
+surface_material_override/0 = SubResource("StandardMaterial3D_08dvp")
+
+[node name="UI" type="Control" parent="."]
+layout_mode = 3
+anchor_right = 1.007
+anchor_bottom = 1.0
+offset_right = -8.06409
+
+[node name="Background" type="Panel" parent="UI"]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.056
+anchor_top = 0.099
+anchor_right = 0.944
+anchor_bottom = 0.901
+offset_left = -0.512001
+offset_top = -0.152008
+offset_right = 0.511963
+offset_bottom = 0.151978
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/Background"]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.025
+anchor_top = 0.047
+anchor_right = 0.975
+anchor_bottom = 0.953
+offset_top = -0.0640011
+offset_bottom = 0.0639648
+grow_horizontal = 2
+grow_vertical = 2
+alignment = 1
+
+[node name="TitleText" type="Label" parent="UI/Background/VBoxContainer"]
+layout_mode = 2
+text = "Report a bug"
+label_settings = SubResource("LabelSettings_l7dxo")
+horizontal_alignment = 1
+
+[node name="DescriptionText" type="Label" parent="UI/Background/VBoxContainer"]
+layout_mode = 2
+text = "Encountered an unexpected behavior of the game? The game crashed, froze or something else? Use this form to describe what happend. Please, tell us about the things that you did before an unexpected behavior occurred so we can reproduce the issue."
+label_settings = SubResource("LabelSettings_fl5l7")
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="WarningText" type="Label" parent="UI/Background/VBoxContainer"]
+layout_mode = 2
+text = "The more details you provide, the more likely the issue will be resolved."
+horizontal_alignment = 1
+uppercase = true
+
+[node name="SummaryBox" type="HBoxContainer" parent="UI/Background/VBoxContainer"]
+layout_mode = 2
+
+[node name="SummaryText" type="Label" parent="UI/Background/VBoxContainer/SummaryBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Summary:"
+
+[node name="SummaryTextBox" type="LineEdit" parent="UI/Background/VBoxContainer/SummaryBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+size_flags_stretch_ratio = 8.0
+placeholder_text = "Short description of your issue... For example: \"Crash on level 2\"."
+
+[node name="NameBox" type="HBoxContainer" parent="UI/Background/VBoxContainer"]
+layout_mode = 2
+
+[node name="NameText" type="Label" parent="UI/Background/VBoxContainer/NameBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Your name:"
+
+[node name="NameTextBox" type="LineEdit" parent="UI/Background/VBoxContainer/NameBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+size_flags_stretch_ratio = 8.0
+placeholder_text = "How should we call you? This field is optional and can be empty."
+
+[node name="EmailBox" type="HBoxContainer" parent="UI/Background/VBoxContainer"]
+layout_mode = 2
+
+[node name="EmailText" type="Label" parent="UI/Background/VBoxContainer/EmailBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Your email:"
+
+[node name="EmailTextBox" type="LineEdit" parent="UI/Background/VBoxContainer/EmailBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+size_flags_stretch_ratio = 8.0
+placeholder_text = "Sometimes we could contact you for more details about the issue. This field is optional and can be empty."
+
+[node name="ReportBox" type="HBoxContainer" parent="UI/Background/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ReportText" type="Label" parent="UI/Background/VBoxContainer/ReportBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Report:"
+
+[node name="ReportTextBox" type="TextEdit" parent="UI/Background/VBoxContainer/ReportBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 8.0
+text = "Describe your issue here! English is preferred, but any other language will work.
+
+# What happend?
+For example, game crash, freeze, graphical glitch, collision issues or something else.
+
+# Where that happend?
+For example, on level 2, near the town.
+
+# What you did before this issue occurred?
+For example, entered level 2 using a teleport, talked to the NPC, went to the town.
+
+# How to reproduce this issue?
+Have you tried to reproduce this issue? Do you know exact steps to reproduce this issue? This would be extremely helpful!
+
+Got anything else to say?"
+
+[node name="ScreenshotBox" type="HBoxContainer" parent="UI/Background/VBoxContainer"]
+layout_mode = 2
+
+[node name="ScreenshotText" type="Label" parent="UI/Background/VBoxContainer/ScreenshotBox"]
+layout_mode = 2
+text = "Include game screenshot in this report (this menu will not be visible in screenshot):"
+
+[node name="ScreenshotOptionBox" type="OptionButton" parent="UI/Background/VBoxContainer/ScreenshotBox"]
+layout_mode = 2
+item_count = 2
+selected = 0
+popup/item_0/text = "no"
+popup/item_0/id = 0
+popup/item_1/text = "yes"
+popup/item_1/id = 1
+
+[node name="NoticeText" type="Label" parent="UI/Background/VBoxContainer"]
+layout_mode = 2
+text = "All information that you specify here will be transferred in the encrypted form, no one except the developers will be able to read your name / email / report. Your email will only be used to get more information about the issue (if necessary). We do not share your email with third parties. After your issue has been resolved, your email will be deleted. "
+label_settings = SubResource("LabelSettings_dtvml")
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ResultText" type="Label" parent="UI/Background/VBoxContainer"]
+layout_mode = 2
+horizontal_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="UI/Background/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.25
+
+[node name="Spacer" type="Control" parent="UI/Background/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SendReportButton" type="Button" parent="UI/Background/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Send Report"
+
+[node name="Spacer2" type="Control" parent="UI/Background/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="FBugReporter" type="FBugReporter" parent="."]
+
+[connection signal="text_changed" from="UI/Background/VBoxContainer/ReportBox/ReportTextBox" to="." method="_on_ReportTextTextEdit_text_changed"]
+[connection signal="pressed" from="UI/Background/VBoxContainer/HBoxContainer/SendReportButton" to="." method="_on_SendReportButton_pressed"]

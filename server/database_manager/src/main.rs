@@ -8,6 +8,9 @@ use std::io::*;
 // Custom.
 use shared::misc::db_manager::*;
 
+const ERROR_LOG_PREFIX: &str = "ERROR: ";
+const INFO_LOG_PREFIX: &str = "INFO: ";
+
 fn main() {
     println!(
         "FBugReporter (database manager) (v{}).",
@@ -18,21 +21,24 @@ fn main() {
     let database_location = DatabaseManager::get_database_location();
 
     println!(
-        "INFO: Looking for database in '{}'...",
+        "{}Looking for database in '{}'...",
+        INFO_LOG_PREFIX,
         database_location.to_string_lossy()
     );
 
     if !(database_location.exists() && database_location.is_file()) {
         println!(
-            "ERROR: No database file found at '{}', make sure \
+            "{}No database file found at '{}', make sure \
             the database is created (the server will create it once it's started \
             for the first time).",
+            ERROR_LOG_PREFIX,
             database_location.to_string_lossy()
         );
         return;
     } else {
         println!(
-            "INFO: Found database at '{}'",
+            "{}Found database at '{}'",
+            INFO_LOG_PREFIX,
             database_location.to_string_lossy()
         );
     }

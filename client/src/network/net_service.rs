@@ -332,20 +332,16 @@ impl NetService {
 
         // Wait for answer.
         let mut is_fin = false;
-        let result = receive_message(
+        let serialized_packet = receive_message(
             self.socket.as_mut().unwrap(),
             &self.secret_key,
             None,
             std::usize::MAX,
             &mut is_fin,
-        );
+        )?;
         if is_fin {
             return Err(AppError::new("unexpected FIN received"));
         }
-        if let Err(app_error) = result {
-            return Err(app_error);
-        }
-        let serialized_packet = result.unwrap();
 
         // Deserialize.
         let message = bincode::deserialize::<ClientAnswer>(&serialized_packet);
@@ -385,20 +381,16 @@ impl NetService {
 
         // Wait for answer.
         let mut is_fin = false;
-        let result = receive_message(
+        let serialized_packet = receive_message(
             self.socket.as_mut().unwrap(),
             &self.secret_key,
             None,
             std::usize::MAX,
             &mut is_fin,
-        );
+        )?;
         if is_fin {
             return Err(AppError::new("unexpected FIN received"));
         }
-        if let Err(app_error) = result {
-            return Err(app_error);
-        }
-        let serialized_packet = result.unwrap();
 
         // Deserialize.
         let message = bincode::deserialize::<ClientAnswer>(&serialized_packet);

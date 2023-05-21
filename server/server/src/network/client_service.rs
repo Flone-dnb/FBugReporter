@@ -480,10 +480,10 @@ impl ClientService {
 
         {
             // Mark user as logged in.
-            self.logger
-                .lock()
-                .unwrap()
-                .print_and_log(LogCategory::Info, &format!("{} logged in", &username));
+            self.logger.lock().unwrap().print_and_log(
+                LogCategory::Info,
+                &format!("{} ({}) logged in", &username, self.socket_addr),
+            );
         }
 
         self.username = Some(username);

@@ -502,6 +502,7 @@ where
 /// - `is_fin`: will be `true` if the remote socket closed connection.
 ///
 /// ## Return
+/// Empty `Ok` array if received FIN from remote connection (connection is being closed).
 /// If custom timeout was specified and reached a timeout will return `Ok` with zero length vector,
 /// otherwise if custom timeout was not specified will return `AppError`.
 pub fn receive_message(
@@ -535,10 +536,7 @@ pub fn receive_message(
     match result {
         IoResult::Fin => {
             *is_fin = true;
-            return Err(AppError::new(&format!(
-                "unexpected FIN received (socket: {})",
-                socket_addr
-            )));
+            return Ok(Vec::new());
         }
         IoResult::Err(app_error) => return Err(app_error),
         IoResult::Ok(byte_count) => {

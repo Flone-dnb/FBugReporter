@@ -127,9 +127,9 @@ impl OtpLayout {
                     data.otp_layout.connect_error.clone()
                 })
                 .with_text_size(TEXT_SIZE)
-                .with_text_alignment(TextAlignment::Center)
                 .with_line_break_mode(LineBreaking::WordWrap),
             )
+            .with_flex_child(SizedBox::empty().expand(), ROW_SPACING)
             .with_flex_child(
                 Flex::row()
                     .main_axis_alignment(MainAxisAlignment::Center)

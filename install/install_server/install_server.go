@@ -377,27 +377,35 @@ func copy(src string, dst string) bool {
 func install_systemd_service(install_dir string, session *sh.Session) bool {
 	var cfg = ini.Empty()
 
-	var currentUser, err = user.Current()
-	if err != nil {
-		log.Fatalf(err.Error())
+	var username = ""
+	var groupname = ""
+	{
+		// Get username.
+		var currentUser, err = user.Current()
+		if err != nil {
+			log.Fatalf(err.Error())
+		}
+
+		if currentUser.Username == "" {
+			log.Fatalf("can't get current user name")
+		}
+
+		username = currentUser.Username
+
+		// Get group name.
+		group, err := user.LookupGroup(username)
+		if err != nil {
+			log.Fatalf(err.Error())
+		}
+
+		if group.Name == "" {
+			log.Fatalf("can't get current user group name")
+		}
+
+		groupname = group.Name
 	}
 
-	if currentUser.Name == "" {
-		log.Fatalf("can't get current user name")
-	}
-
-	var group *user.Group
-	group, err = user.LookupGroup(currentUser.Username)
-	if err != nil {
-		log.Fatalf(err.Error())
-	}
-
-	if group.Name == "" {
-		log.Fatalf("can't get current user group name")
-	}
-
-	var section *ini.Section
-	section, err = cfg.NewSection("Unit")
+	var section, err = cfg.NewSection("Unit")
 	if err != nil {
 		fmt.Println(err)
 		return true
@@ -413,8 +421,8 @@ func install_systemd_service(install_dir string, session *sh.Session) bool {
 
 	section.NewKey("WorkingDirectory", install_dir)
 	section.NewKey("ExecStart", filepath.Join(install_dir, "server_monitor"))
-	section.NewKey("User", currentUser.Name)
-	section.NewKey("Group", group.Name)
+	section.NewKey("User", username)
+	section.NewKey("Group", groupname)
 
 	section, err = cfg.NewSection("Install")
 	if err != nil {
@@ -431,7 +439,7 @@ func install_systemd_service(install_dir string, session *sh.Session) bool {
 	}
 
 	// Stop the old service (if running).
-	fmt.Println("Trying to stop old FBugReporter service (if running)...")
+	fmt.Println("Attempting to stop the previous (old) FBugReporter service (if running)...")
 	session.Command("sudo", "systemctl", "stop", "fbugreporter.service").Run()
 
 	err = session.Command("sudo", "mv", filepath.Join(install_dir, "fbugreporter.service"), "/etc/systemd/system").Run()

@@ -1,7 +1,6 @@
 #![deny(warnings)]
 
 // Std.
-use godot::engine::Image;
 use std::fs::metadata;
 use std::io::Read;
 use std::path::Path;
@@ -9,15 +8,17 @@ use std::path::PathBuf;
 use std::{env, fs::File};
 
 // External.
+use godot::engine::Image;
 use godot::prelude::*;
 use image::{ImageBuffer, RgbaImage};
 
 // Custom.
-mod log_manager;
-mod reporter_service;
 use log_manager::*;
-use reporter_service::*;
+use report_receiver::*;
 use shared::misc::{error::AppError, report::*};
+
+mod log_manager;
+mod report_receiver;
 
 struct FBugReporterExtension;
 
@@ -34,10 +35,12 @@ struct FBugReporter {
     game_name: String,
     game_version: String,
     attachments: Vec<String>,
-    server_addr: Option<String>,
+    remote_address: Option<String>,
     screenshot_path: Option<String>,
     last_report: Option<GameReport>,
+    auth_token: String,
     last_error: String,
+    report_receiver: Option<Box<dyn ReportReceiver>>,
 
     #[base]
     base: Base<Node>,
@@ -54,28 +57,62 @@ impl NodeVirtual for FBugReporter {
             game_name: String::new(),
             game_version: String::new(),
             attachments: Vec::new(),
-            server_addr: None,
+            remote_address: None,
+            auth_token: String::new(),
             screenshot_path: None,
             last_report: None,
             last_error: String::new(),
             base,
+            report_receiver: None,
         }
     }
 }
 
 #[godot_api]
 impl FBugReporter {
+    /// Sets game essential information that will be used in all sent reports.
     #[func]
-    fn initialize(
-        &mut self,
-        game_name: GodotString,
-        game_version: GodotString,
-        server: GodotString,
-        port: u16,
-    ) {
+    fn setup_game(&mut self, game_name: GodotString, game_version: GodotString) {
         self.game_name = game_name.into();
         self.game_version = game_version.into();
-        self.server_addr = Some(format!("{}:{}", Into::<String>::into(server), port));
+    }
+
+    /// Tells reporter what remote entity we are targeting.
+    ///
+    /// ## Remarks
+    /// See files in `src/report_receiver` for all available report receivers.
+    ///
+    /// ## Arguments
+    /// * `receiver_type` name of the remote entity type, for example "Server" for
+    /// FBugReporter server, see `src/report_receiver/mod.rs` enum `ReportReceiverType` for
+    /// all options.
+    /// * `remote_address` string that describes remote entity's address (depends on the report
+    /// receiver), this can be a domain name, IPv4 address or something else.
+    /// * `auth_token` optional authentication token that some report receivers require.
+    #[func]
+    fn setup_report_receiver(
+        &mut self,
+        receiver_type: GodotString,
+        remote_address: GodotString,
+        auth_token: GodotString,
+    ) {
+        // Create receiver.
+        let receiver_type = Into::<String>::into(receiver_type);
+        let result = create_report_receiver(&receiver_type);
+
+        // Check for errors.
+        if result.is_none() {
+            godot_error!(
+                "failed to find a report receiver for the specified type \"{}\"",
+                receiver_type
+            );
+            return;
+        }
+
+        // Save info.
+        self.report_receiver = Some(result.unwrap());
+        self.remote_address = Some(Into::<String>::into(remote_address));
+        self.auth_token = Into::<String>::into(auth_token);
     }
 
     #[func]
@@ -165,9 +202,14 @@ impl FBugReporter {
         self.screenshot_path = None;
     }
 
+    /// Sends the report.
+    ///
+    /// ## Return
+    /// Value of `ReportResult` enum, zero if successful, otherwise error
+    /// (use `get_last_error` to get error description if needed).
     #[func]
     fn send_report(&mut self) -> i32 {
-        if self.server_addr.is_none() {
+        if self.remote_address.is_none() || self.report_receiver.is_none() {
             return ReportResult::ServerNotSet.value();
         }
 
@@ -211,8 +253,6 @@ impl FBugReporter {
             logger.log("No screenshot provided.");
         }
 
-        let mut reporter = ReporterService::new();
-
         // Process other attachments.
         let mut report_attachments: Vec<ReportAttachment> = Vec::new();
         if !self.attachments.is_empty() {
@@ -223,22 +263,25 @@ impl FBugReporter {
                 }
             }
 
-            // Request mac attachment size (in total) in MB.
-            let result = reporter.request_max_attachment_size_in_mb(
-                self.server_addr.as_ref().unwrap().clone(),
-                &mut logger,
-            );
-            if let Err(app_error) = result {
-                self.last_error = app_error.get_message();
-                logger.log(&app_error.to_string());
-                return ReportResult::InternalError.value();
-            }
-            let max_attachments_size_in_mb = result.unwrap();
+            // Request max attachment size (in total) in MB.
+            let mut max_attachments_size_in_mb = std::usize::MAX;
 
-            logger.log(&format!(
-                "Received maximum allowed attachment size of {} MB.",
-                max_attachments_size_in_mb
-            ));
+            let result = self
+                .report_receiver
+                .as_mut()
+                .unwrap()
+                .request_max_attachment_size_in_mb(
+                    self.remote_address.as_ref().unwrap().clone(),
+                    &mut logger,
+                );
+            if let Some(max_size_mb) = result {
+                max_attachments_size_in_mb = max_size_mb;
+
+                logger.log(&format!(
+                    "Received maximum allowed attachment size of {} MB.",
+                    max_attachments_size_in_mb
+                ));
+            }
 
             // Generate attachments from paths.
             let result = Self::generate_attachments_from_paths(
@@ -246,52 +289,63 @@ impl FBugReporter {
                 max_attachments_size_in_mb,
                 &mut logger,
             );
-            if let Err((result, msg)) = result {
-                self.last_error = msg.clone();
+            if let Err(msg) = result {
                 logger.log(&msg);
-                return result.value();
+                self.last_error = msg;
+                return ReportResult::Other(String::new()).value();
             }
             report_attachments = result.unwrap();
+
+            // Check if exceeded maximum size.
+            if report_attachments.is_empty() {
+                return ReportResult::AttachmentTooBig.value();
+            }
         }
 
-        let (result_code, error_message) = reporter.send_report(
-            self.server_addr.as_ref().unwrap().clone(),
+        // Send report.
+        let result = self.report_receiver.as_mut().unwrap().send_report(
+            self.remote_address.as_ref().unwrap().clone(),
+            self.auth_token.clone(),
             report.clone(),
             &mut logger,
             report_attachments,
         );
 
-        if result_code == ReportResult::Ok {
-            // Save report.
-            self.last_report = Some(report);
-            logger.log("Successfully sent the report.");
-
-            // Cleanup.
-            if let Some(screenshot_path) = self.screenshot_path.take() {
-                if Path::new(&screenshot_path).exists() {
-                    if let Err(e) = std::fs::remove_file(&screenshot_path) {
-                        logger.log(&format!(
-                            "failed to delete screenshot from \"{}\" (error: {})",
-                            &screenshot_path, e
-                        ));
-                    }
-                }
-            }
-        } else {
-            match error_message {
-                Some(app_error) => {
-                    logger.log(&app_error.to_string());
-                    self.last_error = app_error.get_message();
-                }
-                None => {
-                    self.last_error =
-                        String::from("An error occurred but the error message is empty.");
-                    logger.log(&self.last_error);
+        // Delete the screenshot (if we took one).
+        if let Some(screenshot_path) = self.screenshot_path.take() {
+            if Path::new(&screenshot_path).exists() {
+                if let Err(e) = std::fs::remove_file(&screenshot_path) {
+                    logger.log(&format!(
+                        "failed to delete screenshot from \"{}\" (error: {})",
+                        &screenshot_path, e
+                    ));
                 }
             }
         }
 
-        result_code.value()
+        // Clear the previous error (if existed).
+        self.last_error = String::new();
+
+        // Process result.
+        match result {
+            SendReportResult::Ok => {
+                self.last_report = Some(report);
+                logger.log("Successfully sent the report.");
+
+                ReportResult::Ok.value()
+            }
+            SendReportResult::CouldNotConnect => {
+                logger.log("Failed to connect to the server.");
+
+                ReportResult::CouldNotConnect.value()
+            }
+            SendReportResult::Other(message) => {
+                logger.log(&message);
+                self.last_error = message;
+
+                ReportResult::Other(String::new()).value()
+            }
+        }
     }
 
     #[func]
@@ -436,11 +490,16 @@ impl FBugReporter {
 
     /// Converts paths to files to report attachments.
     /// Expects file paths to be valid and exist.
+    ///
+    /// ## Return
+    /// `Ok` with empty array if attachments in total exceed the specified size,
+    /// otherwise array with processed attachments.
+    /// `Err` with error message if an internal error occurred.
     fn generate_attachments_from_paths(
         paths: Vec<String>,
         max_attachments_size_in_mb: usize,
         logger: &mut LogManager,
-    ) -> Result<Vec<ReportAttachment>, (ReportResult, String)> {
+    ) -> Result<Vec<ReportAttachment>, String> {
         let mut attachments: Vec<ReportAttachment> = Vec::new();
         let mut total_attachment_size_in_bytes: usize = 0;
         for path in paths {
@@ -449,27 +508,11 @@ impl FBugReporter {
             // Check file name.
             let file_name = file_path.file_name();
             if file_name.is_none() {
-                return Err((
-                    ReportResult::InternalError,
-                    format!(
-                        "An error occurred at [{}, {}]: file name is empty ({})",
-                        file!(),
-                        line!(),
-                        path
-                    ),
-                ));
+                return Err(format!("file name is empty, path: {}", path));
             }
             let file_name = file_name.unwrap().to_str();
             if file_name.is_none() {
-                return Err((
-                    ReportResult::InternalError,
-                    format!(
-                        "An error occurred at [{}, {}]: failed to get file name ({})",
-                        file!(),
-                        line!(),
-                        path
-                    ),
-                ));
+                return Err(format!("failed to get file name, path: {}", path));
             }
             let file_name = String::from(file_name.unwrap());
             total_attachment_size_in_bytes += file_name.len();
@@ -479,19 +522,19 @@ impl FBugReporter {
             // Read file into vec.
             let mut data: Vec<u8> = Vec::new();
 
-            let file = File::open(path);
+            let file = File::open(path.clone());
             if let Err(e) = file {
-                return Err((
-                    ReportResult::InternalError,
-                    format!("An error occurred at [{}, {}]: {}", file!(), line!(), e),
+                return Err(format!(
+                    "failed to open the file (error: {}), path: {}",
+                    e, path
                 ));
             }
             let mut file = file.unwrap();
             let result = file.read_to_end(&mut data);
             if let Err(e) = result {
-                return Err((
-                    ReportResult::InternalError,
-                    format!("An error occurred at [{}, {}]: {}", file!(), line!(), e),
+                return Err(format!(
+                    "failed to read the file (error: {}), path: {}",
+                    e, path
                 ));
             }
             let file_size = result.unwrap();
@@ -506,18 +549,15 @@ impl FBugReporter {
             attachments.push(attachment);
         }
 
-        let max_attachments_size_in_bytes = max_attachments_size_in_mb * 1024 * 1024;
+        // Calculate maximum attachment size in bytes.
+        let mut max_attachments_size_in_bytes = std::usize::MAX;
+        let result = max_attachments_size_in_mb.checked_mul(1024 * 1024);
+        if let Some(size) = result {
+            max_attachments_size_in_bytes = size;
+        }
+
         if total_attachment_size_in_bytes > max_attachments_size_in_bytes {
-            return Err((
-                ReportResult::AttachmentTooBig,
-                format!(
-                    "An error occurred at [{}, {}]: maximum attachment size exceeded ({} > {})",
-                    file!(),
-                    line!(),
-                    total_attachment_size_in_bytes,
-                    max_attachments_size_in_bytes
-                ),
-            ));
+            return Ok(Vec::new());
         }
 
         Ok(attachments)

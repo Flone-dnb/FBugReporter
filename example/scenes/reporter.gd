@@ -19,7 +19,9 @@ var initial_report_text: String = ""; # stores initial contents of the "report" 
 # -----------------------------------------------------------------------------
 
 func _ready():
-	reporter.initialize(game_name, game_version, "127.0.0.1", 50123);
+	reporter.setup_game(game_name, game_version);
+	reporter.setup_report_receiver("Server", "127.0.0.1:50123", "");
+	
 	initial_report_text = report_text_node.text;
 
 	# set length limits
@@ -73,78 +75,24 @@ func send_report(
 
 	# Send report.
 	var result_code: int = reporter.send_report();
+	var error_message: String = ""
 	if result_code != 0: # if result_code == 0 then everything is OK and the server received your report, otherwise:
 		# (it's up to you whether you want to handle all error codes or not, you could ignore the result code or just check if it's equal to 0)
 		# (by handling all possible result codes you can provide more information to your user)
-		# error code names are taken from server/shared/src/report.rs
+		# error code names are taken from server/shared/src/misc/report.rs (see `ReportResult` enum)
 		if result_code == 1:
-			# you forgot to call reporter.set_server()
-			var error_message: String = "An error occurred: initialize() should be called first.";
-			result_text_node.text = error_message;
-			return;
+			# you forgot to initialize the reporter
+			error_message = "Remote address / report receiver type is not set.";
 		elif result_code == 2:
 			# invalid input (some input string is too long)
-			var error_message: String = "The field \"" + reporter.get_last_error() + "\" is too long!";
-			result_text_node.text = error_message;
-			return;
+			error_message = "The field \"" + reporter.get_last_error() + "\" is too long!";
 		elif result_code == 3:
 			# could not connect to the server
-			# use "reporter.get_last_error()" to get the error description
-			var error_message: String = "Could not connect to the server, error: " + reporter.get_last_error();
-			result_text_node.text = error_message;
-			return;
+			error_message = "Could not connect to the server.";
 		elif result_code == 4:
-			# internal reporter error
-			# use "reporter.get_last_error()" to get the error description
-			# notify the user and show him the error code so he can report this issue
-			# make sure to include "reporter.log" which is located
-			# Linux: in the folder with the game,
-			# Windows: in the Documents folder, in the subfolder "FBugReporter".
-			var error_message: String = "Internal error: " + reporter.get_last_error();
-			error_message += "\nPlease, contact the developers of the game and tell them about this issue!\n";
-			error_message += "Make sure to include the file \"reporter.log\" which is located at ";
-			error_message += reporter.get_log_file_path();
-			result_text_node.text = error_message;
-			return;
+			# the specified attachment(s) do not exist, check that all path to the attachments are valid
+			error_message = "The specified attachment(s) do not exist.";
 		elif result_code == 5:
-			# wrong protocol
-			# the versions (protocols) of the server and the reporter are different (incompatible)
-			# if you installed an update of the reporter, make sure you've updated the server (and the client) too
-			var error_message: String = "An error occurred: wrong protocol, reporter/server are incompatible!\n";
-			error_message += "If you installed an update of the reporter, make sure you've updated the server (and the client) too.";
-			result_text_node.text = error_message;
-			return;
-		elif result_code == 6:
-			# server rejected your report
-			# this should probably never happen unless you've modified the source code of the reporter in an incorrect way
-			var error_message: String = "An error occurred: the server rejected your report.\n";
-			error_message += "This should probably never happen unless you've modified the source code of the reporter in an incorrect way.\n";
-			error_message += "If you're not the developer of this game, please, contact the developers and tell them about this issue!\n";
-			error_message += "Make sure to include the file \"reporter.log\" which is located at ";
-			error_message += reporter.get_log_file_path();
-			result_text_node.text = error_message;
-			return;
-		elif result_code == 7:
-			# network issue
-			# something went wrong while transferring the report over the internet
-			# and the server received modified/corrupted report
-			# tip: try again
-			var error_message: String = "An error occurred: network issue.\n";
-			error_message += "Something went wrong while transferring the report over the internet and the server received modified/corrupted report.\n";
-			error_message += "Try again.";
-			result_text_node.text = error_message;
-			return;
-		elif result_code == 8:
-			# the specified attachment(s) do not exist
-			# check that all path to the attachments are valid
-			var error_message: String = "An error occurred: the specified attachment(s) do not exist.\n";
-			error_message += "Make sure that all specified attached file paths are valid.\n";
-			error_message += "If you're not the developer of this game, please, contact the developers and tell them about this issue!\n";
-			error_message += "Make sure to include the file \"reporter.log\" which is located at ";
-			error_message += reporter.get_log_file_path();
-			result_text_node.text = error_message;
-			return;
-		elif result_code == 9:
 			# the specified attachments exceed the maximum allowed attachment size limit on the server
 
 			if take_screenshot:
@@ -154,29 +102,30 @@ func send_report(
 				send_report(report_name, report_text, sender_name, sender_email, report_attachments, false);
 				return;
 
-			var error_message: String = "An error occurred: the specified attachments exceed the maximum allowed attachment size limit.\n";
-			error_message += "If you're not the developer of this game, please, contact the developers and tell them about this issue!\n";
-			error_message += "Make sure to include the file \"reporter.log\" which is located at ";
-			error_message += reporter.get_log_file_path();
-			result_text_node.text = error_message;
-			return;
+			error_message = "The specified attachments exceed the maximum allowed attachment size limit.";
+		elif result_code == 6:
+			# other error, use `get_last_error` for description
+			error_message = "An error occurred: " + str(reporter.get_last_error()) + "."
 		else:
 			# adding this just in case
-			var error_message: String = "An error occurred: reporter returned unknown error code \"" + str(result_code) + "\".\n";
-			error_message += "If you're not the developer of this game, please, contact the developers and tell them about this issue!\n";
-			error_message += "Make sure to include the file \"reporter.log\" which is located at ";
-			error_message += reporter.get_log_file_path();
-			result_text_node.text = error_message;
-			return;
+			error_message = "The reporter returned unknown error code \"" + str(result_code) + "\".";
 	
-	# clear all fields, with this
-	# you can't send the same report again with just another button press
-	result_text_node.text = "We successfully received your report! Thank you!";
-	report_name_node.text = "";
-	sender_name_node.text = "";
-	sender_email_node.text = "";
-	screenshot_option_box.selected = 0
-	report_text_node.text = initial_report_text;
+	# show result message
+	if result_code == 0:
+		result_text_node.text = "We successfully received your report! Thank you!";
+
+		# clear all fields, with this you can't send the same report again with just another button press
+		report_name_node.text = "";
+		sender_name_node.text = "";
+		sender_email_node.text = "";
+		screenshot_option_box.selected = 0
+		report_text_node.text = initial_report_text;
+	else:
+		error_message += "\nIf you're not the developer of this game, please, contact the developers and tell them about this issue!\n";
+		error_message += "Make sure to include the file \"reporter.log\" which is located at ";
+		error_message += reporter.get_log_file_path();
+
+		result_text_node.text = error_message
 
 func _on_SendReportButton_pressed():
 	# Make sure report summary is specified.

@@ -93,35 +93,29 @@ impl ReportLimits {
     }
 }
 
-/// Values that reporter returns into game engine.
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy)]
+/// Values that the reporter returns into the game engine.
+#[derive(PartialEq, Debug, Clone)]
 pub enum ReportResult {
     Ok,
     ServerNotSet,
     InvalidInput,
     CouldNotConnect,
-    InternalError,
-    WrongProtocol,
-    ServerRejected,
-    NetworkIssue,
     AttachmentDoesNotExist,
     AttachmentTooBig,
-    // make sure to handle new entries
-    // in the 'example' project
+    Other(String),
+    // make sure to handle new entries in the 'example' project
 }
+
 impl ReportResult {
     pub fn value(&self) -> i32 {
-        match *self {
+        match &self {
             ReportResult::Ok => 0,
             ReportResult::ServerNotSet => 1,
             ReportResult::InvalidInput => 2,
             ReportResult::CouldNotConnect => 3,
-            ReportResult::InternalError => 4,
-            ReportResult::WrongProtocol => 5,
-            ReportResult::ServerRejected => 6,
-            ReportResult::NetworkIssue => 7,
-            ReportResult::AttachmentDoesNotExist => 8,
-            ReportResult::AttachmentTooBig => 9,
+            ReportResult::AttachmentDoesNotExist => 4,
+            ReportResult::AttachmentTooBig => 5,
+            ReportResult::Other(_) => 6,
         }
     }
 }

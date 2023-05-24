@@ -18,5 +18,5 @@ Now start the `server_monitor`, it will print the port for reporter connections,
 Open the example project using Godot 4 and change the port in `example/scenes/main.gd` in `func _ready()` on the line:
 
 ```
-reporter.initialize(game_name, game_version, "127.0.0.1", 50123); # where 50123 is your port for reporter from `server_monitor`
+reporter.setup_report_receiver("Server", "127.0.0.1:50123", ""); # where 50123 is your port for reporter from `server_monitor`
 ```

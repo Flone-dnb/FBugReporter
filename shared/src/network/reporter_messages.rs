@@ -17,10 +17,16 @@ pub enum ReporterRequest {
     MaxAttachmentSize {},
 }
 
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub enum ServerAnswer {
+    Ok,
+    OtherError(String),
+}
+
 /// Server's answer to reporter.
 /// If made changes, change protocol version.
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ReporterAnswer {
-    Report { result_code: ReportResult },
+    Report { result_code: ServerAnswer },
     MaxAttachmentSize { max_attachments_size_in_mb: usize },
 }

@@ -176,7 +176,7 @@ impl ReporterService {
     ) -> Result<Option<String>, AppError> {
         // Check protocol version.
         if reporter_net_protocol != NETWORK_PROTOCOL_VERSION {
-            let result_code = ReportResult::WrongProtocol;
+            let result_code = ServerAnswer::OtherError("wrong protocol".to_string());
 
             // Notify reporter.
             if let Some(app_error) = send_message(
@@ -195,7 +195,8 @@ impl ReporterService {
 
         // Check field limits.
         if let Err((field, length)) = Self::check_report_field_limits(&game_report) {
-            let result_code = ReportResult::ServerRejected;
+            let result_code =
+                ServerAnswer::OtherError("report field(s) exceed limit (too long)".to_string());
 
             // Notify reporter.
             if let Some(app_error) = send_message(
@@ -238,7 +239,7 @@ impl ReporterService {
                 .unwrap()
                 .save_report(*game_report, attachments)
             {
-                let result_code = ReportResult::InternalError;
+                let result_code = ServerAnswer::OtherError(app_error.get_message());
 
                 // Notify reporter of our failure.
                 if let Some(app_error) = send_message(
@@ -263,7 +264,7 @@ impl ReporterService {
             &mut self.socket,
             &self.secret_key,
             ReporterAnswer::Report {
-                result_code: ReportResult::Ok,
+                result_code: ServerAnswer::Ok,
             },
         ) {
             return Err(app_error);

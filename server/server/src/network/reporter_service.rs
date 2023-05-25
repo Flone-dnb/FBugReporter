@@ -135,8 +135,7 @@ impl ReporterService {
     /// and we don't need to consider this as a bug,
     /// - if `None` then the operation finished successfully.
     ///
-    /// Returns `AppError` as `Err` if there was an internal error
-    /// (bug).
+    /// Returns `AppError` as `Err` if there was an error.
     fn handle_reporter_message(
         &mut self,
         message: ReporterRequest,
@@ -166,8 +165,7 @@ impl ReporterService {
     /// and we don't need to consider this as a bug,
     /// - if `None` then the operation finished successfully.
     ///
-    /// Returns `AppError` as `Err` if there was an internal error
-    /// (bug).
+    /// Returns `AppError` as `Err` if there was an error.
     fn handle_report_request(
         &mut self,
         reporter_net_protocol: u16,
@@ -341,7 +339,7 @@ impl Drop for ReporterService {
             let error = self.exit_error.as_ref().unwrap();
 
             if let Err(app_error) = error {
-                exit_reason = format!(" due to internal error (bug):\n{}", app_error);
+                exit_reason = format!(" due to the following error:\n{}", app_error);
             } else {
                 exit_reason = format!(", reason: {}", error.as_ref().unwrap());
             }

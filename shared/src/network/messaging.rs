@@ -28,6 +28,10 @@ const MAX_MESSAGE_LEN: usize = std::u32::MAX as usize;
 /// chunks and send in chunks.
 const MAX_MESSAGE_SIZE_UNTIL_SPLITING_IN_BYTES: usize = 8192;
 
+const CONNECTION_RESET_DESC_MESSAGE: &str =
+    "the connection was unexpectedly closed by the remote entity, \
+                        this might mean that the remote entity found something wrong in \
+                        your message (too big, corrupted, etc.)";
 enum IoResult {
     Ok(usize),
     Fin,
@@ -726,18 +730,10 @@ fn write_to_socket(socket: &mut TcpStream, buf: &mut [u8]) -> IoResult {
                 continue;
             }
             Err(e) => {
-                return IoResult::Err(AppError::new(&format!(
-                    "{:?} (socket {})",
-                    e,
-                    match socket.peer_addr() {
-                        Ok(addr) => {
-                            addr.to_string()
-                        }
-                        Err(_) => {
-                            String::new()
-                        }
-                    }
-                )));
+                if e.kind() == std::io::ErrorKind::ConnectionReset {
+                    return IoResult::Err(AppError::new(CONNECTION_RESET_DESC_MESSAGE));
+                }
+                return IoResult::Err(AppError::new(&format!("{}", e,)));
             }
         };
     }
@@ -797,18 +793,10 @@ fn read_from_socket_fill_buf(
                 continue;
             }
             Err(e) => {
-                return IoResult::Err(AppError::new(&format!(
-                    "{} (socket {})",
-                    e,
-                    match socket.peer_addr() {
-                        Ok(addr) => {
-                            addr.to_string()
-                        }
-                        Err(_) => {
-                            String::new()
-                        }
-                    },
-                )));
+                if e.kind() == std::io::ErrorKind::ConnectionReset {
+                    return IoResult::Err(AppError::new(CONNECTION_RESET_DESC_MESSAGE));
+                }
+                return IoResult::Err(AppError::new(&format!("{}", e,)));
             }
         };
     }

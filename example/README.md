@@ -2,7 +2,7 @@
 
 In order to use this example, you need to build the reporter and get `reporter.dll` (Windows) or `libreporter.so` (Linux).
 
-Go to reporter's folder where `Cargo.toml` resides and execute the following console command:
+Navigate to the `reporter` directory where `Cargo.toml` is located and execute the following console command:
 
 ```
 cargo build --release

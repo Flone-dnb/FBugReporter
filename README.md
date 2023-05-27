@@ -78,9 +78,9 @@ The only things that you will need to do is install `Rust`, `Go` and `sqlite` pa
 If you want to update FBugReporter you need to update everything (reporter, client, server). For this just clone/download this repository with updated code and run each script again,
 they will ask you to overwrite the files. Make sure to specify the same parameters you specified when you were installing this for the first time.
 
-# Information
+# Additional Information
 
-# Information: Server
+## Server
 
 ### Configuration
 
@@ -93,12 +93,14 @@ The server processes reporters and clients on different ports (see your generate
 
 The server will store logs in the `server_logs` directory (located in `Documents/FBugReporter` directory). This directory is localed in the directory where `server.exe` is located.
 
-# Information: Client
+## Client
 
 ### OTP
+
 When you will login for the first time, the server will request you to scan a QR code with OTP. You have to use an app to scan a QR code for OTPs, for example, Google Authenticator and FreeOTP were confirmed to work correctly with FBugReporter.
 
 ### Theme Customization
+
 On the first start, the client will create a theme file `theme.ini` (it's located in `%APPDATA%\FBugReporter\` on Windows and in `$XDG_CONFIG_HOME/FBugReporter/` on Linux/BSD/MacOS). You can customize values in this theme file. In order for them to be applied, restart the client.
 
 # Build (Manual Installation)
@@ -112,20 +114,36 @@ If you don't want or can't use scripts from the `How to Install` section above, 
 cargo build --release
 ```
 
-The compiled reporter library will be located at `/reporter/target/release/` (with the extension `.dll` for Windows and `.so` for Linux).
+The compiled reporter library will be located at `/reporter/target/release/` (with the extension `.dll` for Windows and `.so` for Linux) you should put it somewhere into your Godot project directory.
 
-**To integrate** the reporter you will need to create a `GDNativeLibrary` resource in your Godot project, you can call it `reporter`. Then navigate to your platform in the opened panel. Click on the directory icon (against number `64` for 64 bit systems, `32` for 32 bit systems) and select the compiled library. Save this resource with the `.gdnlib` extension.
+**To integrate** the reporter you will need to create a `.gdextension` file in your Godot project, you can call it `FBugReporter`. Put the following contents into this file:
 
-Now create a new script with the following parameters:
+```
+[configuration]
+entry_symbol = "gdext_rust_init"
 
-- `Language` to `NativeScript`,
-- `Inherits` to `Node`,
-- `Class Name` to `Reporter`,
-- change the name of the script (file) in the `Path` to `reporter`.
+[libraries]
+linux.debug.x86_64 = "res://<path to libreporter.so>"
+linux.release.x86_64 = "res://<path to libreporter.so>"
+windows.debug.x86_64 = "res://<path to reporter.dll>"
+windows.release.x86_64 = "res://<path to reporter.dll>"
+```
 
-Then open this script and in the `Inspector` panel find a property with the name `Library`, click on it, then pick `Load` and select the `reporter.gdnlib` (GDNativeLibrary) file the we created.
+Now edit the file `<project>/.godot/extension_list.cfg` (create if it does not exist) and add the following line:
 
-See the example project in the `example` directory and `example/MainScene.gd` for how to send reports. You could just copy-paste `MainScene.tscn` and `MainScene.gd` files to your project and customize them as you want.
+```
+res://<path to FBugReporter.gdextension file>
+```
+
+Restart the Godot editor and now you should be able to add a new type of node "FBugReporter" to your scene's node tree.
+
+See the example project in the `example` directory and `example/scenes/reporter.gd` for how to send reports. You could just copy-paste `reporter.tscn` and `reporter.gd` files to your project and customize them as you want. Additionally, if you copied `reporter.tscn` you would need to edit it as a text file and modify the line:
+
+```
+[ext_resource type="Script" path="res://scenes/reporter.gd" id="1_6ftrt"]
+```
+
+To point to the correct script path (if the path is incorrect).
 
 ## Build: Server
 **Requirements:**

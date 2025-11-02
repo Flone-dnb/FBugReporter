@@ -2,8 +2,6 @@
 
 ![](screenshot.png?raw=true)
 
-**Project Status**: low activity (currently this project is not very high priority for me as I really want to work on some other projects but it does not mean that this project is abandoned - no, I actually have some very big plans on the next major (2.0) release but these things will have to wait for some time, sorry).
-
 # Supported Platforms
 
 - Windows
